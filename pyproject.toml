@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beamtimehero_cli"
+version = "0.1.0"
+description = "Generic CLI for SSRL BL15-2 beamline: SPEC injection, scan data reads, log reads, action logging."
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+    "silx",
+    "numpy",
+    "pandas",
+    "scipy",
+    "lmfit",
+    "xraydb",
+    "sqlmodel",
+    "pyyaml",
+    "matplotlib",
+    "python-dotenv",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+beamtimehero = "beamtimehero_cli.cli.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+beamtimehero_cli = ["refdocs/defaults/*.md"]

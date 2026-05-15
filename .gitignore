@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+src/*.egg-info/
+.eggs/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# venv
+venv/
+.venv/
+env/
+
+# editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# local data
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
