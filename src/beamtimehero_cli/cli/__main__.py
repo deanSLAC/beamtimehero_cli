@@ -350,8 +350,26 @@ def dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     return run_tool_leaf(args)
 
 
-def main(argv: list[str] | None = None) -> int:
+def run_with(
+    parser_builder,
+    dispatcher,
+    argv: list[str] | None = None,
+    *,
+    known_trees: frozenset[str] | None = None,
+) -> int:
+    """Wrap parser-build + parse + dispatch with stdout tee + CLI logging.
+
+    Used by `main()` directly and by consumers (e.g. the autonomous repo)
+    that compose their own parser and dispatcher on top of the upstream
+    helpers. Same stdout-tee tail capture and `record_cli_invocation`
+    fallback behavior the standalone `main()` provides.
+
+    `known_trees` is the set of tree names the fallback path uses to
+    classify `argv[0]` when an early SystemExit (e.g. `--help`) fires
+    before the Namespace is built. Defaults to the upstream set.
+    """
     raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
+    known = known_trees if known_trees is not None else _KNOWN_TREES
 
     try:
         from beamtimehero_cli.config import CLI_LOG_ENABLED, CLI_LOG_MAX_RESULT_BYTES, SPEC_MOCK
@@ -364,9 +382,9 @@ def main(argv: list[str] | None = None) -> int:
         spec_mock_flag = None
 
     if not log_enabled:
-        parser = build_parser()
+        parser = parser_builder()
         args = parser.parse_args(argv)
-        return dispatch(parser, args)
+        return dispatcher(parser, args)
 
     started = time.monotonic()
     real_stdout = sys.stdout
@@ -378,9 +396,9 @@ def main(argv: list[str] | None = None) -> int:
     error_message: str | None = None
     try:
         try:
-            parser = build_parser()
+            parser = parser_builder()
             parsed = parser.parse_args(argv)
-            rc = dispatch(parser, parsed)
+            rc = dispatcher(parser, parsed)
         except SystemExit as e:
             rc = int(e.code) if isinstance(e.code, int) else (0 if e.code is None else 1)
             raise
@@ -393,17 +411,18 @@ def main(argv: list[str] | None = None) -> int:
         latency_ms = int((time.monotonic() - started) * 1000)
         try:
             from beamtimehero_cli.action_log.cli_log import record_cli_invocation
-            tree_hint = raw_argv[0] if raw_argv and raw_argv[0] in _KNOWN_TREES else None
+            tree_hint = raw_argv[0] if raw_argv and raw_argv[0] in known else None
             tree = getattr(parsed, "tree", None) if parsed is not None else tree_hint
             leaf = getattr(parsed, "leaf", None) if parsed is not None else None
             tool_name = getattr(parsed, "_tool_name", None) if parsed is not None else None
+            agent_role = getattr(parsed, "_agent_role", None) if parsed is not None else None
             justification = getattr(parsed, "justification", None) if parsed is not None else None
             record_cli_invocation(
                 argv=raw_argv,
                 tree=tree,
                 leaf=leaf,
                 tool_name=tool_name,
-                agent_role=None,
+                agent_role=agent_role,
                 justification=justification,
                 exit_code=rc,
                 latency_ms=latency_ms,
@@ -415,6 +434,10 @@ def main(argv: list[str] | None = None) -> int:
             pass
 
     return rc
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_with(build_parser, dispatch, argv)
 
 
 if __name__ == "__main__":

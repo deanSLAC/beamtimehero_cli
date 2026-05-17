@@ -72,6 +72,7 @@ of forking it. The helpers in `beamtimehero_cli.cli.__main__` are public:
 | `run_tool_leaf(args)` | Dispatch a catalog-leaf invocation. |
 | `dispatch(parser, args)` | Top-level dispatcher (delegates to `run_ref` / `run_tool_leaf`). |
 | `TeeStdout` | Stdout wrapper that captures a bounded tail (used by `main()` for CLI logging). |
+| `run_with(parser_builder, dispatcher, argv=None, *, known_trees=None)` | Wrap a custom parser-builder + dispatcher with the same stdout-tee tail capture and `record_cli_invocation` CLI logging that `main()` provides. |
 | `main(argv=None)` | Full standalone entry point — same as the `beamtimehero` console-script. |
 
 Minimal composition example:
