@@ -9,7 +9,7 @@ Layering:
 """
 
 from beamtimehero_cli.spec_control import (
-    phase_allowlist,
+    phases,
     sandbox_client,
     screen_client,
     spec_cmd,
@@ -18,7 +18,7 @@ from beamtimehero_cli.spec_control import (
 )
 
 __all__ = [
-    "phase_allowlist",
+    "phases",
     "sandbox_client",
     "screen_client",
     "spec_cmd",

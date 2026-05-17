@@ -5,7 +5,7 @@
 harness) is responsible for calling `set_phase` whenever it wants the
 audit-log stamp to reflect a new phase or a new active experiment.
 
-`set_phase` validates the slug against `phase_allowlist.VALID_PHASES`
+`set_phase` validates the slug against `phases.VALID_PHASES`
 and updates the in-memory dict. There is no DB write-through here —
 this package has no `ExperimentPlan` table; persistent state, if any,
 is the host's concern. Hosts that want to repopulate state on a fresh
@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from beamtimehero_cli.spec_control import phase_allowlist
+from beamtimehero_cli.spec_control import phases
 
 
 _STATE: dict[str, Any] = {
-    "phase": phase_allowlist.PHASE_SETUP,
+    "phase": phases.PHASE_SETUP,
     "experiment_id": None,
 }
 
@@ -35,7 +35,7 @@ def get_experiment_id() -> Optional[str]:
 
 
 def set_phase(phase: str, experiment_id: str | None = None) -> None:
-    if phase not in phase_allowlist.VALID_PHASES:
+    if phase not in phases.VALID_PHASES:
         raise ValueError(f"unknown phase: {phase}")
     _STATE["phase"] = phase
     if experiment_id:
