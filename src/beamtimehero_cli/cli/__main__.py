@@ -351,11 +351,6 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    phase_override = os.environ.get("SPEC_PHASE_OVERRIDE")
-    if phase_override:
-        from beamtimehero_cli.spec_control import spec_cmd
-        spec_cmd.set_phase(phase_override)
-
     raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
 
     try:
