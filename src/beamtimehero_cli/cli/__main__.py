@@ -41,7 +41,7 @@ from beamtimehero_cli.tool_catalog.lineage import TOOL_LINEAGE
 CATEGORY_OVERRIDES: dict[str, str] = {}
 
 
-def _categorize(tool_def: dict) -> str:
+def categorize(tool_def: dict) -> str:
     name = tool_def["function"]["name"]
     if name in CATEGORY_OVERRIDES:
         return CATEGORY_OVERRIDES[name]
@@ -82,7 +82,7 @@ def _json_arg(s: str):
         raise argparse.ArgumentTypeError(f"expected JSON, got {s!r}: {e}") from e
 
 
-def _add_arg(p: argparse.ArgumentParser, key: str, prop: dict, required: bool) -> None:
+def add_arg(p: argparse.ArgumentParser, key: str, prop: dict, required: bool) -> None:
     flag = f"--{key.replace('_', '-')}"
     desc = (prop.get("description") or "").strip()
     kwargs: dict = {"help": desc}
@@ -121,14 +121,14 @@ def _add_arg(p: argparse.ArgumentParser, key: str, prop: dict, required: bool) -
 # ---------------------------------------------------------------------------
 
 
-class _ToolParser(argparse.ArgumentParser):
+class ToolParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:  # type: ignore[override]
         payload: dict = {"ok": False, "error": f"argparse: {message}"}
         print(json.dumps(payload))
         sys.exit(2)
 
 
-def _build_ref_subtree(subs: argparse._SubParsersAction) -> None:
+def build_ref_subtree(subs: argparse._SubParsersAction) -> None:
     ref = subs.add_parser(
         "ref",
         help="Reference docs (use `ref --list` to enumerate, `ref <name>` to fetch).",
@@ -140,7 +140,7 @@ def _build_ref_subtree(subs: argparse._SubParsersAction) -> None:
     )
 
 
-def _build_catalog_subtrees(
+def build_catalog_subtrees(
     subs: argparse._SubParsersAction,
     tool_defs: list[dict],
 ) -> None:
@@ -173,7 +173,7 @@ def _build_catalog_subtrees(
         name = fn.get("name")
         if not name:
             continue
-        category = _categorize(tdef)
+        category = categorize(tdef)
         params = fn.get("parameters") or {}
         properties = params.get("properties") or {}
         required = set(params.get("required") or [])
@@ -183,11 +183,11 @@ def _build_catalog_subtrees(
         leaf = bucket[category].add_parser(cli_name, help=description)
         leaf.set_defaults(_tool_name=name, _tool_category=category)
         for key, prop in properties.items():
-            _add_arg(leaf, key, prop or {}, key in required)
+            add_arg(leaf, key, prop or {}, key in required)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = _ToolParser(
+def build_parser() -> argparse.ArgumentParser:
+    parser = ToolParser(
         prog="beamtimehero",
         description=(
             "Unified beamline CLI. Discover trees with `beamtimehero --help`; "
@@ -196,8 +196,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     trees = parser.add_subparsers(dest="tree", metavar="<tree>")
 
-    _build_ref_subtree(trees)
-    _build_catalog_subtrees(trees, TOOL_DEFINITIONS)
+    build_ref_subtree(trees)
+    build_catalog_subtrees(trees, TOOL_DEFINITIONS)
     return parser
 
 
@@ -215,7 +215,7 @@ def _print_doc_index() -> int:
     return 0
 
 
-def _run_ref(args: argparse.Namespace) -> int:
+def run_ref(args: argparse.Namespace) -> int:
     if args.list_docs or not args.doc_name:
         return _print_doc_index()
     name = args.doc_name
@@ -237,7 +237,7 @@ def _run_ref(args: argparse.Namespace) -> int:
         return 1
 
 
-def _run_tool_leaf(args: argparse.Namespace) -> int:
+def run_tool_leaf(args: argparse.Namespace) -> int:
     name = args._tool_name
     framework_keys = {"tree", "leaf", "_tool_name", "_tool_category"}
     payload: dict = {}
@@ -303,7 +303,7 @@ _KNOWN_TREES = frozenset({"ref", "tool", "db", "spec-read", "spec-write"})
 # stdout tee — capture what the CLI prints so the cli_log can store it
 # ---------------------------------------------------------------------------
 
-class _TeeStdout(io.TextIOBase):
+class TeeStdout(io.TextIOBase):
     """Forward writes to the real stdout AND a capture buffer (bounded tail)."""
 
     def __init__(self, real, max_bytes: int) -> None:
@@ -338,16 +338,16 @@ class _TeeStdout(io.TextIOBase):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+def dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if not getattr(args, "tree", None):
         parser.print_help()
         return 0
     if args.tree == "ref":
-        return _run_ref(args)
+        return run_ref(args)
     if not getattr(args, "leaf", None):
         parser.parse_args([args.tree, "--help"])
         return 0
-    return _run_tool_leaf(args)
+    return run_tool_leaf(args)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -364,13 +364,13 @@ def main(argv: list[str] | None = None) -> int:
         spec_mock_flag = None
 
     if not log_enabled:
-        parser = _build_parser()
+        parser = build_parser()
         args = parser.parse_args(argv)
-        return _dispatch(parser, args)
+        return dispatch(parser, args)
 
     started = time.monotonic()
     real_stdout = sys.stdout
-    tee = _TeeStdout(real_stdout, max_bytes)
+    tee = TeeStdout(real_stdout, max_bytes)
     sys.stdout = tee
 
     parsed: argparse.Namespace | None = None
@@ -378,9 +378,9 @@ def main(argv: list[str] | None = None) -> int:
     error_message: str | None = None
     try:
         try:
-            parser = _build_parser()
+            parser = build_parser()
             parsed = parser.parse_args(argv)
-            rc = _dispatch(parser, parsed)
+            rc = dispatch(parser, parsed)
         except SystemExit as e:
             rc = int(e.code) if isinstance(e.code, int) else (0 if e.code is None else 1)
             raise

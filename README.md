@@ -54,3 +54,48 @@ Discover leaves with `--help` at any depth.
 | `BEAMLINE_TOOLS_DB_PATH` | `data/beamline_tools.db` | SQLite path for the action log. |
 | `BEAMTIMEHERO_CLI_LOG` | `1` | If `1`, log each CLI invocation. |
 | `BEAMTIMEHERO_CLI_LOG_MAX_BYTES` | `65536` | Stdout tail bytes captured per invocation. |
+
+## Extending the CLI
+
+Consumers can compose their own subtrees on top of the upstream parser instead
+of forking it. The helpers in `beamtimehero_cli.cli.__main__` are public:
+
+| Name | Purpose |
+|---|---|
+| `build_parser()` | Build the default top-level parser (`ref`, `tool`, `db`, `spec-read`, `spec-write`). |
+| `build_ref_subtree(subs)` | Mount only the `ref` subtree on an existing `_SubParsersAction`. |
+| `build_catalog_subtrees(subs, tool_defs)` | Mount the `tool` / `db` / `spec-read` / `spec-write` subtrees from a tool-definitions list (filtered or unfiltered). |
+| `categorize(tool_def)` | Data-driven category for a tool def (`db`, `spec-write`, `spec-read`, `tool`). |
+| `add_arg(parser, key, prop, required)` | JSON-schema property → argparse flag. |
+| `ToolParser` | `ArgumentParser` subclass that emits `{"ok": false, ...}` JSON on parse errors. |
+| `run_ref(args)` | Dispatch a `ref` invocation. |
+| `run_tool_leaf(args)` | Dispatch a catalog-leaf invocation. |
+| `dispatch(parser, args)` | Top-level dispatcher (delegates to `run_ref` / `run_tool_leaf`). |
+| `TeeStdout` | Stdout wrapper that captures a bounded tail (used by `main()` for CLI logging). |
+| `main(argv=None)` | Full standalone entry point — same as the `beamtimehero` console-script. |
+
+Minimal composition example:
+
+```python
+import sys
+from beamtimehero_cli import refdocs
+from beamtimehero_cli.cli.__main__ import build_parser, dispatch
+
+def main() -> int:
+    refdocs.register_doc("my-procedure", "/path/to/my_doc.md", "Project-specific procedure")
+    parser = build_parser()
+    trees = parser._subparsers._group_actions[0]  # the top-level subparsers action
+    my_tree = trees.add_parser("my-subtree", help="Project-specific subcommands")
+    my_tree.add_argument("--foo")
+    args = parser.parse_args()
+    if args.tree == "my-subtree":
+        print("foo =", args.foo)
+        return 0
+    return dispatch(parser, args)
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+The default `beamtimehero` console-script keeps working unchanged for any
+consumer that doesn't extend it.
