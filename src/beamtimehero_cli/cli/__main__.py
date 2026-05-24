@@ -29,33 +29,7 @@ from pathlib import Path
 
 from beamtimehero_cli import refdocs
 from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS, execute_tool
-from beamtimehero_cli.tool_catalog.lineage import TOOL_LINEAGE
-
-
-# ---------------------------------------------------------------------------
-# Categorization
-# ---------------------------------------------------------------------------
-# Four trees + ref. Categorization is data-driven from TOOL_LINEAGE and the
-# tool definition's required arguments.
-
-CATEGORY_OVERRIDES: dict[str, str] = {}
-
-
-def categorize(tool_def: dict) -> str:
-    name = tool_def["function"]["name"]
-    if name in CATEGORY_OVERRIDES:
-        return CATEGORY_OVERRIDES[name]
-    lineage = TOOL_LINEAGE.get(name) or {}
-    if lineage.get("source") == "autonomy_db":
-        return "db"
-    params = tool_def["function"].get("parameters", {}) or {}
-    required = set(params.get("required", []) or [])
-    if "justification" in required:
-        return "spec-write"
-    spec_cmd_name = lineage.get("spec_command")
-    if spec_cmd_name is not None:
-        return "spec-read"
-    return "tool"
+from beamtimehero_cli.tool_catalog.categorize import CATEGORY_OVERRIDES, categorize
 
 
 # ---------------------------------------------------------------------------
@@ -140,33 +114,50 @@ def build_ref_subtree(subs: argparse._SubParsersAction) -> None:
     )
 
 
+_TREE_HELPS: dict[tuple[str, ...], str] = {
+    ("tool",): "Non-SPEC tools: data queries, analysis, plotting, file I/O.",
+    ("db",): "Action-log queries.",
+    ("spec-read",): "SPEC-bound reads (motor positions, beam status). No mutation.",
+    ("spec-write",): "SPEC-bound mutations. Every leaf requires --justification.",
+    ("spec-file",): "Scan tools that read SPEC files directly (file-cache backend).",
+    ("s3df",): "S3DF-deployment tools (Postgres metadata + pickle scan data).",
+    ("s3df", "psql"): "Direct Postgres queries (raw SQL, command/log queries).",
+    ("slack",): "Slack messaging tools.",
+}
+
+
 def build_catalog_subtrees(
     subs: argparse._SubParsersAction,
     tool_defs: list[dict],
 ) -> None:
-    tool_tree = subs.add_parser(
-        "tool",
-        help="Non-SPEC tools: data queries, analysis, plotting, file I/O.",
-    )
-    db_tree = subs.add_parser(
-        "db",
-        help="Action-log queries.",
-    )
-    spec_read_tree = subs.add_parser(
-        "spec-read",
-        help="SPEC-bound reads (motor positions, beam status). No mutation.",
-    )
-    spec_write_tree = subs.add_parser(
-        "spec-write",
-        help="SPEC-bound mutations. Every leaf requires --justification.",
-    )
+    """Register every tool under its categorized tree (and sub-trees).
 
-    bucket = {
-        "tool": tool_tree.add_subparsers(dest="leaf", metavar="<command>"),
-        "db": db_tree.add_subparsers(dest="leaf", metavar="<command>"),
-        "spec-read": spec_read_tree.add_subparsers(dest="leaf", metavar="<command>"),
-        "spec-write": spec_write_tree.add_subparsers(dest="leaf", metavar="<command>"),
-    }
+    Each tool's tree comes from ``categorize(tdef)`` and may be a multi-
+    segment tuple for nested branches (e.g. ``("s3df", "psql")``).
+    """
+    # parent path → its add_subparsers() action
+    bucket: dict[tuple[str, ...], argparse._SubParsersAction] = {}
+    # path → the parser at that node (so we can attach further children)
+    nodes: dict[tuple[str, ...], argparse.ArgumentParser] = {(): None}  # root sentinel
+
+    def _ensure_bucket(path: tuple[str, ...]) -> argparse._SubParsersAction:
+        if path in bucket:
+            return bucket[path]
+        parent = path[:-1]
+        parent_subs = subs if parent == () else _ensure_bucket(parent)
+        node = parent_subs.add_parser(
+            path[-1], help=_TREE_HELPS.get(path, "").strip() or None,
+        )
+        nodes[path] = node
+        bucket[path] = node.add_subparsers(
+            dest=_dest_for(path), metavar="<command>",
+        )
+        return bucket[path]
+
+    # Pre-create the known trees so they always appear in --help even if no
+    # tools are registered there yet.
+    for path in _TREE_HELPS:
+        _ensure_bucket(path)
 
     for tdef in tool_defs:
         fn = tdef.get("function") or {}
@@ -180,10 +171,18 @@ def build_catalog_subtrees(
         description = (fn.get("description") or "").strip()
 
         cli_name = name.replace("_", "-")
-        leaf = bucket[category].add_parser(cli_name, help=description)
+        leaf = _ensure_bucket(category).add_parser(cli_name, help=description)
         leaf.set_defaults(_tool_name=name, _tool_category=category)
         for key, prop in properties.items():
             add_arg(leaf, key, prop or {}, key in required)
+
+
+def _dest_for(path: tuple[str, ...]) -> str:
+    """argparse dest for a tree's add_subparsers — `leaf` for top-level
+    branches, `leaf_<parent>` for nested ones so they coexist on the
+    same Namespace without clobbering each other.
+    """
+    return "leaf" if len(path) == 1 else f"leaf_{path[-2].replace('-', '_')}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -239,15 +238,17 @@ def run_ref(args: argparse.Namespace) -> int:
 
 def run_tool_leaf(args: argparse.Namespace) -> int:
     name = args._tool_name
-    framework_keys = {"tree", "leaf", "_tool_name", "_tool_category"}
+    category = getattr(args, "_tool_category", ("tool",))
     payload: dict = {}
     for k, v in vars(args).items():
-        if k in framework_keys or v is None:
+        if k in {"tree", "_tool_name", "_tool_category"} or k.startswith("leaf"):
+            continue
+        if v is None:
             continue
         payload[k] = v
 
     try:
-        text, images = execute_tool(name, payload)
+        text, images = execute_tool(category, name, payload)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc(file=sys.stderr)
         print(json.dumps({"ok": False, "error": str(e)}, default=str))
@@ -296,7 +297,10 @@ def run_tool_leaf(args: argparse.Namespace) -> int:
     return 0
 
 
-_KNOWN_TREES = frozenset({"ref", "tool", "db", "spec-read", "spec-write"})
+_KNOWN_TREES = frozenset({
+    "ref", "tool", "db", "spec-read", "spec-write",
+    "spec-file", "s3df", "slack",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +348,18 @@ def dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         return 0
     if args.tree == "ref":
         return run_ref(args)
-    if not getattr(args, "leaf", None):
-        parser.parse_args([args.tree, "--help"])
+    # A leaf is reached iff set_defaults populated _tool_name. Nested branches
+    # (e.g. `s3df psql ...`) terminate with their own leaf parser, all of which
+    # set this default.
+    if not getattr(args, "_tool_name", None):
+        # No leaf chosen — re-invoke with --help so argparse renders the
+        # appropriate level of the tree.
+        argv = [args.tree]
+        for k, v in vars(args).items():
+            if k.startswith("leaf") and isinstance(v, str) and v:
+                argv.append(v)
+        argv.append("--help")
+        parser.parse_args(argv)
         return 0
     return run_tool_leaf(args)
 

@@ -14,14 +14,14 @@ def mock_spec(monkeypatch):
 
 def test_execute_unknown_tool_returns_message():
     from beamtimehero_cli.tool_catalog import execute_tool
-    text, imgs = execute_tool("definitely_not_a_real_tool", {})
+    text, imgs = execute_tool(("tool",), "definitely_not_a_real_tool", {})
     assert "Unknown tool" in text
     assert imgs == []
 
 
 def test_execute_list_scans():
     from beamtimehero_cli.tool_catalog import execute_tool
-    text, imgs = execute_tool("list_scans", {"limit": 5})
+    text, imgs = execute_tool(("tool",), "list_scans", {"limit": 5})
     # Either returns a JSON array (possibly empty) or a plain message; both fine.
     assert isinstance(text, str)
     assert isinstance(imgs, list)

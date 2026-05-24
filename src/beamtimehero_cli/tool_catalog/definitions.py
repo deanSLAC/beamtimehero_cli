@@ -1613,6 +1613,177 @@ AUTONOMY_TOOL_DEFINITIONS = [
             },
         },
     },
+
+    # ---- s3df: postgres-backed scan tools (tree=s3df) ----
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "list_scans",
+            "description": "List processed scans from the S3DF Postgres metadata table, most-recent first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max scans to return (default 20).", "default": 20},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "get_latest_scan",
+            "description": "Return metadata for the most-recently inserted scan in the S3DF Postgres metadata table.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "read_scan",
+            "description": "Read a processed scan's metadata + DataFrame from the converter's pickle store. Use s3df list-scans to discover file_name and scan_number.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string"},
+                    "scan_number": {"type": "integer"},
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "get_active_counter",
+            "description": "Identify the active fluorescence/absorption counter for a scan stored in S3DF.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string"},
+                    "scan_number": {"type": "integer"},
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "get_scan_deadtime",
+            "description": "Get dead-time stats for a scan (wall-clock vs acquisition seconds and percentage).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string"},
+                    "scan_number": {"type": "integer"},
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "s3df",
+        "function": {
+            "name": "plot_scan",
+            "description": "Plot one scan from the S3DF pickle store. Auto-detects the active counter when none is given. The plot is shown directly to the user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string"},
+                    "scan_number": {"type": "integer"},
+                    "counter": {"type": "string", "description": "Counter column to plot (auto-detected if omitted)."},
+                    "normalize_by": {"type": "string", "description": "Optional counter to divide by (e.g. I0)."},
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+
+    # ---- s3df psql: direct Postgres queries (tree=s3df.psql) ----
+    {
+        "type": "function",
+        "tree": "s3df.psql",
+        "function": {
+            "name": "execute_readonly_sql",
+            "description": "Run a read-only SELECT against the S3DF metadata Postgres. Rejects write keywords; truncates at max_rows.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "A read-only SELECT statement (no INSERT/UPDATE/DELETE/etc.)."},
+                    "max_rows": {"type": "integer", "description": "Row cap on the result (default 100).", "default": 100},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+
+    # ---- Slack messaging tools (tree=slack, install with [slack] extra) ----
+    {
+        "type": "function",
+        "tree": "slack",
+        "function": {
+            "name": "post_slack_message",
+            "description": "Post a message to a Slack channel or thread reply.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "channel_id": {"type": "string", "description": "Slack channel ID."},
+                    "text": {"type": "string", "description": "Message text (Slack mrkdwn)."},
+                    "thread_ts": {"type": "string", "description": "If set, posts as a reply in this thread."},
+                },
+                "required": ["channel_id", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "slack",
+        "function": {
+            "name": "read_channel_messages",
+            "description": "Read recent messages from a Slack channel.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "channel_id": {"type": "string", "description": "Slack channel ID."},
+                    "limit": {"type": "integer", "description": "Max messages (default 20, max 100).", "default": 20},
+                    "oldest": {"type": "string", "description": "Only return messages newer than this Unix ts."},
+                },
+                "required": ["channel_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "slack",
+        "function": {
+            "name": "read_thread_replies",
+            "description": "Read all replies in a Slack thread (parent + children).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "channel_id": {"type": "string"},
+                    "thread_ts": {"type": "string", "description": "Timestamp of the parent message."},
+                },
+                "required": ["channel_id", "thread_ts"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "tree": "slack",
+        "function": {
+            "name": "list_channels",
+            "description": "List public Slack channels the bot belongs to.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 # Category map for the sidebar

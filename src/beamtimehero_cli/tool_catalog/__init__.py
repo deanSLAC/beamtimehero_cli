@@ -5,7 +5,7 @@ Public surface:
   * ``TOOL_DEFINITIONS`` — JSON-schema definitions for every tool.
   * ``TOOL_CATEGORIES`` — UI groupings.
   * ``CLI_TOOL_DEFINITION`` — single-tool wrapper for progressive discovery mode.
-  * ``execute_tool(name, args)`` — dispatch to a tool's Python implementation.
+  * ``execute_tool(tree, name, args)`` — dispatch to a tool's Python implementation.
 """
 from __future__ import annotations
 

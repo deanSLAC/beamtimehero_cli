@@ -26,6 +26,17 @@ dependencies = [
 dev = [
     "pytest",
 ]
+# Slack messaging tools. Pulled lazily inside notify/slack.py so the bare
+# install can run without slack-sdk if no deployment needs Slack.
+slack = [
+    "slack-sdk",
+]
+# Postgres-backed scan data (used by deployments where bldata_converter
+# populates BL15-2_scan_metadata, like the playground k8s pod). Lazy
+# import inside spec_data/postgres_backend.py.
+postgres = [
+    "psycopg2-binary",
+]
 
 [project.scripts]
 beamtimehero = "beamtimehero_cli.cli.__main__:main"

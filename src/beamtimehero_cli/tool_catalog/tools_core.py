@@ -1012,7 +1012,12 @@ def t_evaluate_spec_macro(arguments: dict) -> tuple[str, list[str]]:
 # Dispatch table
 # ---------------------------------------------------------------------------
 
-DISPATCH: dict[str, callable] = {
+# Flat name → handler map for the "default" implementation of each tool
+# name. The (tree, name) keyed DISPATCH below augments this with branch-
+# specific overrides (e.g. ("s3df", "list_scans") points at a different
+# handler than ("spec-file", "list_scans") even though the leaf name and
+# JSON schema are identical).
+_HANDLERS: dict[str, callable] = {
     # CAT-0
     "align_beamline": t_align_beamline,
     "align_xes_spectrometer": t_align_xes,
@@ -1104,4 +1109,195 @@ DISPATCH: dict[str, callable] = {
     "get_motor_config": t_get_motor_config,
     "get_counter_config": t_get_counter_config,
     "evaluate_spec_macro": t_evaluate_spec_macro,
+    # Slack tools (require the [slack] extra).
+    "post_slack_message": lambda args: _t_slack(
+        "post_message", args, kw=("channel_id", "text", "thread_ts"),
+    ),
+    "read_channel_messages": lambda args: _t_slack(
+        "read_channel_messages", args, kw=("channel_id", "limit", "oldest"),
+    ),
+    "read_thread_replies": lambda args: _t_slack(
+        "read_thread_replies", args, kw=("channel_id", "thread_ts"),
+    ),
+    "list_channels": lambda args: _t_slack("list_channels", args, kw=()),
 }
+
+
+# ---------------------------------------------------------------------------
+# s3df (postgres-backed) handlers
+# ---------------------------------------------------------------------------
+
+_PG_BACKEND = None
+
+
+def _pg_backend():
+    """Lazily build a process-wide PostgresBackend. Connections themselves
+    are still per-call inside the backend; this just avoids re-importing
+    psycopg2 on every tool invocation."""
+    global _PG_BACKEND
+    if _PG_BACKEND is None:
+        from beamtimehero_cli.spec_data.postgres_backend import PostgresBackend
+        _PG_BACKEND = PostgresBackend()
+    return _PG_BACKEND
+
+
+def _s3df(call) -> tuple[str, list[str]]:
+    """Wrap a backend call so missing driver / DB outage produces a JSON
+    error payload instead of crashing the tool loop."""
+    try:
+        result = call(_pg_backend())
+        if result is None:
+            return "Not found.", []
+        return json.dumps(result, indent=2, default=str), []
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e)}), []
+    except Exception as e:  # noqa: BLE001
+        logger.warning("s3df tool failed", exc_info=True)
+        return json.dumps({"ok": False, "error": str(e)}), []
+
+
+def t_s3df_list_scans(args):
+    return _s3df(lambda b: b.list_scans(limit=args.get("limit", 20)))
+
+
+def t_s3df_get_latest_scan(args):
+    return _s3df(lambda b: b.get_latest_scan())
+
+
+def t_s3df_read_scan(args):
+    def _go(b):
+        meta = b.get_scan_metadata(args.get("file_name", ""), args.get("scan_number", 1))
+        if not meta:
+            return None
+        df = b.read_scan(args["file_name"], args["scan_number"])
+        if df is not None:
+            meta["data"] = df.to_string()
+        return meta
+    return _s3df(_go)
+
+
+def t_s3df_get_active_counter(args):
+    return _s3df(lambda b: b.get_active_counter(
+        args.get("file_name", ""), args.get("scan_number", 1),
+    ))
+
+
+def t_s3df_get_scan_deadtime(args):
+    return _s3df(lambda b: b.get_scan_deadtime(
+        args.get("file_name", ""), args.get("scan_number", 1),
+    ))
+
+
+def t_s3df_plot_scan(args):
+    """Plot a scan from the postgres-backed pickle store."""
+    try:
+        backend = _pg_backend()
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e)}), []
+
+    file_name = args.get("file_name", "")
+    scan_number = args.get("scan_number", 1)
+    counter = args.get("counter")
+    normalize_by = args.get("normalize_by")
+
+    try:
+        df = backend.read_scan(file_name, scan_number)
+        if df is None:
+            return f"Scan not found: {file_name} #{scan_number}", []
+        if not counter:
+            active = backend.get_active_counter(file_name, scan_number)
+            if active:
+                counter = active["active_counter"]
+        meta = backend.get_scan_metadata(file_name, scan_number) or {}
+
+        from beamtimehero_cli.analysis.render import render_scan, fig_to_base64
+        fig, summary = render_scan(
+            df, file_name, scan_number,
+            counter=counter, normalize_by=normalize_by,
+            scan_command=meta.get("scan_command"),
+        )
+        if fig is None:
+            return summary, []
+        b64 = fig_to_base64(fig)
+        import matplotlib.pyplot as plt
+        plt.close(fig)
+        return summary, [b64]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("s3df plot_scan failed", exc_info=True)
+        return json.dumps({"ok": False, "error": str(e)}), []
+
+
+# ---------------------------------------------------------------------------
+# s3df psql (raw SQL)
+# ---------------------------------------------------------------------------
+
+def t_s3df_psql_execute_readonly_sql(args):
+    return _s3df(lambda b: b.execute_readonly_sql(
+        args.get("query", ""),
+        max_rows=args.get("max_rows", 100),
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Slack adapter (lives below; both branches' handlers added below in _HANDLERS)
+# ---------------------------------------------------------------------------
+
+def _t_slack(fn_name: str, args: dict, *, kw: tuple[str, ...]) -> tuple[str, list[str]]:
+    """Common adapter for slack tools — dispatch to ``notify.slack`` and
+    wrap the dict result as JSON. Missing token / missing slack-sdk
+    degrade to a JSON error payload rather than crashing the loop.
+    """
+    from beamtimehero_cli.notify import slack as _slack
+    try:
+        fn = getattr(_slack, fn_name)
+        payload = {k: args[k] for k in kw if k in args and args[k] is not None}
+        return json.dumps(fn(**payload), indent=2, default=str), []
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e)}), []
+    except Exception as e:  # noqa: BLE001
+        return json.dumps({"ok": False, "error": f"slack {fn_name} failed: {e}"}), []
+
+
+# Branch-specific overrides: when a tool name has different implementations
+# per tree, register them here. The (tree, name) key wins over the flat
+# _HANDLERS entry for that name. Same JSON schema, different backend.
+_BRANCH_HANDLERS: dict[tuple[str, ...], callable] = {
+    # s3df: postgres metadata + pickle DataFrames
+    ("s3df", "list_scans"): t_s3df_list_scans,
+    ("s3df", "get_latest_scan"): t_s3df_get_latest_scan,
+    ("s3df", "read_scan"): t_s3df_read_scan,
+    ("s3df", "get_active_counter"): t_s3df_get_active_counter,
+    ("s3df", "get_scan_deadtime"): t_s3df_get_scan_deadtime,
+    ("s3df", "plot_scan"): t_s3df_plot_scan,
+    # s3df psql: raw queries
+    ("s3df", "psql", "execute_readonly_sql"): t_s3df_psql_execute_readonly_sql,
+}
+
+
+def _build_dispatch() -> dict[tuple[str, ...], "callable"]:
+    """Build the ``(tree, ..., name) -> handler`` dispatch table at import.
+
+    For each definition: categorize() decides the tree, then we pick the
+    handler from ``_BRANCH_HANDLERS[(tree, name)]`` if present, else fall
+    back to ``_HANDLERS[name]``. Tools without any handler are skipped —
+    that happens for plan-aware tools described in the catalog but
+    dispatched through the autonomous repo's own executor.
+    """
+    from beamtimehero_cli.tool_catalog.categorize import categorize
+    from beamtimehero_cli.tool_catalog.definitions import AUTONOMY_TOOL_DEFINITIONS
+
+    out: dict[tuple[str, ...], "callable"] = {}
+    for tdef in AUTONOMY_TOOL_DEFINITIONS:
+        name = tdef.get("function", {}).get("name")
+        if not name:
+            continue
+        tree = categorize(tdef)
+        key = tree + (name,)
+        handler = _BRANCH_HANDLERS.get(key) or _HANDLERS.get(name)
+        if handler is None:
+            continue
+        out[key] = handler
+    return out
+
+
+DISPATCH: dict[tuple[str, ...], "callable"] = _build_dispatch()
