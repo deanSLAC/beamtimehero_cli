@@ -23,6 +23,10 @@ _DOCS: dict[str, dict] = {
         "file": _DEFAULTS_DIR / "action-log.md",
         "description": "Action-log schema and how each CLI invocation is recorded.",
     },
+    "profiles": {
+        "file": _DEFAULTS_DIR / "profiles.md",
+        "description": "Agent profiles: curated per-agent CLI surfaces over the master catalog.",
+    },
 }
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import logging
 import os
 import sys
 import time
@@ -28,8 +29,15 @@ import traceback
 from pathlib import Path
 
 from beamtimehero_cli import refdocs
+from beamtimehero_cli.cli.profiles import PROFILES
 from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS, execute_tool
 from beamtimehero_cli.tool_catalog.categorize import CATEGORY_OVERRIDES, categorize
+
+
+_CANONICAL_TREES = frozenset({
+    "ref", "tool", "db", "spec-read", "spec-write",
+    "spec-file", "s3df", "slack",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +193,84 @@ def _dest_for(path: tuple[str, ...]) -> str:
     return "leaf" if len(path) == 1 else f"leaf_{path[-2].replace('-', '_')}"
 
 
+def _index_tool_defs(tool_defs: list[dict]) -> dict[tuple[str, ...], dict]:
+    """Index tool defs by their canonical ``(tree, ..., name)`` path.
+
+    Used by ``build_profile_subtrees`` to resolve aliases in O(1) and
+    reach the JSON schema needed to clone arguments onto the profile leaf.
+    """
+    out: dict[tuple[str, ...], dict] = {}
+    for tdef in tool_defs:
+        fn = tdef.get("function") or {}
+        name = fn.get("name")
+        if not name:
+            continue
+        path = categorize(tdef) + (name,)
+        out[path] = tdef
+    return out
+
+
+def build_profile_subtrees(
+    subs: argparse._SubParsersAction,
+    tool_defs: list[dict],
+) -> None:
+    """Register each agent profile as a top-level branch.
+
+    A profile branch holds leaf parsers whose names are the profile's
+    alias keys (kebab-case); each leaf is built from the canonical
+    tool's JSON schema and dispatches to the same ``_tool_name`` /
+    ``_tool_category`` the canonical leaf would set. The master catalog
+    is untouched.
+    """
+    if not PROFILES:
+        return
+
+    index = _index_tool_defs(tool_defs)
+
+    for profile_name, profile in PROFILES.items():
+        # Guard against profile names colliding with canonical trees —
+        # would shadow the canonical branch in --help.
+        if profile_name in _CANONICAL_TREES:
+            raise RuntimeError(
+                f"Profile name {profile_name!r} collides with a canonical tree. "
+                f"Rename the profile."
+            )
+
+        branch = subs.add_parser(
+            profile_name,
+            help=(profile.get("description") or "").strip() or None,
+        )
+        leaves = branch.add_subparsers(
+            dest=_dest_for((profile_name,)), metavar="<command>",
+        )
+
+        for alias_name, canonical_path in (profile.get("aliases") or {}).items():
+            canonical_path = tuple(canonical_path)
+            tdef = index.get(canonical_path)
+            if tdef is None:
+                logging.getLogger(__name__).warning(
+                    "Profile %r aliases %r -> %s but no such tool is registered; skipping.",
+                    profile_name, alias_name, canonical_path,
+                )
+                continue
+
+            fn = tdef.get("function") or {}
+            description = (fn.get("description") or "").strip()
+            params = fn.get("parameters") or {}
+            properties = params.get("properties") or {}
+            required = set(params.get("required") or [])
+
+            leaf = leaves.add_parser(alias_name, help=description)
+            canonical_tree = canonical_path[:-1]
+            canonical_name = canonical_path[-1]
+            leaf.set_defaults(
+                _tool_name=canonical_name,
+                _tool_category=canonical_tree,
+            )
+            for key, prop in properties.items():
+                add_arg(leaf, key, prop or {}, key in required)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = ToolParser(
         prog="beamtimehero",
@@ -193,10 +279,17 @@ def build_parser() -> argparse.ArgumentParser:
             "leaves with `beamtimehero <tree> <cmd> --help`."
         ),
     )
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        dest="list_profiles",
+        help="List registered agent profiles and their alias counts.",
+    )
     trees = parser.add_subparsers(dest="tree", metavar="<tree>")
 
     build_ref_subtree(trees)
     build_catalog_subtrees(trees, TOOL_DEFINITIONS)
+    build_profile_subtrees(trees, TOOL_DEFINITIONS)
     return parser
 
 
@@ -241,7 +334,7 @@ def run_tool_leaf(args: argparse.Namespace) -> int:
     category = getattr(args, "_tool_category", ("tool",))
     payload: dict = {}
     for k, v in vars(args).items():
-        if k in {"tree", "_tool_name", "_tool_category"} or k.startswith("leaf"):
+        if k in {"tree", "_tool_name", "_tool_category", "list_profiles"} or k.startswith("leaf"):
             continue
         if v is None:
             continue
@@ -297,10 +390,7 @@ def run_tool_leaf(args: argparse.Namespace) -> int:
     return 0
 
 
-_KNOWN_TREES = frozenset({
-    "ref", "tool", "db", "spec-read", "spec-write",
-    "spec-file", "s3df", "slack",
-})
+_KNOWN_TREES = _CANONICAL_TREES | frozenset(PROFILES.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +432,25 @@ class TeeStdout(io.TextIOBase):
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _print_profile_index() -> int:
+    if not PROFILES:
+        print("No agent profiles registered.")
+        return 0
+    lines = ["Registered agent profiles:", ""]
+    for name in sorted(PROFILES):
+        prof = PROFILES[name]
+        desc = (prof.get("description") or "").strip()
+        n = len(prof.get("aliases") or {})
+        lines.append(f"  {name:20s} {n:3d} alias{'es' if n != 1 else ''}  {desc}")
+    lines.append("")
+    lines.append("Usage: beamtimehero <profile> <command> [--help]")
+    print("\n".join(lines))
+    return 0
+
+
 def dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    if getattr(args, "list_profiles", False):
+        return _print_profile_index()
     if not getattr(args, "tree", None):
         parser.print_help()
         return 0
