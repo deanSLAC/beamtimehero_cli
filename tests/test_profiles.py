@@ -24,35 +24,35 @@ def parser_module():
     return main_mod
 
 
-def test_profile_discovery_finds_k8s_agent(parser_module):
-    from beamtimehero_cli.cli.profiles import PROFILES
-    assert "k8s-agent" in PROFILES
-    assert PROFILES["k8s-agent"]["name"] == "k8s-agent"
-    assert "aliases" in PROFILES["k8s-agent"]
-    assert len(PROFILES["k8s-agent"]["aliases"]) > 0
-
-
 def test_profile_discovery_finds_bl_aligner(parser_module):
     from beamtimehero_cli.cli.profiles import PROFILES
     assert "bl-aligner" in PROFILES
+    assert PROFILES["bl-aligner"]["name"] == "bl-aligner"
+    assert len(PROFILES["bl-aligner"]["aliases"]) > 0
 
 
-def test_k8s_agent_list_scans_routes_to_s3df(parser_module):
-    parser = parser_module.build_parser()
-    args = parser.parse_args(["k8s-agent", "list-scans", "--limit", "5"])
-    assert args._tool_category == ("s3df",)
-    assert args._tool_name == "list_scans"
-    assert args.limit == 5
+def test_register_profile_adds_to_known_set(parser_module):
+    from beamtimehero_cli.cli.profiles import PROFILES, register_profile
+    register_profile({
+        "name": "test-extra",
+        "description": "registered out-of-tree",
+        "aliases": {"list-scans": ("s3df", "list_scans")},
+    })
+    try:
+        assert "test-extra" in PROFILES
+        # The profile aliases are reachable through the built parser.
+        parser = parser_module.build_parser()
+        args = parser.parse_args(["test-extra", "list-scans", "--limit", "3"])
+        assert args._tool_category == ("s3df",)
+        assert args._tool_name == "list_scans"
+    finally:
+        del PROFILES["test-extra"]
 
 
-def test_k8s_agent_psql_alias_resolves_to_nested_branch(parser_module):
-    parser = parser_module.build_parser()
-    args = parser.parse_args([
-        "k8s-agent", "execute-readonly-sql", "--query", "SELECT 1",
-    ])
-    assert args._tool_category == ("s3df", "psql")
-    assert args._tool_name == "execute_readonly_sql"
-    assert args.query == "SELECT 1"
+def test_register_profile_rejects_empty_name():
+    from beamtimehero_cli.cli.profiles import register_profile
+    with pytest.raises(ValueError):
+        register_profile({"aliases": {}})
 
 
 def test_bl_aligner_list_scans_routes_to_spec_file(parser_module):
@@ -67,7 +67,6 @@ def test_help_shows_profile_trees(parser_module, capsys):
     with pytest.raises(SystemExit):
         parser.parse_args(["--help"])
     captured = capsys.readouterr()
-    assert "k8s-agent" in captured.out
     assert "bl-aligner" in captured.out
 
 
@@ -78,7 +77,6 @@ def test_list_profiles_flag(parser_module, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "k8s-agent" in out
     assert "bl-aligner" in out
     assert "alias" in out
 

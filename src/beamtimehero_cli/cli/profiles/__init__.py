@@ -6,9 +6,9 @@ in the master tool catalog. Profiles are a *curated view* — they don't
 add new tools, they just expose a subset under a per-agent top-level
 branch (e.g. ``beamtimehero k8s-agent list-scans``).
 
-Discovery is module-listdir at import time; new profiles drop in as
-files under this package. A profile is registered if its module exposes
-``PROFILE`` with at least a ``name``.
+Discovery is module-listdir at import time for profiles bundled with
+this package. Out-of-tree consumers (e.g. the playground deployment)
+register their profiles via :func:`register_profile`.
 """
 from __future__ import annotations
 
@@ -19,6 +19,21 @@ import pkgutil
 logger = logging.getLogger(__name__)
 
 PROFILES: dict[str, dict] = {}
+
+
+def register_profile(profile: dict) -> None:
+    """Register an out-of-tree agent profile.
+
+    The profile dict must contain ``name`` (str) and ``aliases``
+    (mapping of kebab leaf name → canonical ``(tree, ..., name)``
+    tuple). A ``description`` field is recommended for help text.
+
+    Call this at startup, before any parser is built. Later calls
+    overwrite earlier ones with the same name.
+    """
+    if not profile or not profile.get("name"):
+        raise ValueError("Profile must include a non-empty 'name'.")
+    PROFILES[profile["name"]] = profile
 
 
 def _discover() -> None:
