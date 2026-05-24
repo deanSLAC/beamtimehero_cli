@@ -2,6 +2,10 @@
 
 Uses local_data module for metadata queries and scan reading.
 No pickle files required.
+
+Pure-math helpers (edge-step normalization, active-counter selection,
+per-rep noise estimation, averaging) live in ``beamtimehero_cli.analysis.xas``
+so the postgres-backed flow can reuse them without copy-pasting.
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+from beamtimehero_cli.analysis import xas
 from beamtimehero_cli.spec_data import local_data
 
 
@@ -38,71 +43,24 @@ def get_scan_deadtime(file_name, scan_number):
 def get_active_counter(file_name, scan_number):
     """Determine the 'active' fluorescence/absorption counter for a scan.
 
-    Decision logic:
-      1. If 'ppboff' is a counter, it is the active counter.
-      2. Else if 'vortDT' is a counter, compare max values of vortDT, vortDT2,
-         vortDT3, vortDT4 -- whichever has the highest max is active.
-      3. Otherwise, default to 'I1'.
+    Selection logic lives in ``analysis.xas.pick_active_counter`` and is
+    shared with the postgres backend.
     """
     df = read_processed_scan(file_name, scan_number)
     if df is None:
         return None
-
-    cols = set(df.columns)
-
-    if "ppboff" in cols:
-        return {
-            "file_name": file_name,
-            "scan_number": scan_number,
-            "active_counter": "ppboff",
-            "reason": "ppboff counter present",
-        }
-
-    vort_candidates = ["vortDT", "vortDT2", "vortDT3", "vortDT4"]
-    available_vorts = [c for c in vort_candidates if c in cols]
-    if available_vorts:
-        best = max(available_vorts, key=lambda c: df[c].max())
-        return {
-            "file_name": file_name,
-            "scan_number": scan_number,
-            "active_counter": best,
-            "reason": f"highest max among {available_vorts}",
-        }
-
+    counter, reason = xas.pick_active_counter(df)
     return {
         "file_name": file_name,
         "scan_number": scan_number,
-        "active_counter": "I1",
-        "reason": "no ppboff or vortDT counters, defaulting to I1",
+        "active_counter": counter,
+        "reason": reason,
     }
 
 
-def _edge_step_normalize(df, counter, normalize_by="I0"):
-    """Core edge-step normalization on a scan DataFrame."""
-    if counter not in df.columns:
-        raise KeyError(f"Counter '{counter}' not found. Available: {list(df.columns)}")
-    if normalize_by and normalize_by not in df.columns:
-        raise KeyError(f"Normalization counter '{normalize_by}' not found. Available: {list(df.columns)}")
-
-    energy = df.index.values.astype(float)
-    signal = df[counter].values.astype(float)
-
-    if normalize_by:
-        i0 = df[normalize_by].values.astype(float)
-        i0_safe = np.where(i0 == 0, 1.0, i0)
-        signal = signal / i0_safe
-
-    n = len(signal)
-    n10 = max(1, n // 10)
-    pre_mean = np.mean(signal[:n10])
-    post_mean = np.mean(signal[-n10:])
-    denom = post_mean - pre_mean
-    if abs(denom) < 1e-15:
-        normalized = signal - pre_mean
-    else:
-        normalized = (signal - pre_mean) / denom
-
-    return energy, normalized
+# Backward-compat shim: re-export the pure math from the analysis layer
+# so callers that still import ``scans._edge_step_normalize`` keep working.
+_edge_step_normalize = xas.edge_step_normalize
 
 
 def edge_step_normalize_scan(file_name, scan_number, counter=None, normalize_by="I0"):
@@ -204,24 +162,8 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     return combined, file_name, counter, used_scans
 
 
-def _estimate_per_rep_noise(combined: pd.DataFrame, baseline_frac: float = 0.10) -> np.ndarray:
-    """Estimate per-rep noise sigma from the standard deviation of the last
-    `baseline_frac` of the energy axis (post-edge plateau, defined to be ~1.0
-    by edge-step normalization, so any residual std is per-rep noise).
-
-    Returns one sigma per scan column. Falls back to 1.0 (equal-weighted) if
-    the baseline window is too short or yields zero std.
-    """
-    n_points = len(combined)
-    n_baseline = max(5, int(n_points * baseline_frac))
-    baseline = combined.iloc[-n_baseline:]
-    sigmas = baseline.std(axis=0, ddof=1).values
-    sigmas = np.where(np.isfinite(sigmas) & (sigmas > 0), sigmas, np.nan)
-    if not np.any(np.isfinite(sigmas)):
-        return np.ones(combined.shape[1])
-    fallback = np.nanmedian(sigmas)
-    sigmas = np.where(np.isfinite(sigmas), sigmas, fallback)
-    return sigmas
+# Backward-compat shim — implementation lives in ``analysis.xas``.
+_estimate_per_rep_noise = xas.estimate_per_rep_noise
 
 
 def average_energy_scans(
