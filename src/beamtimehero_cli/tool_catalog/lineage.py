@@ -1126,6 +1126,53 @@ TOOL_LINEAGE: dict[str, dict] = {
         ),
         "depends_on": [],
     },
+
+    # ---------- Observation ---------------------------------------------------
+
+    "capture_sample_image": {
+        "long_description": (
+            "Capture a low-resolution JPEG snapshot from the RPi-Cam "
+            "sample camera. Returns image metadata as text and the raw "
+            "JPEG as an inline base64 image. Also logs the JPEG to "
+            "DATA_DIR/camera_log/ for audit. Useful for visual "
+            "inspection of sample position, beam spot location, or "
+            "cryostat window state."
+        ),
+        "python_func": (
+            "requests.get(f'http://{SAMPLE_CAM_HOST}:{SAMPLE_CAM_PORT}"
+            "/snapshot.jpg', params={'resolution': 'low', 'quality': q})"
+        ),
+        "spec_command": None,
+        "output": "JSON: {ok, resolution, quality, size_bytes} + inline JPEG image",
+        "source": "camera",
+        "source_detail": (
+            "HTTP GET to the RPi-Cam snapshot endpoint on the beamline "
+            "network (default 192.168.150.93:8080). Returns the latest "
+            "live video frame at 1600x1200. Override via SAMPLE_CAM_HOST "
+            "and SAMPLE_CAM_PORT env vars."
+        ),
+        "depends_on": [],
+    },
+    "get_reference_image": {
+        "long_description": (
+            "Return a reference image for a known sample environment or "
+            "diagnostic tool. The image is read from version-controlled "
+            "package data and returned inline as base64 JPEG. Compare "
+            "the result with a live capture_sample_image snapshot to "
+            "confirm what is currently mounted on the sample stage."
+        ),
+        "python_func": (
+            "Path(reference_images / manifest[kind]['file']).read_bytes()"
+        ),
+        "spec_command": None,
+        "output": "JSON: {ok, kind, description, size_bytes} + inline JPEG image",
+        "source": "filesystem",
+        "source_detail": (
+            "Reads from beamtimehero_cli/reference_images/ — "
+            "version-controlled JPEG files registered in manifest.json."
+        ),
+        "depends_on": [],
+    },
 }
 
 def extract_inputs(tool_def: dict) -> list[dict]:

@@ -128,3 +128,10 @@ LOG_FILE_PATTERN = "log__*"
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
 MAX_LOG_LINES = 1000
+
+# ---------------------------------------------------------------------------
+# Sample camera (RPi-Cam snapshot endpoint)
+# ---------------------------------------------------------------------------
+SAMPLE_CAM_HOST = os.getenv("SAMPLE_CAM_HOST", "192.168.150.93")
+SAMPLE_CAM_PORT = int(os.getenv("SAMPLE_CAM_PORT", "8080"))
+SAMPLE_CAM_DEFAULT_QUALITY = int(os.getenv("SAMPLE_CAM_QUALITY", "50"))
