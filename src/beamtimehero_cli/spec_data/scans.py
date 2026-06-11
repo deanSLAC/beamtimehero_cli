@@ -65,6 +65,33 @@ def get_active_counter(file_name, scan_number):
     }
 
 
+# ---------------------------------------------------------------------------
+# LLM-facing DataFrame rendering
+# ---------------------------------------------------------------------------
+
+_LLM_MAX_ROWS = 200
+_LLM_EDGE_ROWS = 100
+
+
+def df_to_llm_text(df, max_rows: int = _LLM_MAX_ROWS) -> str:
+    """Render a DataFrame for inclusion in LLM-facing tool output.
+
+    Small frames render byte-identically to ``df.to_string()``. Frames
+    larger than *max_rows* are elided to head+tail with an explicit
+    marker so a 1000-point scan doesn't become a multi-thousand-token
+    blob per tool call.
+    """
+    if len(df) <= max_rows:
+        return df.to_string()
+    head = df.head(_LLM_EDGE_ROWS).to_string()
+    tail = df.tail(_LLM_EDGE_ROWS).to_string()
+    elided = len(df) - 2 * _LLM_EDGE_ROWS
+    return (
+        f"{head}\n... [{elided} of {len(df)} rows elided — "
+        f"use plot/analysis tools for the full series] ...\n{tail}"
+    )
+
+
 # Backward-compat shim: re-export the pure math from the analysis layer
 # so callers that still import ``scans._edge_step_normalize`` keep working.
 _edge_step_normalize = xas.edge_step_normalize
@@ -96,7 +123,7 @@ def edge_step_normalize_scan(file_name, scan_number, counter=None, normalize_by=
         "counter": counter,
         "normalize_by": normalize_by,
         "num_points": len(result_df),
-        "data": result_df.to_string(),
+        "data": df_to_llm_text(result_df),
     }
 
 
@@ -309,7 +336,7 @@ def average_energy_scans(
     if result_df is None:
         return info
     out = {k: v for k, v in info.items() if k != "weights_used"}
-    out["data"] = result_df.to_string()
+    out["data"] = df_to_llm_text(result_df)
     if "weights_used" in info:
         out["weights_used"] = info["weights_used"]
     return out

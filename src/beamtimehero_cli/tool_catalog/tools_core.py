@@ -569,7 +569,7 @@ def t_read_scan(arguments: dict) -> tuple[str, list[str]]:
         return "Scan not found.", images_b64
     df, reason = scan_data.read_processed_scan_ex(file_name, scan_number)
     if df is not None:
-        meta["data"] = df.to_string()
+        meta["data"] = scan_data.df_to_llm_text(df)
     else:
         # Not-found vs corrupt are different situations for the agent:
         # metadata exists, so say WHY the data itself is unavailable.
@@ -1188,7 +1188,7 @@ def t_s3df_read_scan(args):
             return None
         df = b.read_scan(args["file_name"], args["scan_number"])
         if df is not None:
-            meta["data"] = df.to_string()
+            meta["data"] = scan_data.df_to_llm_text(df)
         return meta
     return _s3df(_go)
 
