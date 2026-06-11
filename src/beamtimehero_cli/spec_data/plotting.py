@@ -62,25 +62,14 @@ def plot_averaged_scans_overlay(file_names):
     plotted = []
 
     for fn in sample_names:
-        result = scans.average_energy_scans(file_name=fn)
-        if not result or "error" in result:
-            logger.info("Skipping %s: %s", fn, result.get("error") if result else "no result")
+        info, result_df = scans.average_energy_scans_arrays(file_name=fn)
+        if result_df is None or len(result_df) == 0:
+            logger.info("Skipping %s: %s", fn, info.get("error", "no result"))
             continue
-        # Parse the string data back into arrays for plotting
-        lines = result["data"].strip().split("\n")
-        energies, averages, stds = [], [], []
-        for line in lines[1:]:  # skip header
-            parts = line.split()
-            if len(parts) >= 2:
-                energies.append(float(parts[0]))
-                averages.append(float(parts[1]))
-                stds.append(float(parts[2]) if len(parts) >= 3 else 0.0)
-        if not energies:
-            continue
-        energies_arr = np.array(energies)
-        avg_arr = np.array(averages)
-        std_arr = np.array(stds)
-        label = f"{fn} ({result['num_scans_averaged']} scans)"
+        energies_arr = result_df.index.values.astype(float)
+        avg_arr = result_df["average"].values.astype(float)
+        std_arr = np.nan_to_num(result_df["std"].values.astype(float))
+        label = f"{fn} ({info['num_scans_averaged']} scans)"
         line, = ax.plot(energies_arr, avg_arr, label=label, linewidth=1.2)
         if std_arr.any():
             ax.fill_between(energies_arr, avg_arr - std_arr, avg_arr + std_arr,

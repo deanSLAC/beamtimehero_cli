@@ -166,36 +166,30 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
 _estimate_per_rep_noise = xas.estimate_per_rep_noise
 
 
-def average_energy_scans(
+def average_energy_scans_arrays(
     file_name=None,
     e_min=None,
     e_max=None,
     weighting: str = "equal",
     scan_numbers=None,
 ):
-    """Average all energy scans in a SPEC file after edge-step normalization.
+    """Array-returning core of :func:`average_energy_scans`.
 
-    Parameters
-    ----------
-    file_name : str, optional
-        SPEC file name. If None, uses the most recent file.
-    e_min, e_max : float, optional
-        Restrict the returned average to this energy window. Normalization is
-        still done on the full scan; only the output is windowed.
-    weighting : {"equal", "inverse_variance"}, default "equal"
-        "equal": unweighted mean across scans.
-        "inverse_variance": weight each scan by 1/sigma_i^2 where sigma_i is
-        estimated from the post-edge baseline std of that scan. Higher-SNR
-        spots contribute more.
-    scan_numbers : list[int], optional
-        If given, restrict to these specific scan numbers.
+    Returns ``(info, result_df)`` where ``info`` is the summary dict
+    WITHOUT the rendered ``"data"`` string and ``result_df`` is the
+    averaged DataFrame (index=energy, columns=``average``, ``std``).
+    On failure returns ``({"error": ...}, None)``.
+
+    Use this from numeric consumers (plotting, analysis) — the
+    ``to_string()`` rendering in :func:`average_energy_scans` exists
+    only for LLM-facing tool output.
     """
     try:
         combined, file_name, counter, used_scans = get_normalized_scan_arrays(
             file_name, e_min=e_min, e_max=e_max, scan_numbers=scan_numbers
         )
     except ValueError as e:
-        return {"error": str(e)}
+        return {"error": str(e)}, None
 
     if weighting == "inverse_variance":
         # For weighting we need a baseline estimate from the FULL scan, not the
@@ -219,12 +213,12 @@ def average_energy_scans(
         std = combined.std(axis=1)
         weights_used = None
     else:
-        return {"error": f"Unknown weighting '{weighting}'. Use 'equal' or 'inverse_variance'."}
+        return {"error": f"Unknown weighting '{weighting}'. Use 'equal' or 'inverse_variance'."}, None
 
     result_df = pd.DataFrame({"energy": avg.index, "average": avg.values, "std": std.values})
     result_df = result_df.set_index("energy")
 
-    out = {
+    info = {
         "file_name": file_name,
         "active_counter": counter,
         "num_scans_averaged": len(used_scans),
@@ -232,10 +226,50 @@ def average_energy_scans(
         "num_points": len(result_df),
         "weighting": weighting,
         "energy_window": [e_min, e_max] if (e_min is not None and e_max is not None) else None,
-        "data": result_df.to_string(),
     }
     if weights_used is not None:
-        out["weights_used"] = [round(w, 6) for w in weights_used]
+        info["weights_used"] = [round(w, 6) for w in weights_used]
+    return info, result_df
+
+
+def average_energy_scans(
+    file_name=None,
+    e_min=None,
+    e_max=None,
+    weighting: str = "equal",
+    scan_numbers=None,
+):
+    """Average all energy scans in a SPEC file after edge-step normalization.
+
+    Parameters
+    ----------
+    file_name : str, optional
+        SPEC file name. If None, uses the most recent file.
+    e_min, e_max : float, optional
+        Restrict the returned average to this energy window. Normalization is
+        still done on the full scan; only the output is windowed.
+    weighting : {"equal", "inverse_variance"}, default "equal"
+        "equal": unweighted mean across scans.
+        "inverse_variance": weight each scan by 1/sigma_i^2 where sigma_i is
+        estimated from the post-edge baseline std of that scan. Higher-SNR
+        spots contribute more.
+    scan_numbers : list[int], optional
+        If given, restrict to these specific scan numbers.
+
+    The returned dict carries the averaged data rendered via ``to_string``
+    under ``"data"`` (LLM-facing). Numeric consumers should call
+    :func:`average_energy_scans_arrays` instead of re-parsing that text.
+    """
+    info, result_df = average_energy_scans_arrays(
+        file_name=file_name, e_min=e_min, e_max=e_max,
+        weighting=weighting, scan_numbers=scan_numbers,
+    )
+    if result_df is None:
+        return info
+    out = {k: v for k, v in info.items() if k != "weights_used"}
+    out["data"] = result_df.to_string()
+    if "weights_used" in info:
+        out["weights_used"] = info["weights_used"]
     return out
 
 
