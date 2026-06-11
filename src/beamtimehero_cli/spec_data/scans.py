@@ -98,6 +98,41 @@ def get_most_recent_file():
     return local_data.get_most_recent_file()
 
 
+# Energy-grid alignment tolerance: 4 decimals of eV (0.1 meV) — far below
+# any mono step size, far above float jitter between nominally-equal grids.
+_ENERGY_ALIGN_DECIMALS = 4
+
+
+def _concat_aligned(series_list, decimals=_ENERGY_ALIGN_DECIMALS):
+    """Concat per-scan Series on a tolerance-aligned energy index.
+
+    Exact-float index alignment in ``pd.concat`` silently fans out rows
+    (and later ``dropna()`` discards them) when energy grids carry float
+    jitter between reps. When the grids are already exactly identical
+    the series are concatenated as-is — behavior (and index values) are
+    unchanged. Otherwise each index is rounded to ``decimals`` decimals
+    of eV before concat; duplicate rounded energies within one scan are
+    averaged.
+    """
+    if len(series_list) > 1:
+        first = series_list[0].index
+        identical = all(
+            len(s.index) == len(first) and np.array_equal(s.index.values, first.values)
+            for s in series_list[1:]
+        )
+        if not identical:
+            aligned = []
+            for s in series_list:
+                s2 = s.copy()
+                s2.index = np.round(s2.index.values.astype(float), decimals)
+                if s2.index.has_duplicates:
+                    s2 = s2.groupby(level=0).mean()
+                    s2.name = s.name
+                aligned.append(s2)
+            series_list = aligned
+    return pd.concat(series_list, axis=1)
+
+
 def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numbers=None):
     """Load all scans for a file, normalize, and return as a DataFrame on a common energy grid.
 
@@ -146,7 +181,7 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     if not normalized_scans:
         raise ValueError(f"No valid scans to normalize in '{file_name}'.")
 
-    combined = pd.concat(normalized_scans, axis=1)
+    combined = _concat_aligned(normalized_scans)
 
     if e_min is not None and e_max is not None:
         if e_min >= e_max:
@@ -441,7 +476,7 @@ def get_raw_counter_arrays(file_name=None, scan_numbers=None):
     if not series_list:
         raise ValueError(f"No scans with counter '{counter}' found in '{file_name}'.")
 
-    combined = pd.concat(series_list, axis=1)
+    combined = _concat_aligned(series_list)
     combined.attrs["count_times"] = count_times
     combined.attrs["counter"] = counter
     return combined, file_name, counter, used
