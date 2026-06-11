@@ -8,8 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX; advisory locking is a no-op
+    fcntl = None
 
 import numpy as np
 import pandas as pd
@@ -20,7 +28,8 @@ logger = logging.getLogger(__name__)
 from beamtimehero_cli import config as bl_config
 
 _metadata_cache: dict | None = None
-_cached_file_mtimes: dict[str, float] = {}  # file_path -> mtime at cache time
+# file_path -> (mtime, size) at last successful parse
+_cached_file_sigs: dict[str, tuple[float, int]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -144,13 +153,66 @@ def _get_cache_file() -> Path | None:
     return None
 
 
+@contextmanager
+def _cache_lock():
+    """Advisory inter-process lock around load-merge-save of the cache.
+
+    Uses ``fcntl.flock`` on a ``.lock`` sidecar next to the cache file so
+    concurrent CLI processes serialize their load-merge-save sequences
+    instead of clobbering each other's writes. Best-effort: any failure
+    to acquire the lock degrades to unlocked operation.
+    """
+    cache_file = _get_cache_file()
+    fh = None
+    if cache_file is not None and fcntl is not None:
+        lock_file = cache_file.with_name(cache_file.name + ".lock")
+        try:
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            fh = open(lock_file, "a")
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            if fh is not None:
+                fh.close()
+            fh = None
+    try:
+        yield
+    finally:
+        if fh is not None:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+            fh.close()
+
+
+def _load_cache_file(cache_file: Path) -> dict | None:
+    """Read the sidecar cache from disk. Returns None when missing,
+    unreadable, or not the expected dict-of-dicts shape (e.g. ``null`` or
+    a list left by a corrupt/partial write) — caller rebuilds in that case.
+    """
+    if not cache_file.exists():
+        return None
+    try:
+        loaded = json.loads(cache_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(loaded, dict):
+        logger.warning(
+            "Metadata cache %s contains %s instead of an object; rebuilding.",
+            cache_file, type(loaded).__name__,
+        )
+        return None
+    # Drop malformed (non-dict) entries instead of AttributeError-ing later.
+    return {k: v for k, v in loaded.items() if isinstance(v, dict)}
+
+
 def _load_cache() -> dict:
     """Load or rebuild the scan metadata cache.
 
-    Checks per-file mtimes to detect new or changed SPEC files and
-    re-parses only those files.
+    Checks per-file (mtime, size) signatures to detect new or changed
+    SPEC files and re-parses only those files.
     """
-    global _metadata_cache, _cached_file_mtimes
+    global _metadata_cache
 
     scan_dir = bl_config.BL_SCAN_DIR
 
@@ -160,22 +222,27 @@ def _load_cache() -> dict:
         if not changed:
             return _metadata_cache
         # Re-parse only changed files, merge into existing cache
-        logger.info("Re-parsing %d changed SPEC file(s)", len(changed))
-        new_entries = _parse_spec_files(changed)
-        _metadata_cache.update(new_entries)
-        _save_cache()
+        with _cache_lock():
+            logger.info("Re-parsing %d changed SPEC file(s)", len(changed))
+            new_entries = _parse_spec_files(changed)
+            _metadata_cache.update(new_entries)
+            _save_cache()
         return _metadata_cache
 
-    # Try loading from disk
-    cache_file = _get_cache_file()
-    if cache_file and cache_file.exists():
-        try:
-            _metadata_cache = json.loads(cache_file.read_text())
-            # Rebuild file mtime tracking from cache entries
+    with _cache_lock():
+        # Try loading from disk
+        cache_file = _get_cache_file()
+        loaded = _load_cache_file(cache_file) if cache_file else None
+        if loaded is not None:
+            _metadata_cache = loaded
+            # Rebuild file signature tracking from cache entries
             for entry in _metadata_cache.values():
                 fp = entry.get("file_path")
                 if fp:
-                    _cached_file_mtimes[fp] = entry.get("file_mtime", 0)
+                    _cached_file_sigs[fp] = (
+                        entry.get("file_mtime", 0),
+                        entry.get("file_size", -1),
+                    )
             # Check for changes since disk cache was written
             changed = _find_changed_files(scan_dir)
             if changed:
@@ -184,17 +251,15 @@ def _load_cache() -> dict:
                 _metadata_cache.update(new_entries)
                 _save_cache()
             return _metadata_cache
-        except (json.JSONDecodeError, OSError):
-            pass
 
-    # Build from scratch
-    _metadata_cache = _build_metadata_cache()
-    _save_cache()
-    return _metadata_cache
+        # Build from scratch
+        _metadata_cache = _build_metadata_cache()
+        _save_cache()
+        return _metadata_cache
 
 
 def _find_changed_files(scan_dir: Path) -> list[Path]:
-    """Find SPEC files that are new or have a different mtime than cached."""
+    """Find SPEC files that are new or have a different (mtime, size) than cached."""
     changed = []
     if not scan_dir or not scan_dir.exists():
         return changed
@@ -212,31 +277,46 @@ def _find_changed_files(scan_dir: Path) -> list[Path]:
 
 
 def _check_file(spec_path: Path, changed: list[Path]):
-    """Check if a single file needs re-parsing."""
+    """Check if a single file needs re-parsing.
+
+    Compares (mtime, size) for inequality — mtime alone misses
+    same-second rewrites and backwards clock adjustments. The new
+    signature is recorded by ``_parse_spec_files`` only AFTER a
+    successful parse, so a failed parse is retried on the next call.
+    """
     try:
         if not is_specfile(str(spec_path)):
             return
     except Exception:
         return
+    try:
+        st = spec_path.stat()
+    except OSError:
+        return
     fp = str(spec_path)
-    current_mtime = spec_path.stat().st_mtime
-    if fp not in _cached_file_mtimes or _cached_file_mtimes[fp] < current_mtime:
+    if _cached_file_sigs.get(fp) != (st.st_mtime, st.st_size):
         changed.append(spec_path)
-        _cached_file_mtimes[fp] = current_mtime
 
 
 def _parse_spec_files(file_list: list[Path]) -> dict:
     """Parse a list of SPEC files and return cache entries."""
     cache = {}
     for spec_path in file_list:
+        # Stat BEFORE parsing: if the file changes mid-parse, the recorded
+        # signature is the pre-parse one and the file is re-parsed next call.
+        try:
+            st = spec_path.stat()
+        except OSError:
+            continue
         try:
             sf = SpecFile(str(spec_path))
         except Exception:
-            logger.debug("Failed to open SPEC file: %s", spec_path)
+            logger.warning("Failed to open SPEC file: %s", spec_path)
             continue
 
         file_name = spec_path.name
-        file_mtime = spec_path.stat().st_mtime
+        file_mtime = st.st_mtime
+        file_size = st.st_size
         exp_name = spec_path.parent.name
 
         for scan_idx in range(len(sf)):
@@ -292,10 +372,15 @@ def _parse_spec_files(file_list: list[Path]) -> dict:
                     "wall_clock_seconds": wall_clock,
                     "dead_time_seconds": dead_time,
                     "file_mtime": file_mtime,
+                    "file_size": file_size,
                 }
             except Exception as e:
-                logger.debug("Failed to parse scan %d in %s: %s", scan_idx, spec_path, e)
+                logger.warning("Failed to parse scan %d in %s: %s", scan_idx, spec_path, e)
                 continue
+
+        # Record the signature only AFTER the file parsed successfully,
+        # so a failed parse is retried on the next call.
+        _cached_file_sigs[str(spec_path)] = (file_mtime, file_size)
 
     return cache
 
@@ -314,37 +399,55 @@ def _build_metadata_cache() -> dict:
                     try:
                         if is_specfile(str(spec_path)):
                             all_spec_files.append(spec_path)
-                            _cached_file_mtimes[str(spec_path)] = spec_path.stat().st_mtime
                     except Exception:
                         continue
         elif child.is_file():
             try:
                 if is_specfile(str(child)):
                     all_spec_files.append(child)
-                    _cached_file_mtimes[str(child)] = child.stat().st_mtime
             except Exception:
                 continue
 
+    # _parse_spec_files records the (mtime, size) signature per file
+    # after each successful parse.
     return _parse_spec_files(all_spec_files)
 
 
 def _save_cache():
-    """Persist cache to disk."""
+    """Persist cache to disk atomically.
+
+    Writes to a temp file in the same directory then ``os.replace()``s it
+    over the cache, so readers never see a partially written JSON file.
+    """
     cache_file = _get_cache_file()
     if not cache_file or not _metadata_cache:
         return
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps(_metadata_cache, default=str))
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(cache_file.parent),
+            prefix=cache_file.name + ".",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps(_metadata_cache, default=str))
+            os.replace(tmp_path, str(cache_file))
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
     except OSError as e:
         logger.warning("Failed to save metadata cache: %s", e)
 
 
 def clear_cache():
     """Clear the in-memory cache. Called when scan dir changes."""
-    global _metadata_cache, _cached_file_mtimes
+    global _metadata_cache
     _metadata_cache = None
-    _cached_file_mtimes.clear()
+    _cached_file_sigs.clear()
 
 
 def refresh_cache():
