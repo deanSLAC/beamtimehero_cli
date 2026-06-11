@@ -35,6 +35,13 @@ def read_processed_scan(file_name, scan_number):
     return local_data.read_processed_scan(file_name, scan_number)
 
 
+def read_processed_scan_ex(file_name, scan_number):
+    """Read scan data returning ``(df, reason)`` — reason distinguishes
+    ``not_found`` / ``empty_scan`` / ``parse_error: ...`` when df is None.
+    """
+    return local_data.read_processed_scan_ex(file_name, scan_number)
+
+
 def get_scan_deadtime(file_name, scan_number):
     """Get dead time info for a single scan."""
     return local_data.get_scan_deadtime(file_name, scan_number)

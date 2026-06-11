@@ -33,6 +33,10 @@ _metadata_cache: dict | None = None
 _cached_file_sigs: dict[str, tuple[float, int]] = {}
 
 
+class ScanReadError(Exception):
+    """A SPEC scan exists in the metadata cache but could not be parsed."""
+
+
 # ---------------------------------------------------------------------------
 # SPEC file helpers
 # ---------------------------------------------------------------------------
@@ -112,7 +116,11 @@ def _parse_scan_command(header_lines: list[str]) -> tuple[int | None, str]:
 
 
 def _read_spec_scan(spec_path: str | Path, scan_index: int) -> pd.DataFrame | None:
-    """Read a single scan from a SPEC file and return as a DataFrame."""
+    """Read a single scan from a SPEC file and return as a DataFrame.
+
+    Returns None for an empty (header-only) scan; raises
+    :class:`ScanReadError` when the file/scan exists but cannot be parsed.
+    """
     try:
         sf = _open_specfile(spec_path)
         scan = sf[scan_index]
@@ -168,8 +176,10 @@ def _read_spec_scan(spec_path: str | Path, scan_index: int) -> pd.DataFrame | No
         }
         return df
     except Exception as e:
-        logger.debug("Failed to read scan %d from %s: %s", scan_index, spec_path, e)
-        return None
+        logger.warning("Failed to read scan %d from %s: %s", scan_index, spec_path, e)
+        raise ScanReadError(
+            f"scan index {scan_index} in {spec_path} could not be parsed: {e}"
+        ) from e
 
 
 # ---------------------------------------------------------------------------
@@ -538,19 +548,41 @@ def get_scan_metadata(file_name, scan_number) -> dict | None:
 
 
 def read_processed_scan(file_name, scan_number) -> pd.DataFrame | None:
-    """Read scan data from the SPEC file. Returns DataFrame or None."""
+    """Read scan data from the SPEC file. Returns DataFrame or None.
+
+    None covers both scan-not-found and parse failure (backward compat);
+    use :func:`read_processed_scan_ex` to distinguish the two.
+    """
+    df, _reason = read_processed_scan_ex(file_name, scan_number)
+    return df
+
+
+def read_processed_scan_ex(file_name, scan_number) -> tuple[pd.DataFrame | None, str | None]:
+    """Like :func:`read_processed_scan` but returns ``(df, reason)``.
+
+    ``reason`` is None on success, ``"not_found"`` when the scan is not
+    in the cache (or its file vanished), ``"empty_scan"`` for a
+    header-only scan, or ``"parse_error: ..."`` when the file exists but
+    silx failed to parse it.
+    """
     cache = _load_cache()
     key = f"{file_name}::{scan_number}"
     entry = cache.get(key)
     if not entry or not entry.get("file_path"):
-        return None
+        return None, "not_found"
     spec_path = Path(entry["file_path"])
     if not spec_path.exists():
-        return None
+        return None, "not_found"
     scan_index = entry.get("scan_index")
     if scan_index is None:
-        return None
-    return _read_spec_scan(spec_path, scan_index)
+        return None, "not_found"
+    try:
+        df = _read_spec_scan(spec_path, scan_index)
+    except ScanReadError as e:
+        return None, f"parse_error: {e}"
+    if df is None:
+        return None, "empty_scan"
+    return df, None
 
 
 def get_scan_deadtime(file_name, scan_number) -> dict | None:

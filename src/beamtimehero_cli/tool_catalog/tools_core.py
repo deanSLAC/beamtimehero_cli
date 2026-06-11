@@ -557,9 +557,16 @@ def t_read_scan(arguments: dict) -> tuple[str, list[str]]:
     meta = scan_data.get_scan_metadata(file_name, scan_number)
     if not meta:
         return "Scan not found.", images_b64
-    df = scan_data.read_processed_scan(file_name, scan_number)
+    df, reason = scan_data.read_processed_scan_ex(file_name, scan_number)
     if df is not None:
         meta["data"] = df.to_string()
+    else:
+        # Not-found vs corrupt are different situations for the agent:
+        # metadata exists, so say WHY the data itself is unavailable.
+        meta["data_error"] = (
+            f"Scan metadata found but scan data could not be read "
+            f"({reason or 'unknown'})."
+        )
     return json.dumps(meta, indent=2), images_b64
 
 def t_get_latest_log_entries(arguments: dict) -> tuple[str, list[str]]:
