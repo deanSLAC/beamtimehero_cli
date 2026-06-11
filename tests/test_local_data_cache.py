@@ -155,6 +155,42 @@ def test_failed_parse_is_retried_on_next_call(scan_dir):
     assert str(spec) in local_data._cached_file_sigs
 
 
+# ---------------------------------------------------------------------------
+# Item 3: one SpecFile parse per file for multi-scan operations
+# ---------------------------------------------------------------------------
+
+def test_specfile_parsed_once_for_repeated_scan_reads(scan_dir):
+    spec = scan_dir / "sample1"
+    _write_spec(spec, n_scans=3)
+    local_data._load_cache()
+    local_data._specfile_handles.clear()
+
+    count = {"n": 0}
+    real = local_data.SpecFile
+
+    def _counting(path):
+        count["n"] += 1
+        return real(path)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(local_data, "SpecFile", _counting)
+        for sn in (1, 2, 3):
+            df = local_data.read_processed_scan("sample1", sn)
+            assert df is not None
+    assert count["n"] == 1, "reading N scans of one unchanged file must parse it once"
+
+
+def test_specfile_handle_invalidated_on_change(scan_dir):
+    spec = scan_dir / "sample1"
+    _write_spec(spec, n_scans=1)
+    assert local_data.read_processed_scan("sample1", 1) is not None
+
+    _write_spec(spec, n_scans=2)
+    local_data._load_cache()
+    df = local_data.read_processed_scan("sample1", 2)
+    assert df is not None, "appended scan must be visible after the file changed"
+
+
 def test_unchanged_file_not_reparsed(scan_dir, monkeypatch):
     spec = scan_dir / "sample1"
     _write_spec(spec)

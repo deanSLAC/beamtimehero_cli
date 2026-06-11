@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import tempfile
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,35 @@ _cached_file_sigs: dict[str, tuple[float, int]] = {}
 # ---------------------------------------------------------------------------
 # SPEC file helpers
 # ---------------------------------------------------------------------------
+
+_SPECFILE_HANDLE_MAX = 8
+# (path, mtime, size) -> SpecFile; small LRU so multi-scan operations
+# (e.g. averaging all reps of a file) parse the file once, not N+1 times.
+_specfile_handles: OrderedDict[tuple[str, float, int], SpecFile] = OrderedDict()
+
+
+def _open_specfile(spec_path: str | Path) -> SpecFile:
+    """Open a SPEC file through a small (path, mtime, size)-keyed LRU.
+
+    Returns a cached ``SpecFile`` when the file is unchanged since it was
+    last opened; otherwise re-parses and replaces any stale handle for
+    the same path. Raises whatever ``SpecFile``/``stat`` raise.
+    """
+    st = Path(spec_path).stat()
+    key = (str(spec_path), st.st_mtime, st.st_size)
+    sf = _specfile_handles.get(key)
+    if sf is not None:
+        _specfile_handles.move_to_end(key)
+        return sf
+    sf = SpecFile(str(spec_path))
+    # Drop stale handles for the same path before inserting the fresh one.
+    for stale in [k for k in _specfile_handles if k[0] == key[0]]:
+        del _specfile_handles[stale]
+    _specfile_handles[key] = sf
+    while len(_specfile_handles) > _SPECFILE_HANDLE_MAX:
+        _specfile_handles.popitem(last=False)
+    return sf
+
 
 def _parse_spec_date(header_lines: list[str]) -> str | None:
     """Extract date from #D header line and return as ISO string."""
@@ -84,7 +114,7 @@ def _parse_scan_command(header_lines: list[str]) -> tuple[int | None, str]:
 def _read_spec_scan(spec_path: str | Path, scan_index: int) -> pd.DataFrame | None:
     """Read a single scan from a SPEC file and return as a DataFrame."""
     try:
-        sf = SpecFile(str(spec_path))
+        sf = _open_specfile(spec_path)
         scan = sf[scan_index]
         labels = scan.labels
         data = scan.data
@@ -309,7 +339,7 @@ def _parse_spec_files(file_list: list[Path]) -> dict:
         except OSError:
             continue
         try:
-            sf = SpecFile(str(spec_path))
+            sf = _open_specfile(spec_path)
         except Exception:
             logger.warning("Failed to open SPEC file: %s", spec_path)
             continue
@@ -448,6 +478,7 @@ def clear_cache():
     global _metadata_cache
     _metadata_cache = None
     _cached_file_sigs.clear()
+    _specfile_handles.clear()
 
 
 def refresh_cache():
