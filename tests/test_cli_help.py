@@ -1,8 +1,8 @@
 """--help surface tests.
 
-Confirm the top-level CLI exposes only the four generic trees plus `ref`,
-and that no per-role agent branches (`blaligner`, `samplealigner`,
-`collector`, `surveyor`) leak in.
+Confirm the top-level CLI exposes only the generic trees plus `ref` and
+the bundled agent profiles, and that no per-role agent branches
+(`blaligner`, `samplealigner`, `collector`, `surveyor`) leak in.
 """
 from __future__ import annotations
 
@@ -11,10 +11,15 @@ import sys
 
 import pytest
 
-from beamtimehero_cli.cli.__main__ import _build_parser, main
+from beamtimehero_cli.cli.__main__ import build_parser as _build_parser, main
 
 
-EXPECTED_TREES = {"ref", "tool", "db", "spec-read", "spec-write"}
+EXPECTED_TREES = {
+    "ref", "tool", "db", "spec-read", "spec-write",
+    "spec-file", "s3df", "slack",
+    # bundled agent profiles (curated views over the catalog)
+    "bl-aligner",
+}
 FORBIDDEN_TREES = {"blaligner", "samplealigner", "collector", "surveyor", "steering"}
 
 
