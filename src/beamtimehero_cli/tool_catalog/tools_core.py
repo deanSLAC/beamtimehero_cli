@@ -1025,6 +1025,101 @@ def t_evaluate_spec_macro(arguments: dict) -> tuple[str, list[str]]:
     )
     return json.dumps(result, indent=2), images_b64
 
+
+# ---------------------------------------------------------------------------
+# CAT-6 · Observation
+# ---------------------------------------------------------------------------
+
+def t_capture_sample_image(arguments: dict) -> tuple[str, list[str]]:
+    import base64
+
+    import requests
+
+    from beamtimehero_cli.config import (
+        SAMPLE_CAM_DEFAULT_QUALITY,
+        SAMPLE_CAM_HOST,
+        SAMPLE_CAM_PORT,
+        SPEC_MOCK,
+    )
+
+    if SPEC_MOCK:
+        return _as_json({"ok": True, "mock": True,
+                         "note": "Camera not available in mock mode"}), []
+
+    quality = max(1, min(100, int(arguments.get("quality", SAMPLE_CAM_DEFAULT_QUALITY))))
+    url = f"http://{SAMPLE_CAM_HOST}:{SAMPLE_CAM_PORT}/snapshot.jpg"
+    try:
+        resp = requests.get(
+            url,
+            params={"resolution": "low", "quality": str(quality)},
+            timeout=10,
+            proxies={"http": None, "https": None},
+        )
+        resp.raise_for_status()
+    except requests.ConnectionError:
+        return _as_json({"ok": False, "error": "Camera unavailable — connection refused"}), []
+    except requests.Timeout:
+        return _as_json({"ok": False, "error": "Camera request timed out"}), []
+    except requests.HTTPError as e:
+        code = e.response.status_code if e.response is not None else "unknown"
+        body = ""
+        if e.response is not None:
+            body = e.response.text[:200]
+        return _as_json({"ok": False, "error": f"Camera HTTP {code}: {body}"}), []
+
+    try:
+        from datetime import datetime
+        from beamtimehero_cli.config import DATA_DIR
+        log_dir = DATA_DIR / "camera_log"
+        log_dir.mkdir(exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        (log_dir / f"snapshot_{ts}.jpg").write_bytes(resp.content)
+    except Exception:
+        pass
+
+    img_b64 = base64.b64encode(resp.content).decode("ascii")
+    return _as_json({
+        "ok": True,
+        "resolution": "low",
+        "quality": quality,
+        "size_bytes": len(resp.content),
+    }), [img_b64]
+
+
+def t_get_reference_image(arguments: dict) -> tuple[str, list[str]]:
+    import base64
+
+    from beamtimehero_cli.tool_catalog.definitions import (
+        REFERENCE_IMAGE_MANIFEST,
+        _REFERENCE_IMAGES_DIR,
+    )
+
+    kind = (arguments.get("kind") or "").strip()
+    available = sorted(REFERENCE_IMAGE_MANIFEST.keys())
+    if kind not in REFERENCE_IMAGE_MANIFEST:
+        return _as_json({
+            "ok": False,
+            "error": f"Unknown reference image kind: {kind!r}",
+            "available": available,
+        }), []
+
+    entry = REFERENCE_IMAGE_MANIFEST[kind]
+    path = _REFERENCE_IMAGES_DIR / entry["file"]
+    if not path.is_file():
+        return _as_json({
+            "ok": False,
+            "error": f"Reference image file missing: {entry['file']}",
+        }), []
+
+    img_b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    return _as_json({
+        "ok": True,
+        "kind": kind,
+        "description": entry.get("description", ""),
+        "size_bytes": path.stat().st_size,
+    }), [img_b64]
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -1088,6 +1183,8 @@ _HANDLERS: dict[str, callable] = {
     "get_counts": t_get_counts,
     "get_counter": t_get_counter,
     "request_gap_ownership": t_request_gap_ownership,
+    "capture_sample_image": t_capture_sample_image,
+    "get_reference_image": t_get_reference_image,
     # CAT-7
     "get_element": t_get_element,
     "get_scan_number": t_get_scan_number,

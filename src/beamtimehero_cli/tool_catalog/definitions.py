@@ -4,6 +4,17 @@ Kept in its own module so tools/definitions.py stays readable. The
 app-level `TOOL_DEFINITIONS` import concatenates the two lists.
 """
 
+import json
+from pathlib import Path
+
+_REFERENCE_IMAGES_DIR = Path(__file__).resolve().parent.parent / "reference_images"
+_MANIFEST_PATH = _REFERENCE_IMAGES_DIR / "manifest.json"
+try:
+    with open(_MANIFEST_PATH) as _f:
+        REFERENCE_IMAGE_MANIFEST: dict[str, dict] = json.load(_f)
+except Exception:
+    REFERENCE_IMAGE_MANIFEST = {}
+
 # ---- Shared schema fragments -----------------------------------------------
 
 _J = {
@@ -1784,6 +1795,64 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+
+    # -----------------------------------------------------------------
+    # CAT-6 · Observation
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "capture_sample_image",
+            "description": (
+                "Capture a low-resolution JPEG snapshot of the sample from the "
+                "beamline sample camera (RPi-Cam). Returns image metadata as text "
+                "and the JPEG as an inline image. Use this to visually inspect "
+                "sample position, beam spot, or cryostat window before or during "
+                "alignment and data collection."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "quality": {
+                        "type": "integer",
+                        "description": (
+                            "JPEG compression quality (1–100). Higher means "
+                            "sharper but larger. Default 50."
+                        ),
+                        "default": 50,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_reference_image",
+            "description": (
+                "Return a reference image for a known sample environment or "
+                "diagnostic tool. Compare the result with a live "
+                "capture_sample_image snapshot to confirm what is currently "
+                "mounted on the sample stage."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": sorted(REFERENCE_IMAGE_MANIFEST.keys()) or ["diagnostic_pinhole"],
+                        "description": (
+                            "Which reference image to retrieve. Each value "
+                            "corresponds to a known sample environment or "
+                            "diagnostic tool configuration."
+                        ),
+                    },
+                },
+                "required": ["kind"],
+            },
+        },
+    },
 ]
 
 # Category map for the sidebar
@@ -1812,7 +1881,7 @@ AUTONOMY_TOOL_CATEGORIES = [
         "small_beam", "big_beam", "xtal_align", "reset_gap", "set_m2_stripe",
         "get_anchor", "set_anchor", "tracking",
     ]),
-    ("CAT-6 Beam", ["get_beam_size", "get_beam_status", "get_counts", "get_counter", "request_gap_ownership"]),
+    ("CAT-6 Beam", ["get_beam_size", "get_beam_status", "get_counts", "get_counter", "request_gap_ownership", "capture_sample_image", "get_reference_image"]),
     ("CAT-7 State", ["get_element", "get_scan_number", "get_current_datafile", "get_plotselected_counter", "abort_current_scan"]),
     ("CAT-8 Orchestration", [
         "transition_phase", "request_human_intervention", "post_status_update",
