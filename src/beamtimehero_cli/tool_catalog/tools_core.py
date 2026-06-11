@@ -20,6 +20,7 @@ import matplotlib
 matplotlib.use("Agg")
 import numpy as np
 
+from beamtimehero_cli import config as bl_config
 from beamtimehero_cli import runtime_state
 from beamtimehero_cli.action_log.db import recent_actions
 from beamtimehero_cli.audited_call import audited_call
@@ -543,11 +544,20 @@ def t_get_latest_scan(arguments: dict) -> tuple[str, list[str]]:
         for k in ("file_name", "scan_number", "scan_command", "date_time", "num_points")
         if k in entry
     }
+    if bl_config.USING_SAMPLE_DATA:
+        trimmed["data_source"] = "packaged_sample_data"
     return json.dumps(trimmed, indent=2), images_b64
 
 def t_list_scans(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
     result = scan_data.list_processed_scans(limit=arguments.get("limit", 20))
+    if bl_config.USING_SAMPLE_DATA:
+        # Make demo provenance explicit so agents don't mistake packaged
+        # sample scans for live beamline data. Normal-mode output unchanged.
+        return json.dumps({
+            "data_source": "packaged_sample_data",
+            "scans": result,
+        }, indent=2), images_b64
     return json.dumps(result, indent=2), images_b64
 
 def t_read_scan(arguments: dict) -> tuple[str, list[str]]:

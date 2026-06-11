@@ -31,3 +31,6 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# runtime artifacts from the metadata-cache file lock
+*.scan_metadata_cache.json.lock

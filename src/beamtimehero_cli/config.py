@@ -81,9 +81,22 @@ def now_pacific() -> datetime:
 
 _SAMPLE_DATA = PACKAGE_ROOT / "sample_data"
 
+# Provenance flags: True when the corresponding directory fell back to
+# the packaged demo sample_data because the real beamline directory was
+# missing. Tools include this in their output so agents never mistake
+# demo data for live beamline data.
+USING_SAMPLE_DATA = False  # scan data (BL_SCAN_DIR)
+USING_SAMPLE_LOGS = False  # log files (BL_LOGS_DIR)
+
 BL_LOGS_DIR = Path(os.getenv("BL_LOGS_DIR", "/usr/local/lib/spec.log/logfiles"))
 if not BL_LOGS_DIR.exists():
+    logger.warning(
+        "*** DEMO DATA *** BL_LOGS_DIR %s does not exist; falling back to "
+        "packaged sample data at %s. Log output is NOT live beamline data.",
+        BL_LOGS_DIR, _SAMPLE_DATA,
+    )
     BL_LOGS_DIR = _SAMPLE_DATA
+    USING_SAMPLE_LOGS = True
 
 _DATA_ROOT = Path(os.getenv("BL_SCAN_DIR", "/data/fifteen"))
 
@@ -100,7 +113,21 @@ def _resolve_scan_dir(root: Path) -> Path:
     return _SAMPLE_DATA
 
 
-BL_SCAN_DIR = _resolve_scan_dir(_DATA_ROOT)
+def _set_scan_dir_globals(scan_dir: Path) -> None:
+    """Update BL_SCAN_DIR and the USING_SAMPLE_DATA provenance flag."""
+    global BL_SCAN_DIR, USING_SAMPLE_DATA
+    BL_SCAN_DIR = scan_dir
+    USING_SAMPLE_DATA = scan_dir == _SAMPLE_DATA
+    if USING_SAMPLE_DATA:
+        logger.warning(
+            "*** DEMO DATA *** BL_SCAN_DIR %s has no usable scan directory; "
+            "falling back to packaged sample data at %s. Scan tool output is "
+            "NOT live beamline data.",
+            _DATA_ROOT, _SAMPLE_DATA,
+        )
+
+
+_set_scan_dir_globals(_resolve_scan_dir(_DATA_ROOT))
 
 
 def set_scan_dir(name: str) -> Path:
@@ -108,10 +135,8 @@ def set_scan_dir(name: str) -> Path:
 
     Pass 'auto' to re-run auto-detection.
     """
-    global BL_SCAN_DIR
-
     if name == "auto":
-        BL_SCAN_DIR = _resolve_scan_dir(_DATA_ROOT)
+        _set_scan_dir_globals(_resolve_scan_dir(_DATA_ROOT))
         logger.info("Scan directory auto-detected: %s", BL_SCAN_DIR)
         return BL_SCAN_DIR
 
@@ -119,7 +144,7 @@ def set_scan_dir(name: str) -> Path:
     if not target.is_dir():
         raise ValueError(f"Directory does not exist: {target}")
 
-    BL_SCAN_DIR = target
+    _set_scan_dir_globals(target)
     logger.info("Scan directory set to: %s", BL_SCAN_DIR)
     return BL_SCAN_DIR
 
