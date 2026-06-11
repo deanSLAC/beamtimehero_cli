@@ -1,7 +1,7 @@
 """SQLModel engine + session for the beamline_tools action_log DB.
 
 Bound to `BEAMLINE_TOOLS_DB_PATH` (see beamtimehero_cli.config). WAL +
-busy_timeout so multiple processes (FastAPI parent + opencode tool
+busy_timeout so multiple processes (FastAPI parent + agent tool
 subprocesses) can hit the same file without contention.
 """
 

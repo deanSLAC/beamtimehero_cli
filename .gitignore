@@ -33,4 +33,5 @@ data/
 *.db-shm
 
 # runtime artifacts from the metadata-cache file lock
-*.scan_metadata_cache.json.lock
+.scan_metadata_cache*.json.lock
+.scan_metadata_cache*.json

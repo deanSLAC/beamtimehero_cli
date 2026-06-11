@@ -186,11 +186,48 @@ def _read_spec_scan(spec_path: str | Path, scan_index: int) -> pd.DataFrame | No
 # Scan metadata cache
 # ---------------------------------------------------------------------------
 
+# v2: cache entries are keyed by path-relative-to-BL_SCAN_DIR (v1 used the
+# bare file name, so same-named files in two experiment subdirs silently
+# overwrote each other). New filename so v1 sidecars rebuild instead of
+# half-matching.
+_CACHE_FILENAME = ".scan_metadata_cache_v2.json"
+
+
 def _get_cache_file() -> Path | None:
     scan_dir = bl_config.BL_SCAN_DIR
     if scan_dir:
-        return scan_dir / ".scan_metadata_cache.json"
+        return scan_dir / _CACHE_FILENAME
     return None
+
+
+def _entry_key(spec_path: Path, scan_number) -> str:
+    """Cache key: path relative to BL_SCAN_DIR (fallback: name) + scan no."""
+    try:
+        rel = spec_path.resolve().relative_to(Path(bl_config.BL_SCAN_DIR).resolve())
+    except (ValueError, OSError):
+        rel = spec_path.name
+    return f"{rel}::{scan_number}"
+
+
+def _lookup_entry(cache: dict, file_name, scan_number) -> dict | None:
+    """Resolve a scan by file_name (bare name OR scan-dir-relative path).
+
+    Bare names can match several files across experiment subdirs; pick
+    the most recently modified — matching pre-v2 freshness expectations
+    while no longer silently losing the other file's scans.
+    """
+    direct = cache.get(f"{file_name}::{scan_number}")
+    if direct is not None:
+        return direct
+    best = None
+    for entry in cache.values():
+        if entry.get("file_name") != file_name:
+            continue
+        if str(entry.get("scan_number")) != str(scan_number):
+            continue
+        if best is None or entry.get("file_mtime", 0) > best.get("file_mtime", 0):
+            best = entry
+    return best
 
 
 @contextmanager
@@ -394,7 +431,7 @@ def _parse_spec_files(file_list: list[Path]) -> dict:
                         if acquisition is not None:
                             dead_time = wall_clock - acquisition
 
-                key = f"{file_name}::{scan_number}"
+                key = _entry_key(spec_path, scan_number)
                 cache[key] = {
                     "file_name": file_name,
                     "file_path": str(spec_path),
@@ -528,8 +565,7 @@ def list_processed_scans(limit=20) -> list[dict]:
 def get_scan_metadata(file_name, scan_number) -> dict | None:
     """Get full metadata for a single scan."""
     cache = _load_cache()
-    key = f"{file_name}::{scan_number}"
-    entry = cache.get(key)
+    entry = _lookup_entry(cache, file_name, scan_number)
     if not entry:
         return None
     return {
@@ -566,8 +602,7 @@ def read_processed_scan_ex(file_name, scan_number) -> tuple[pd.DataFrame | None,
     silx failed to parse it.
     """
     cache = _load_cache()
-    key = f"{file_name}::{scan_number}"
-    entry = cache.get(key)
+    entry = _lookup_entry(cache, file_name, scan_number)
     if not entry or not entry.get("file_path"):
         return None, "not_found"
     spec_path = Path(entry["file_path"])
@@ -588,8 +623,7 @@ def read_processed_scan_ex(file_name, scan_number) -> tuple[pd.DataFrame | None,
 def get_scan_deadtime(file_name, scan_number) -> dict | None:
     """Get dead time info for a single scan."""
     cache = _load_cache()
-    key = f"{file_name}::{scan_number}"
-    entry = cache.get(key)
+    entry = _lookup_entry(cache, file_name, scan_number)
     if not entry:
         return None
 

@@ -206,3 +206,35 @@ def test_unchanged_file_not_reparsed(scan_dir, monkeypatch):
     monkeypatch.setattr(local_data, "_parse_spec_files", _spy)
     local_data._load_cache()
     assert calls == [], "unchanged files must not be re-parsed"
+
+
+# ---------------------------------------------------------------------------
+# Item 9: relpath cache keys — same-named files in two subdirs coexist
+# ---------------------------------------------------------------------------
+
+def test_same_named_files_in_two_subdirs_do_not_collide(scan_dir):
+    (scan_dir / "2026-05_expA").mkdir()
+    (scan_dir / "2026-06_expB").mkdir()
+    _write_spec(scan_dir / "2026-05_expA" / "sample1", n_scans=2)
+    _write_spec(scan_dir / "2026-06_expB" / "sample1", n_scans=3)
+
+    cache = local_data._load_cache()
+    sample1_entries = [e for e in cache.values() if e["file_name"] == "sample1"]
+    assert len(sample1_entries) == 5, "scans from both subdirs must coexist"
+
+    # Bare-name lookup resolves to the most recently modified file.
+    newer = max(sample1_entries, key=lambda e: e["file_mtime"])
+    meta = local_data.get_scan_metadata("sample1", 1)
+    assert meta is not None
+    assert meta["file_path"] == newer["file_path"]
+
+    # Relpath lookup pins an exact file.
+    meta_a = local_data.get_scan_metadata("2026-05_expA/sample1", 1)
+    assert meta_a is not None
+    assert meta_a["file_path"].endswith("2026-05_expA/sample1")
+
+
+def test_cache_filename_is_v2(scan_dir):
+    _write_spec(scan_dir / "sample1")
+    local_data._load_cache()
+    assert local_data._get_cache_file().name == ".scan_metadata_cache_v2.json"
