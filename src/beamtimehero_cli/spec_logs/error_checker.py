@@ -108,7 +108,8 @@ def _call_llm(system: str, user: str) -> Optional[str]:
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "temperature": 0,
+                # No temperature: gateway-side model configs (e.g. Bedrock
+                # with extended thinking) reject non-default values.
                 "max_tokens": 4096,
             },
             timeout=60,
