@@ -81,6 +81,14 @@ def now_pacific() -> datetime:
 
 _SAMPLE_DATA = PACKAGE_ROOT / "sample_data"
 
+# When the real beamline directory is missing, the CLI normally falls back
+# to the packaged demo sample_data so it stays usable off-beamline. Set
+# BEAMTIMEHERO_NO_SAMPLE_FALLBACK=1 to disable that fallback: the configured
+# (possibly missing) path is kept instead and the *_CONFIGURED flags below
+# report False, so callers can surface "not configured" rather than serve
+# demo data that looks live. (BeamtimeHero's web app sets this.)
+_NO_SAMPLE_FALLBACK = os.getenv("BEAMTIMEHERO_NO_SAMPLE_FALLBACK", "0") == "1"
+
 # Provenance flags: True when the corresponding directory fell back to
 # the packaged demo sample_data because the real beamline directory was
 # missing. Tools include this in their output so agents never mistake
@@ -88,8 +96,22 @@ _SAMPLE_DATA = PACKAGE_ROOT / "sample_data"
 USING_SAMPLE_DATA = False  # scan data (BL_SCAN_DIR)
 USING_SAMPLE_LOGS = False  # log files (BL_LOGS_DIR)
 
+# True when the corresponding directory resolved to a real, existing
+# beamline directory (neither the sample fallback nor a missing path).
+SCAN_DIR_CONFIGURED = False
+LOGS_DIR_CONFIGURED = False
+
 BL_LOGS_DIR = Path(os.getenv("BL_LOGS_DIR", "/usr/local/lib/spec.log/logfiles"))
-if not BL_LOGS_DIR.exists():
+if BL_LOGS_DIR.exists():
+    LOGS_DIR_CONFIGURED = True
+elif _NO_SAMPLE_FALLBACK:
+    logger.warning(
+        "BL_LOGS_DIR %s does not exist and the sample-data fallback is "
+        "disabled; log tools will report no data until a directory is "
+        "configured.",
+        BL_LOGS_DIR,
+    )
+else:
     logger.warning(
         "*** DEMO DATA *** BL_LOGS_DIR %s does not exist; falling back to "
         "packaged sample data at %s. Log output is NOT live beamline data.",
@@ -101,22 +123,32 @@ if not BL_LOGS_DIR.exists():
 _DATA_ROOT = Path(os.getenv("BL_SCAN_DIR", "/data/fifteen"))
 
 
-def _resolve_scan_dir(root: Path) -> Path:
-    """Pick the most recently modified YYYY-mm_* subdirectory, or fall back."""
+def _resolve_scan_dir(root: Path) -> tuple[Path, bool]:
+    """Resolve the active scan directory.
+
+    Returns ``(scan_dir, configured)``; ``configured`` is True only when a
+    real beamline scan directory resolved. When nothing resolves, fall back
+    to the packaged sample data — unless ``BEAMTIMEHERO_NO_SAMPLE_FALLBACK``
+    is set, in which case the intended (missing) root is kept so tools report
+    no data instead of demo data.
+    """
     if root.is_dir():
         if re.match(r"\d{4}-\d{2}_", root.name):
-            return root
+            return root, True
         subdirs = [d for d in root.iterdir()
                    if d.is_dir() and re.match(r"\d{4}-\d{2}_", d.name)]
         if subdirs:
-            return max(subdirs, key=lambda d: d.stat().st_mtime)
-    return _SAMPLE_DATA
+            return max(subdirs, key=lambda d: d.stat().st_mtime), True
+    if _NO_SAMPLE_FALLBACK:
+        return root, False
+    return _SAMPLE_DATA, False
 
 
-def _set_scan_dir_globals(scan_dir: Path) -> None:
-    """Update BL_SCAN_DIR and the USING_SAMPLE_DATA provenance flag."""
-    global BL_SCAN_DIR, USING_SAMPLE_DATA
+def _set_scan_dir_globals(scan_dir: Path, configured: bool) -> None:
+    """Update BL_SCAN_DIR and the provenance/configuration flags."""
+    global BL_SCAN_DIR, USING_SAMPLE_DATA, SCAN_DIR_CONFIGURED
     BL_SCAN_DIR = scan_dir
+    SCAN_DIR_CONFIGURED = configured
     USING_SAMPLE_DATA = scan_dir == _SAMPLE_DATA
     if USING_SAMPLE_DATA:
         logger.warning(
@@ -125,9 +157,16 @@ def _set_scan_dir_globals(scan_dir: Path) -> None:
             "NOT live beamline data.",
             _DATA_ROOT, _SAMPLE_DATA,
         )
+    elif not configured:
+        logger.warning(
+            "BL_SCAN_DIR %s has no usable scan directory and the sample-data "
+            "fallback is disabled; scan tools will report no data until a "
+            "directory is configured.",
+            _DATA_ROOT,
+        )
 
 
-_set_scan_dir_globals(_resolve_scan_dir(_DATA_ROOT))
+_set_scan_dir_globals(*_resolve_scan_dir(_DATA_ROOT))
 
 
 def set_scan_dir(name: str) -> Path:
@@ -136,7 +175,7 @@ def set_scan_dir(name: str) -> Path:
     Pass 'auto' to re-run auto-detection.
     """
     if name == "auto":
-        _set_scan_dir_globals(_resolve_scan_dir(_DATA_ROOT))
+        _set_scan_dir_globals(*_resolve_scan_dir(_DATA_ROOT))
         logger.info("Scan directory auto-detected: %s", BL_SCAN_DIR)
         return BL_SCAN_DIR
 
@@ -144,7 +183,7 @@ def set_scan_dir(name: str) -> Path:
     if not target.is_dir():
         raise ValueError(f"Directory does not exist: {target}")
 
-    _set_scan_dir_globals(target)
+    _set_scan_dir_globals(target, True)
     logger.info("Scan directory set to: %s", BL_SCAN_DIR)
     return BL_SCAN_DIR
 
