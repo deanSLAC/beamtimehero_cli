@@ -1125,8 +1125,10 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "Comprehensive scan repetition efficiency report. Includes convergence, CV analysis, "
                 "rate-based and counts-based Poisson floor comparison, optimal scan count recommendation, "
                 "and a verdict (needs_more / reasonable / marginal / wasteful). "
-                "e_min/e_max bounds are required — whole-spectrum mode averages dynamic content with "
-                "normalization-defined plateaus and produces structurally optimistic verdicts."
+                "e_min/e_max bounds are required: the verdict is only meaningful on the dynamic "
+                "feature window (white-line / pre-edge), since the normalization-defined plateaus "
+                "(post-edge ~1.0, pre-edge ~0) otherwise dominate the statistics and mask a feature "
+                "that is still resolving."
             ),
             "parameters": {
                 "type": "object",
@@ -1201,7 +1203,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "type": "number",
                         "default": 0.01,
                         "description": (
-                            "Target final SEM as a fraction of the running mean. 0.01 (1%) is the "
+                            "Target final SEM as a fraction of the running mean. 0.01 (1 percent) is the "
                             "default for publication-quality on a prominent feature; tighten to 0.005 "
                             "for very small features driving a result."
                         ),
@@ -1224,7 +1226,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "Cluster a file's scans by sample spot using the recorded Sx/Sy/Sz motor positions. "
                 "Two scans are the same spot if their Sx, Sy, Sz all agree within tol_mm. Useful "
                 "before convergence analysis when reps came from multiple spots — between-spot "
-                "differences can pollute whole-file CV. Pair with analyze_per_spot."
+                "differences can pollute the combined cross-spot CV. Pair with analyze_per_spot."
             ),
             "parameters": {
                 "type": "object",
@@ -1250,7 +1252,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "heterogeneity F-statistic. F~1 = spots agree (safe to combine); F>>1 = spots "
                 "disagree beyond shot noise (the combined average is a population mean, not a "
                 "single chemistry — more reps won't fix it). Pass numeric e_min/e_max for the "
-                "feature you care about."
+                "feature you care about (required)."
             ),
             "parameters": {
                 "type": "object",
@@ -1258,11 +1260,11 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": {"type": "string", "description": "SPEC file name."},
                     "e_min": {
                         "type": "number",
-                        "description": "Lower bound (eV) of the feature window. Strongly recommended.",
+                        "description": "Lower bound (eV) of the feature window. REQUIRED.",
                     },
                     "e_max": {
                         "type": "number",
-                        "description": "Upper bound (eV) of the feature window.",
+                        "description": "Upper bound (eV) of the feature window. REQUIRED.",
                     },
                     "tol_mm": {
                         "type": "number",
@@ -1270,7 +1272,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "description": "Position tolerance in mm for grouping.",
                     },
                 },
-                "required": ["file_name"],
+                "required": ["file_name", "e_min", "e_max"],
             },
         },
     },
@@ -1386,7 +1388,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "Plot a single per-rep scalar (the chosen statistic over [e_min, e_max]) versus rep "
                 "number, with running mean and ±SEM band. The visual companion to "
                 "analyze_feature_evolution. Use to confirm a feature has flatlined; a still-trending "
-                "trace means the feature is not yet converged regardless of whole-spectrum verdicts."
+                "trace means the feature is not yet converged."
             ),
             "parameters": {
                 "type": "object",

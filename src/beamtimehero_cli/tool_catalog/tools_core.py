@@ -750,6 +750,13 @@ def t_analyze_per_spot(arguments: dict) -> tuple[str, list[str]]:
             json.dumps({"error": "file_name is required."}, indent=2),
             images_b64,
         )
+    if e_min is None or e_max is None:
+        return (
+            json.dumps({
+                "error": "analyze_per_spot requires e_min and e_max (numeric eV bounds for the feature window)."
+            }, indent=2),
+            images_b64,
+        )
     grouping = scan_data.group_scans_by_spot(file_name, tol_mm=tol_mm)
     if "error" in grouping:
         return json.dumps(grouping, indent=2), images_b64
