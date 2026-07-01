@@ -1,4 +1,4 @@
-"""Tool schemas for the autonomy CAT-0..CAT-8 surface.
+"""Tool schemas for the autonomy CAT-0..CAT-10 surface.
 
 Kept in its own module so tools/definitions.py stays readable. The
 app-level `TOOL_DEFINITIONS` import concatenates the two lists.
@@ -1855,6 +1855,262 @@ AUTONOMY_TOOL_DEFINITIONS = [
             },
         },
     },
+    # -----------------------------------------------------------------
+    # CAT-10 · Scientific interpretation (HERFD XANES)
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "record_energy_calibration",
+            "description": (
+                "Register a session energy calibration from a MEASURED reference "
+                "foil/compound scan. Computes the reference's E0 (fixed definition: "
+                "Savitzky-Golay smoothed derivative maximum) and stores the offset to "
+                "the assigned reference energy, with timestamp. Run this after "
+                "calibrate_mono / at session start and after any mono/crystal change. "
+                "Interpretation tools REFUSE absolute oxidation-state estimates until "
+                "a calibration is recorded (mono offset/drift is eV-scale — the same "
+                "size as the valence signal)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {
+                        "type": "string",
+                        "description": "SPEC file containing the reference foil/compound scan(s).",
+                    },
+                    "scan_numbers": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Restrict to these scan numbers (default: all scans in file).",
+                    },
+                    "element": {"type": "string", "description": "Reference element, e.g. 'Fe'."},
+                    "edge": {"type": "string", "description": "Reference edge, e.g. 'K', 'L3', 'M4'."},
+                    "assigned_reference_ev": {
+                        "type": "number",
+                        "description": (
+                            "Energy (eV) assigned to the reference's E0. Default: the "
+                            "xraydb tabulated edge energy (Elam/Ravel/Sieber), the "
+                            "standard foil-first-inflection convention. Override to pin "
+                            "a different literature convention."
+                        ),
+                    },
+                    "notes": {"type": "string", "description": "Free-text provenance notes."},
+                },
+                "required": ["file_name", "element", "edge"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_energy_calibration",
+            "description": (
+                "Report the current session energy calibration: offset (eV), reference "
+                "element/edge, age, and drift across all calibration records. Returns "
+                "calibrated=false when none exists — interpretation tools then run in "
+                "relative-only mode (no absolute oxidation states)."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_xas_descriptors",
+            "description": (
+                "Deterministic numeric descriptors from the averaged, normalized XANES "
+                "spectrum of a file: E0 (derivative-max AND half-step, with "
+                "uncertainties), white-line fit (energy/height/area), Wilke-style "
+                "pre-edge fit (centroid, integrated intensity, component count, fit "
+                "quality), per-scan descriptor trends (drift/beam-damage test), "
+                "glitch/saturation/self-absorption quality flags, and full provenance "
+                "(normalization, baseline model, fit windows). For 3d K-edges a "
+                "core-hole re-broadened pre-edge fit is included so conventional-XANES "
+                "calibrations apply validly to HERFD data. Returns an annotated plot. "
+                "This is the source of truth the interpret_* tools consume."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_numbers": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Restrict to these scan numbers (default: all).",
+                    },
+                    "element": {
+                        "type": "string",
+                        "description": (
+                            "Absorber element (e.g. 'Fe'). Default: auto-suggested from "
+                            "the scan energy window via tabulated edge energies."
+                        ),
+                    },
+                    "edge": {"type": "string", "description": "Edge label ('K','L3','M4','M5')."},
+                    "normalization": {
+                        "type": "string",
+                        "enum": ["area", "edge_step"],
+                        "default": "area",
+                        "description": (
+                            "Intensity normalization. 'area' (default) per "
+                            "Bugarin/Glatzel 2024 — edge-step normalization biases "
+                            "HERFD intensities. The choice is recorded in provenance."
+                        ),
+                    },
+                    "assume_dilute": {
+                        "type": "boolean",
+                        "description": (
+                            "Assert the sample is dilute/thin (negligible "
+                            "self-absorption). Recorded as an assertion; lifts the "
+                            "self_absorption_risk degradation of intensity verdicts."
+                        ),
+                    },
+                    "white_line_components": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": (
+                            "Max pseudo-Voigt components for the white-line fit. 0 = "
+                            "auto (3 for Ln/An L3 and An M edges — Ce(IV) doublet / "
+                            "U(VI) satellites — else 1)."
+                        ),
+                    },
+                    "pre_edge_e_min": {
+                        "type": "number",
+                        "description": "Override pre-edge fit window lower bound (absolute eV).",
+                    },
+                    "pre_edge_e_max": {
+                        "type": "number",
+                        "description": "Override pre-edge fit window upper bound (absolute eV).",
+                    },
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "interpret_oxidation_state",
+            "description": (
+                "Hybrid oxidation-state verdict from the file's averaged spectrum, on "
+                "the family-appropriate basis: 3d K-edge -> pre-edge centroid (Wilke "
+                "2001, applied to the re-broadened spectrum) + calibrated edge shift; "
+                "Ce L3 -> Ce(IV) final-state doublet deconvolution; U M4 -> "
+                "peak-position/satellite method (Bes 2016); 5d L3 -> white-line trend. "
+                "Returns {estimate, range, confidence, basis, descriptors_used, "
+                "calibration_context, flags, caveats, narration} — all numbers from "
+                "fits, none invented. REFUSES an absolute estimate when no session "
+                "energy calibration exists (record_energy_calibration first); "
+                "shape-based signatures (Ce doublet, U(VI) satellites) still work "
+                "uncalibrated."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_numbers": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Restrict to these scan numbers (default: all).",
+                    },
+                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
+                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
+                    "normalization": {
+                        "type": "string",
+                        "enum": ["area", "edge_step"],
+                        "default": "area",
+                        "description": "Intensity normalization (see extract_xas_descriptors).",
+                    },
+                    "assume_dilute": {
+                        "type": "boolean",
+                        "description": "Assert negligible self-absorption (recorded assertion).",
+                    },
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "interpret_coordination_geometry",
+            "description": (
+                "Hybrid coordination/site-symmetry verdict for 3d K-edges from the "
+                "pre-edge intensity + component count on the Wilke 2001 "
+                "centroid-vs-intensity envelope (weak pre-edge = centrosymmetric/"
+                "octahedral; strong = non-centrosymmetric/tetrahedral; intermediate = "
+                "5-coordinate/distorted/mixed). Uses the core-hole re-broadened fit and "
+                "area normalization; confidence is degraded under self-absorption risk, "
+                "edge-step normalization, or non-Fe elements (envelope calibrated for "
+                "Fe). For L3/M edges returns electronic-structure hints only. Same "
+                "structured output contract as interpret_oxidation_state."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_numbers": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Restrict to these scan numbers (default: all).",
+                    },
+                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
+                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
+                    "normalization": {
+                        "type": "string",
+                        "enum": ["area", "edge_step"],
+                        "default": "area",
+                        "description": "Intensity normalization (see extract_xas_descriptors).",
+                    },
+                    "assume_dilute": {
+                        "type": "boolean",
+                        "description": "Assert negligible self-absorption (recorded assertion).",
+                    },
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_sample_chemistry",
+            "description": (
+                "Capstone chemical interpretation of a sample's averaged spectrum: "
+                "runs extract_xas_descriptors + interpret_oxidation_state + "
+                "interpret_coordination_geometry, adds a per-scan drift verdict "
+                "(monotonic E0/white-line/pre-edge trends — the photoreduction/beam-"
+                "damage signature a half-split misses), and returns one consolidated "
+                "narration paragraph plus the annotated descriptor plot. Use after "
+                "convergence analysis to record the chemistry of each sample; feed "
+                "drift verdicts into skip/extend decisions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_numbers": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Restrict to these scan numbers (default: all).",
+                    },
+                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
+                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
+                    "normalization": {
+                        "type": "string",
+                        "enum": ["area", "edge_step"],
+                        "default": "area",
+                        "description": "Intensity normalization (see extract_xas_descriptors).",
+                    },
+                    "assume_dilute": {
+                        "type": "boolean",
+                        "description": "Assert negligible self-absorption (recorded assertion).",
+                    },
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
 ]
 
 # Category map for the sidebar
@@ -1911,5 +2167,10 @@ AUTONOMY_TOOL_CATEGORIES = [
         "list_files", "read_file", "write_summary", "write_macro",
         "save_plan", "get_motor_config", "get_counter_config",
         "evaluate_spec_macro",
+    ]),
+    ("CAT-10 Interpretation", [
+        "record_energy_calibration", "get_energy_calibration",
+        "extract_xas_descriptors", "interpret_oxidation_state",
+        "interpret_coordination_geometry", "summarize_sample_chemistry",
     ]),
 ]

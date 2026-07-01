@@ -51,6 +51,13 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     "analyze_convergence": "spec-file",
     "analyze_efficiency": "spec-file",
     "analyze_feature_evolution": "spec-file",
+    # CAT-10 scientific-interpretation tools read the same file cache
+    "record_energy_calibration": "spec-file",
+    "get_energy_calibration": "spec-file",
+    "extract_xas_descriptors": "spec-file",
+    "interpret_oxidation_state": "spec-file",
+    "interpret_coordination_geometry": "spec-file",
+    "summarize_sample_chemistry": "spec-file",
 }
 
 

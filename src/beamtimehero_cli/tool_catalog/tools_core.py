@@ -1127,6 +1127,197 @@ def t_get_reference_image(arguments: dict) -> tuple[str, list[str]]:
     }), [img_b64]
 
 
+# ===========================================================================
+# CAT-10 · Scientific interpretation (HERFD XANES)
+# ===========================================================================
+
+def _interpretation_inputs(arguments: dict):
+    """Load the averaged normalized spectrum + rep stack for interpretation.
+
+    Returns ``(energy, mu, reps, edge_info, meta)``; raises ValueError on
+    any data problem so handlers share one error path.
+    """
+    from beamtimehero_cli.analysis.xas import average_reps
+    from beamtimehero_cli.interpretation import edges as interp_edges
+
+    combined, file_name, counter, used_scans = scan_data.get_normalized_scan_arrays(
+        arguments.get("file_name"), scan_numbers=arguments.get("scan_numbers"),
+    )
+    combined = combined.dropna()
+    if combined.empty or len(combined) < 20:
+        raise ValueError(
+            "Too few overlapping energy points across the selected scans "
+            f"({len(combined)}) for descriptor fits."
+        )
+    energy = combined.index.values.astype(float)
+    reps = combined.values.T  # (n_scans, n_points)
+    avg, _std, _weights = average_reps(combined)
+    mu = avg.values.astype(float)
+
+    element, edge = arguments.get("element"), arguments.get("edge")
+    if element and edge:
+        edge_info = interp_edges.get_edge_info(element, edge)
+        edge_info["detection"] = "explicit"
+    elif element or edge:
+        raise ValueError("Pass BOTH element and edge, or neither (auto-detect).")
+    else:
+        suggestion = interp_edges.suggest_edge(float(energy.min()), float(energy.max()))
+        if not suggestion["found"]:
+            raise ValueError(suggestion["reason"])
+        edge_info = suggestion["best"]
+        edge_info["detection"] = "auto_from_energy_window"
+
+    meta = {
+        "file_name": file_name,
+        "active_counter": counter,
+        "scan_numbers": used_scans,
+        "n_scans": len(used_scans),
+    }
+    return energy, mu, reps, edge_info, meta
+
+
+def _extract_for_interpretation(arguments: dict):
+    """Shared descriptor pipeline for all CAT-10 handlers."""
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+
+    energy, mu, reps, edge_info, meta = _interpretation_inputs(arguments)
+    wl_comps = int(arguments.get("white_line_components") or 0)
+    if wl_comps <= 0:
+        # Ce(IV) doublet / U(VI) satellites need the multi-peak path
+        wl_comps = 3 if edge_info["family"] in ("ln_L3", "an_L3", "an_M") else 1
+    kwargs = {}
+    pe_lo, pe_hi = arguments.get("pre_edge_e_min"), arguments.get("pre_edge_e_max")
+    if pe_lo is not None and pe_hi is not None:
+        e0 = interp_desc.find_e0(energy, mu)["e0_ev"]
+        kwargs["pre_edge_window_rel"] = (float(pe_lo) - e0, float(pe_hi) - e0)
+    descriptors, arrays = interp_desc.extract_descriptors(
+        energy, mu, reps=reps, edge_info=edge_info,
+        normalization=arguments.get("normalization", "area"),
+        assume_dilute=arguments.get("assume_dilute"),
+        white_line_components=wl_comps,
+        **kwargs,
+    )
+    return descriptors, arrays, meta
+
+
+def t_record_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
+    images_b64: list[str] = []
+    from beamtimehero_cli.analysis.xas import average_reps
+    from beamtimehero_cli.interpretation import calibration_store
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.interpretation import edges as interp_edges
+
+    element = arguments.get("element")
+    edge = arguments.get("edge")
+    if not element or not edge:
+        return json.dumps({"error": "element and edge are required."}, indent=2), images_b64
+    try:
+        edge_meta = interp_edges.get_edge_info(element, edge)
+        combined, file_name, counter, used_scans = scan_data.get_normalized_scan_arrays(
+            arguments.get("file_name"), scan_numbers=arguments.get("scan_numbers"),
+        )
+        combined = combined.dropna()
+        energy = combined.index.values.astype(float)
+        avg, _std, _weights = average_reps(combined)
+        e0 = interp_desc.find_e0(energy, avg.values.astype(float))
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), images_b64
+
+    assigned = arguments.get("assigned_reference_ev")
+    if assigned is None:
+        assigned = edge_meta["tabulated_energy_ev"]
+        ref_source = (
+            edge_meta["tabulated_energy_source"]
+            + " (foil-first-inflection convention)"
+        )
+    else:
+        ref_source = "caller-assigned reference energy"
+    record = calibration_store.record_calibration(
+        element=element, edge=edge,
+        measured_e0_ev=e0["e0_ev"], measured_e0_unc_ev=e0["e0_unc_ev"],
+        assigned_reference_ev=float(assigned), reference_source=ref_source,
+        file_name=file_name, scan_numbers=used_scans,
+        e0_definition=e0["e0_definition"],
+        notes=arguments.get("notes", ""),
+    )
+    result = {
+        "recorded": True,
+        "record": record,
+        "active_counter": counter,
+        "session": calibration_store.current_calibration(),
+    }
+    return json.dumps(result, indent=2, default=str), images_b64
+
+
+def t_get_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import calibration_store
+    return json.dumps(calibration_store.current_calibration(), indent=2, default=str), []
+
+
+def t_extract_xas_descriptors(arguments: dict) -> tuple[str, list[str]]:
+    images_b64: list[str] = []
+    try:
+        descriptors, arrays, meta = _extract_for_interpretation(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), images_b64
+    from beamtimehero_cli.interpretation import plotting as interp_plotting
+    edge_info = descriptors.get("edge") or {}
+    fig = interp_plotting.annotated_descriptor_figure(
+        descriptors, arrays,
+        title=f"{meta['file_name']} — {edge_info.get('element')} {edge_info.get('edge')}",
+    )
+    images_b64.append(fig_to_base64(fig))
+    import matplotlib.pyplot as plt
+    plt.close(fig)
+    return json.dumps({**meta, **descriptors}, indent=2, default=str), images_b64
+
+
+def _t_interpret(arguments: dict, engine_fn) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import calibration_store
+    try:
+        descriptors, _arrays, meta = _extract_for_interpretation(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    verdict = engine_fn(descriptors, calibration_store.current_calibration())
+    verdict.update(meta)
+    return json.dumps(verdict, indent=2, default=str), []
+
+
+def t_interpret_oxidation_state(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import interpret as interp_engine
+    return _t_interpret(arguments, interp_engine.interpret_oxidation_state)
+
+
+def t_interpret_coordination_geometry(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import interpret as interp_engine
+    return _t_interpret(arguments, interp_engine.interpret_coordination_geometry)
+
+
+def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
+    images_b64: list[str] = []
+    from beamtimehero_cli.interpretation import calibration_store
+    from beamtimehero_cli.interpretation import interpret as interp_engine
+    from beamtimehero_cli.interpretation import plotting as interp_plotting
+    try:
+        descriptors, arrays, meta = _extract_for_interpretation(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), images_b64
+    summary = interp_engine.summarize_chemistry(
+        descriptors, calibration_store.current_calibration(),
+    )
+    edge_info = descriptors.get("edge") or {}
+    fig = interp_plotting.annotated_descriptor_figure(
+        descriptors, arrays,
+        title=f"{meta['file_name']} — {edge_info.get('element')} {edge_info.get('edge')} chemistry",
+    )
+    images_b64.append(fig_to_base64(fig))
+    import matplotlib.pyplot as plt
+    plt.close(fig)
+    summary.update(meta)
+    summary["descriptors"] = descriptors
+    return json.dumps(summary, indent=2, default=str), images_b64
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -1230,6 +1421,13 @@ _HANDLERS: dict[str, callable] = {
     "get_motor_config": t_get_motor_config,
     "get_counter_config": t_get_counter_config,
     "evaluate_spec_macro": t_evaluate_spec_macro,
+    # CAT-10 · Scientific interpretation
+    "record_energy_calibration": t_record_energy_calibration,
+    "get_energy_calibration": t_get_energy_calibration,
+    "extract_xas_descriptors": t_extract_xas_descriptors,
+    "interpret_oxidation_state": t_interpret_oxidation_state,
+    "interpret_coordination_geometry": t_interpret_coordination_geometry,
+    "summarize_sample_chemistry": t_summarize_sample_chemistry,
     # Slack tools (require the [slack] extra).
     "post_slack_message": lambda args: _t_slack(
         "post_message", args, kw=("channel_id", "text", "thread_ts"),
