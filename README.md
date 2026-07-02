@@ -54,6 +54,10 @@ Discover leaves with `--help` at any depth.
 | `BEAMLINE_TOOLS_DB_PATH` | `data/beamline_tools.db` | SQLite path for the action log. |
 | `BEAMTIMEHERO_CLI_LOG` | `1` | If `1`, log each CLI invocation. |
 | `BEAMTIMEHERO_CLI_LOG_MAX_BYTES` | `65536` | Stdout tail bytes captured per invocation. |
+| `SLAC_API_KEY_PRIMARY` | _(unset)_ | Primary SLAC-gateway key for `spec_logs` LLM error detection. Tried first. |
+| `SLAC_API_KEY` | _(unset)_ | Fallback SLAC-gateway key. Used when `SLAC_API_KEY_PRIMARY` is unset, or when the primary is rate-limited / locked out. |
+| `SLAC_MODEL` | `us.anthropic.claude-opus-4-8-v1` | Override the model id sent to the SLAC gateway for LLM error detection. |
+| `LLM_KEY_COOLDOWN_S` | `900` | Seconds a rate-limited gateway key is skipped before it is retried (honors a `Retry-After` header when present). |
 
 ## Extending the CLI
 

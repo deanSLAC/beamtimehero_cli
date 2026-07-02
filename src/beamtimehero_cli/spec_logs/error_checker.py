@@ -9,11 +9,27 @@ from typing import List, Optional
 
 import requests
 
+from beamtimehero_cli.llm import get_pool, is_lockout, retry_after_seconds
+
 logger = logging.getLogger(__name__)
 
-API_BASE = "https://aiapi-prod.stanford.edu/v1"
-API_KEY = os.getenv("API_KEY", "")
-MODEL = "claude-opus-4-6"
+# SLAC AI Gateway (OpenAI-compatible). Model id matches the SLAC gateway's
+# Bedrock-backed Opus; override with SLAC_MODEL if the gateway's id changes.
+API_BASE = "https://ai-api.slac.stanford.edu/v1"
+MODEL = os.getenv("SLAC_MODEL", "us.anthropic.claude-opus-4-8-v1")
+
+# Ordered gateway keys: prefer the primary, fall back to the existing key when
+# the primary is rate-limited / locked out of usage. Read lazily (not at import)
+# so a key set after import is still picked up.
+_KEY_ENVS = ("SLAC_API_KEY_PRIMARY", "SLAC_API_KEY")
+
+
+def _key_pool():
+    """Shared KeyPool for this checker's gateway, built from the current env."""
+    return get_pool(
+        "beamtimehero_error_checker",
+        [(name, os.getenv(name, "")) for name in _KEY_ENVS],
+    )
 
 SYSTEM_PROMPT = """You are analyzing SPEC beamline control log output for errors, warnings, and unexpected behavior.
 
@@ -91,34 +107,84 @@ def _build_user_message(chunks: list) -> str:
 
 
 def _call_llm(system: str, user: str) -> Optional[str]:
-    """Call the Stanford AI Gateway chat completions endpoint."""
-    if not API_KEY:
-        logger.warning("API_KEY not set, skipping LLM error detection.")
-        return None
-    try:
-        resp = requests.post(
-            f"{API_BASE}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                # No temperature: gateway-side model configs (e.g. Bedrock
-                # with extended thinking) reject non-default values.
-                "max_tokens": 4096,
-            },
-            timeout=60,
+    """Call the SLAC AI Gateway chat completions endpoint.
+
+    Tries the primary key first and falls back to the secondary key on a
+    rate-limit / lockout response (HTTP 429 or a quota marker), remembering the
+    lockout so subsequent calls skip the exhausted key until it cools down. Any
+    other failure returns ``None`` so the caller degrades to regex detection,
+    exactly as before.
+    """
+    pool = _key_pool()
+    keys = pool.order()
+    if not keys:
+        logger.warning(
+            "No LLM gateway API key set (API_KEY_PRIMARY / API_KEY); "
+            "skipping LLM error detection."
         )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.warning("LLM call failed: %s", e)
         return None
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        # No temperature: gateway-side model configs (e.g. Bedrock with
+        # extended thinking) reject non-default values.
+        "max_tokens": 4096,
+    }
+
+    for env_name, key in keys:
+        try:
+            resp = requests.post(
+                f"{API_BASE}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=60,
+            )
+        except Exception as e:
+            # Network-level failure is not a key lockout — don't burn the other
+            # key over it; degrade to regex as before.
+            logger.warning("LLM call failed: %s", e)
+            return None
+
+        # A valid completion always carries "choices"; anything else is an error
+        # body (some gateways return rate-limit errors even with HTTP 200).
+        try:
+            data = resp.json()
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and "choices" in data:
+            return data["choices"][0]["message"]["content"]
+
+        if is_lockout(resp.status_code, resp.text):
+            pool.mark_locked_out(env_name, retry_after_seconds(resp.headers))
+            logger.warning(
+                "LLM gateway key %s locked out (HTTP %s); trying fallback key.",
+                env_name, resp.status_code,
+            )
+            continue
+
+        # Non-lockout failure (bad request, auth error, 5xx, malformed body):
+        # give up and let the caller fall back to regex, as before.
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning("LLM call failed: %s", e)
+        else:
+            logger.warning(
+                "LLM response missing 'choices': %s", (resp.text or "")[:200]
+            )
+        return None
+
+    logger.warning(
+        "All LLM gateway keys locked out; skipping LLM error detection."
+    )
+    return None
 
 
 def _parse_llm_response(response_text: str, chunks: list) -> List[DetectedError]:
