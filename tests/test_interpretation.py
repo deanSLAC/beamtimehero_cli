@@ -136,6 +136,49 @@ def test_area_normalization():
     assert not prov_short["applied"]
 
 
+def test_mback_normalization():
+    mu = 2.5 * fe_spectrum()  # arbitrary scale MBACK must absorb
+    mu_n, prov = N.mback_normalize(E, mu, EDGE_C, "Fe", "K")
+    assert prov["applied"] and prov["method"] == "mback"
+    assert np.all(np.isfinite(mu_n))
+    # unit-edge-step scale: pre-edge ~0, post-edge ~1 (same scale as area)
+    pre = mu_n[E < EDGE_C - 25]
+    post = mu_n[(E > EDGE_C + 35) & (E < EDGE_C + 90)]
+    assert abs(float(pre.mean())) < 0.2
+    assert 0.6 < float(post.mean()) < 1.4
+    # the white line (a real spectral feature) survives the background fit
+    wl = mu_n[(E > WL_C - 2) & (E < WL_C + 2)].max()
+    assert wl > float(post.mean())
+    # aligns the tabulated Fe edge (7112 eV) onto the observed E0 (7120)
+    assert prov["edge_shift_ev"] == pytest.approx(EDGE_C - 7112.0, abs=1.5)
+
+
+def test_mback_degrades_gracefully():
+    mu = fe_spectrum()
+    # no element/edge -> unchanged spectrum + reason, never raises
+    same, prov = N.mback_normalize(E, mu, EDGE_C, None, "K")
+    assert not prov["applied"] and "reason" in prov
+    assert np.array_equal(same, mu)
+    # short scan with no post-edge region -> refuses
+    e_short = E[E < EDGE_C + 20]
+    _, prov_short = N.mback_normalize(e_short, fe_spectrum(e=e_short), EDGE_C, "Fe", "K")
+    assert not prov_short["applied"]
+
+
+def test_mback_through_extract_descriptors():
+    desc, _ = D.extract_descriptors(E, fe_spectrum(), edge_info=FE, normalization="mback")
+    assert desc["provenance"]["normalization"]["method"] == "mback"
+    assert desc["provenance"]["normalization"]["applied"]
+    assert "mback_normalization_unavailable" not in desc["flags"]
+    # descriptors still recovered on the MBACK-normalized spectrum
+    assert desc["pre_edge"]["fit_ok"]
+    assert desc["e0"]["e0_ev"] == pytest.approx(EDGE_C, abs=1.0)
+    json.dumps(desc, default=str)
+    # coordination verdict flags the non-area normalization (HERFD intensity)
+    v = I.interpret_coordination_geometry(desc, FE_CALIB)
+    assert any("not area" in c for c in v["caveats"])
+
+
 def test_per_scan_drift_detection():
     rng = np.random.default_rng(3)
     drifting = np.array([fe_spectrum(shift=-0.06 * i) + rng.normal(0, 0.004, len(E))

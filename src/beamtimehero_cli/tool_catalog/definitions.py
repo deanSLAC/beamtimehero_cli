@@ -1949,12 +1949,20 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge": {"type": "string", "description": "Edge label ('K','L3','M4','M5')."},
                     "normalization": {
                         "type": "string",
-                        "enum": ["area", "edge_step"],
+                        "enum": ["area", "edge_step", "mback"],
                         "default": "area",
                         "description": (
                             "Intensity normalization. 'area' (default) per "
-                            "Bugarin/Glatzel 2024 — edge-step normalization biases "
-                            "HERFD intensities. The choice is recorded in provenance."
+                            "Bugarin/Glatzel 2024 — the recommended choice for HERFD "
+                            "intensities, since edge-step normalization biases them. "
+                            "'mback' fits the spectrum to the xraydb-tabulated "
+                            "mass-absorption coefficient (Weng/Penner-Hahn 2005, "
+                            "erfc-step + polynomial background) — a physics-based "
+                            "background subtraction, useful as a cross-check or when a "
+                            "proper edge-step normalization is wanted; it degrades "
+                            "gracefully (unchanged spectrum + flag) if the fit fails. "
+                            "For HERFD intensity comparisons 'area' is still preferred. "
+                            "The choice is recorded in provenance."
                         ),
                     },
                     "assume_dilute": {
@@ -2017,7 +2025,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge": {"type": "string", "description": "Edge label (default: auto)."},
                     "normalization": {
                         "type": "string",
-                        "enum": ["area", "edge_step"],
+                        "enum": ["area", "edge_step", "mback"],
                         "default": "area",
                         "description": "Intensity normalization (see extract_xas_descriptors).",
                     },
@@ -2058,7 +2066,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge": {"type": "string", "description": "Edge label (default: auto)."},
                     "normalization": {
                         "type": "string",
-                        "enum": ["area", "edge_step"],
+                        "enum": ["area", "edge_step", "mback"],
                         "default": "area",
                         "description": "Intensity normalization (see extract_xas_descriptors).",
                     },
@@ -2098,7 +2106,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge": {"type": "string", "description": "Edge label (default: auto)."},
                     "normalization": {
                         "type": "string",
-                        "enum": ["area", "edge_step"],
+                        "enum": ["area", "edge_step", "mback"],
                         "default": "area",
                         "description": "Intensity normalization (see extract_xas_descriptors).",
                     },

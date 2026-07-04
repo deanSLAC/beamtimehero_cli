@@ -500,6 +500,13 @@ def extract_descriptors(
         mu_n, norm_prov = norm.area_normalize(energy, mu, e0)
         if not norm_prov.get("applied"):
             flags.append("area_normalization_unavailable")
+    elif normalization == "mback":
+        einfo = edge_info or {}
+        mu_n, norm_prov = norm.mback_normalize(
+            energy, mu, e0, einfo.get("element"), einfo.get("edge")
+        )
+        if not norm_prov.get("applied"):
+            flags.append("mback_normalization_unavailable")
     else:
         mu_n, norm_prov = mu, norm.edge_step_provenance()
 

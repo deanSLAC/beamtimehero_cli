@@ -504,12 +504,14 @@ def interpret_coordination_geometry(descriptors: dict, calibration: dict) -> dic
             "Self-absorption damps intensities (assume_dilute not "
             "asserted) — a truly tetrahedral site could read intermediate."
         )
-    if not descriptors["provenance"]["normalization"].get("applied") or \
-            descriptors["provenance"]["normalization"].get("method") != "area":
+    norm_prov = descriptors["provenance"]["normalization"]
+    norm_method = norm_prov.get("method")
+    if not norm_prov.get("applied") or norm_method != "area":
         v["confidence"] = _degrade(v["confidence"])
         v["caveats"].append(
-            "Intensity read on edge-step (not area) normalization — "
-            "known HERFD intensity bias (Bugarin/Glatzel 2024)."
+            f"Intensity read on {norm_method} (not area) normalization — "
+            "area normalization is preferred for HERFD intensities "
+            "(Bugarin/Glatzel 2024)."
         )
     if element != "Fe":
         v["confidence"] = _degrade(v["confidence"])
