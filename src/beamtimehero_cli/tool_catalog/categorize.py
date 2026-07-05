@@ -58,6 +58,24 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     "interpret_oxidation_state": "spec-file",
     "interpret_coordination_geometry": "spec-file",
     "summarize_sample_chemistry": "spec-file",
+    # CAT-XRS · dedicated X-ray Raman analysis branch (energy-loss axis).
+    # Kept separate from the XAS/HERFD spec-file tools so the Raman-specific
+    # processing + interpretation surface is coherent on its own.
+    "calibrate_energy_loss": "xrs",
+    "build_loss_axis": "xrs",
+    "average_xrs_scans": "xrs",
+    "subtract_compton_background": "xrs",
+    "normalize_xrs": "xrs",
+    "overlay_xrs_spectra": "xrs",
+    "sum_crystals": "xrs",
+    "align_crystals": "xrs",
+    "tag_crystal_q": "xrs",
+    "extract_xrs_descriptors": "xrs",
+    "interpret_xrs_oxidation_state": "xrs",
+    "interpret_q_dependence": "xrs",
+    "compare_xrs_to_references": "xrs",
+    "assess_xrs_quality": "xrs",
+    "summarize_xrs_chemistry": "xrs",
 }
 
 

@@ -28,6 +28,74 @@ _J = {
     },
 }
 
+# Shared across every multi-scan analysis tool (average/convergence/efficiency/
+# plot_*). Auto-selection + edge-step normalization are XAS defaults that are
+# WRONG for XRS; these let the caller override both. See the refdoc
+# ``beamtimehero ref counter-selection`` for the full rationale.
+_COUNTER_PROP = {
+    "type": "string",
+    "description": (
+        "Signal counter to analyze (e.g. 'vortDT2'). If omitted, auto-detected "
+        "by a highest-max heuristic. ALWAYS set this explicitly for XRS or any "
+        "non-edge technique — the auto-picker can select a flat dark/background "
+        "channel (e.g. vortDT) over the real signal (vortDT2). The tool echoes a "
+        "counter_warning when the auto-pick looks flat. See `ref counter-selection`."
+    ),
+}
+_NORMALIZATION_PROP = {
+    "type": "string",
+    "enum": ["edge_step", "divide_by_i0", "raw"],
+    "default": "edge_step",
+    "description": (
+        "Per-rep normalization applied before scans are combined. 'edge_step' "
+        "(default) anchors pre-edge→0 / post-edge→1 and assumes an absorption "
+        "edge — WRONG for XRS, which is a bump on a Compton background with no "
+        "step. Use 'divide_by_i0' (signal/I0) or 'raw' for XRS / non-edge data; "
+        "for the full XRS pipeline use the dedicated xrs_* tools. See "
+        "`ref counter-selection`."
+    ),
+}
+
+# Shared across the XRS (CAT-XRS) tools.
+_XRS_COUNTER_PROP = {
+    "type": "string",
+    "description": (
+        "Signal counter (SDD ROI) that carries the XRS signal — the one showing "
+        "the elastic line and edge, e.g. 'vortDT2', NOT a flat dark channel like "
+        "'vortDT'. If omitted, auto-picked and a counter_warning is echoed when the "
+        "pick looks flat. Set this explicitly. See `ref counter-selection`."
+    ),
+}
+_ELASTIC_CENTER_PROP = {
+    "type": "number",
+    "description": (
+        "Incident energy (eV) of the elastic line = zero of energy loss. If omitted, "
+        "the recorded calibration from calibrate_energy_loss is used; without either, "
+        "the axis stays mono energy (flagged)."
+    ),
+}
+_XRS_SCAN_NUMBERS_PROP = {
+    "type": "array", "items": {"type": "integer"},
+    "description": "Data scan numbers to average (default: all in file). Exclude elastic/Compton scans.",
+}
+_XRS_EDGE_LO_PROP = {
+    "type": "number",
+    "description": "Lower energy-loss bound (eV) of the edge feature; Compton background is fit outside it. Set with edge_hi to subtract the background before interpreting (strongly recommended — onset/pre-edge are meaningless on the raw Compton profile).",
+}
+_XRS_EDGE_HI_PROP = {
+    "type": "number", "description": "Upper energy-loss bound (eV) of the edge feature.",
+}
+_XRS_MODEL_PROP = {
+    "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+    "description": "Compton background shape used when subtracting.",
+}
+_XRS_ELEMENT_PROP = {
+    "type": "string", "description": "Absorber element (e.g. 'O', 'C', 'Ni'). Default: auto-suggest from the loss window.",
+}
+_XRS_EDGE_PROP = {
+    "type": "string", "description": "Edge label ('K', 'L3', ...). Default: auto with element.",
+}
+
 AUTONOMY_TOOL_DEFINITIONS = [
     # -----------------------------------------------------------------
     # CAT-0 · High-level procedural macros
@@ -1081,6 +1149,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                             "different signal levels and you want SNR-optimal averaging."
                         ),
                     },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": [],
             },
@@ -1112,6 +1182,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "type": "number",
                         "description": "Upper bound (eV) of the feature window to analyze.",
                     },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["e_min", "e_max"],
             },
@@ -1155,6 +1227,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                             "as 1/sqrt(n)); ratio >>1 means systematics-limited (more reps won't help)."
                         ),
                     },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["e_min", "e_max"],
             },
@@ -1213,6 +1287,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "default": 0.01,
                         "description": "Step-to-step running-mean drift target as fraction of the latest mean.",
                     },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_name", "e_min", "e_max"],
             },
@@ -1271,6 +1347,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "default": 0.05,
                         "description": "Position tolerance in mm for grouping.",
                     },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_name", "e_min", "e_max"],
             },
@@ -1311,7 +1389,9 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of SPEC file names (one per sample) to compare.",
-                    }
+                    },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_names"],
             },
@@ -1334,6 +1414,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": {"type": "string", "description": "SPEC file name."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional but strongly recommended."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_name"],
             },
@@ -1355,6 +1437,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": {"type": "string", "description": "SPEC file name."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_name"],
             },
@@ -1375,6 +1459,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": {"type": "string", "description": "SPEC file name."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
                 },
                 "required": ["file_name"],
             },
@@ -2119,6 +2205,434 @@ AUTONOMY_TOOL_DEFINITIONS = [
             },
         },
     },
+    # -----------------------------------------------------------------
+    # CAT-XRS · X-ray Raman scattering (energy-loss axis, NOT edge-step).
+    # See `beamtimehero ref counter-selection` and
+    # docs/xrs-analysis-branch-plan.md.
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "calibrate_energy_loss",
+            "description": (
+                "Fit the elastic (Rayleigh) line of an elastic scan (an `ascan mono` "
+                "with the analyzer fixed) to set the ZERO of energy loss (ω=0) and the "
+                "instrumental energy resolution (elastic FWHM), and record it for the "
+                "file. Run this FIRST for XRS — it is the loss-axis anchor that replaces "
+                "find_e0. Returns elastic_center_ev + resolution_fwhm_ev and a fit plot."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_number": {"type": "integer", "description": "The elastic-line scan number (ascan mono)."},
+                    "counter": _XRS_COUNTER_PROP,
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "build_loss_axis",
+            "description": (
+                "Convert one scan's incident-energy axis to energy loss (ω = incident − "
+                "elastic center) and plot signal/I0 vs loss. Uses the recorded elastic "
+                "calibration unless elastic_center_ev is given; without either, the axis "
+                "stays mono energy (flagged). Single-scan companion to average_xrs_scans."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_number": {"type": "integer", "description": "Scan number to convert."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                },
+                "required": ["file_name", "scan_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "average_xrs_scans",
+            "description": (
+                "Average repeated XRS scans on the energy-loss axis: load each rep on the "
+                "chosen counter, divide by I0, re-reference to the elastic line, interpolate "
+                "onto a common loss grid, and average with per-point SEM. This is the XRS "
+                "analogue of average_scans — it does NOT edge-step-normalize and does NOT "
+                "align by find_e0. Optionally area-normalizes. Returns spectrum summary + plot."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": {
+                        "type": "array", "items": {"type": "integer"},
+                        "description": "Data scan numbers to average (default: all in file). Exclude elastic/Compton calibration scans.",
+                    },
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "normalization": {
+                        "type": "string", "enum": ["none", "area"], "default": "none",
+                        "description": "'none' = signal/I0; 'area' = unit-area over [e_min,e_max] loss window. Never edge-step.",
+                    },
+                    "e_min": {"type": "number", "description": "Loss-window lower bound (eV) for area normalization. Optional."},
+                    "e_max": {"type": "number", "description": "Loss-window upper bound (eV)."},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subtract_compton_background",
+            "description": (
+                "Average XRS reps, then fit and subtract the Compton/valence background "
+                "under the edge — the XRS replacement for XAS pre/post-edge normalization "
+                "(the feature is a bump on a sloping Compton profile, not a step). Fits the "
+                "background to flank points OUTSIDE [edge_lo, edge_hi] (energy-loss eV) and "
+                "subtracts. Returns the isolated edge + a two-panel plot."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": {"type": "array", "items": {"type": "integer"}, "description": "Data scans to average."},
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": {"type": "number", "description": "Lower energy-loss bound (eV) of the edge feature — background is fit outside this."},
+                    "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
+                    "model": {
+                        "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                        "description": "Background shape: 'constant' (pre-edge mean), 'linear' (flanks), 'pearson7' (Compton hump; falls back to linear).",
+                    },
+                    "normalization": {
+                        "type": "string", "enum": ["none", "area"], "default": "none",
+                        "description": "Optionally area-normalize the subtracted edge over the edge window.",
+                    },
+                },
+                "required": ["edge_lo", "edge_hi"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "normalize_xrs",
+            "description": (
+                "Full XRS reduction to a comparable edge: average reps → subtract the "
+                "Compton background → area-normalize over the edge window. Use this to "
+                "produce the final per-atom-comparable XRS spectrum (area normalization; "
+                "f-sum/absolute is a future extension). Same inputs as "
+                "subtract_compton_background but normalization defaults to 'area'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": {"type": "array", "items": {"type": "integer"}, "description": "Data scans to average."},
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": {"type": "number", "description": "Lower energy-loss bound (eV) of the edge feature."},
+                    "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
+                    "model": {
+                        "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                        "description": "Compton background shape.",
+                    },
+                },
+                "required": ["edge_lo", "edge_hi"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "overlay_xrs_spectra",
+            "description": (
+                "Overlay reduced XRS spectra from multiple files (samples, states of charge, "
+                "q-bins) on the energy-loss axis with consistent processing. Each file is "
+                "averaged, optionally Compton-subtracted (if edge_lo/edge_hi given) and "
+                "area-normalized, then plotted together. The XRS analogue of "
+                "plot_averaged_scans."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_names": {"type": "array", "items": {"type": "string"}, "description": "SPEC file names to overlay."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": {"type": "number", "description": "If set with edge_hi, Compton-subtract each spectrum first."},
+                    "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
+                    "model": {"type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                              "description": "Compton background shape (if subtracting)."},
+                    "normalization": {"type": "string", "enum": ["none", "area"], "default": "area",
+                                      "description": "Per-spectrum normalization for a fair overlay."},
+                },
+                "required": ["file_names"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sum_crystals",
+            "description": (
+                "Energy-align multiple analyzer-crystal / SDD-ROI channels of ONE scan onto "
+                "a common loss grid (each channel has its own calibration), reject outlier "
+                "channels (low SNR or shape deviating from the channel median), and sum. The "
+                "crystals Bragg-focus onto the SDD and the ROI gates the signal — they work "
+                "together. Returns the summed spectrum, which channels were dropped and why, "
+                "and a plot."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_number": {"type": "integer", "description": "Scan number holding the per-crystal channels."},
+                    "counters": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "Counter names, one per analyzer-crystal/ROI channel (e.g. ['vortDT2','vortDT3',...]).",
+                    },
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "reject": {"type": "boolean", "default": True, "description": "Reject outlier channels before summing."},
+                },
+                "required": ["file_name", "scan_number", "counters"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "align_crystals",
+            "description": (
+                "Report per-crystal alignment and outlier-rejection decisions WITHOUT "
+                "summing: for each channel, its SNR and how far its shape deviates from the "
+                "channel-median spectrum, and whether it would be kept. Use to inspect the "
+                "analyzer array before sum_crystals."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "scan_number": {"type": "integer", "description": "Scan number holding the per-crystal channels."},
+                    "counters": {"type": "array", "items": {"type": "string"}, "description": "Counter names, one per crystal/ROI channel."},
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                },
+                "required": ["file_name", "scan_number", "counters"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tag_crystal_q",
+            "description": (
+                "Compute the momentum transfer q (Å⁻¹) for each analyzer crystal from the "
+                "incident energy and the crystal scattering angles 2θ: q = (4π/λ)·sin(θ). "
+                "Low q ≈ dipole (XANES-like); high q turns on monopole/quadrupole "
+                "transitions. Use to group crystals into q-bins for q-resolved analysis."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "incident_energy_ev": {"type": "number", "description": "Incident photon energy (eV), ~10 keV for hard-X-ray XRS."},
+                    "two_thetas": {"type": "array", "items": {"type": "number"}, "description": "Scattering angle 2θ (deg) for each crystal."},
+                    "counters": {"type": "array", "items": {"type": "string"}, "description": "Optional counter/crystal labels, aligned with two_thetas."},
+                },
+                "required": ["incident_energy_ev", "two_thetas"],
+            },
+        },
+    },
+    # -----------------------------------------------------------------
+    # CAT-XRS · X-ray Raman scientific interpretation
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_xrs_descriptors",
+            "description": (
+                "Extract measurable descriptors from a reduced XRS edge: edge onset "
+                "(loss-axis inflection), pre-edge peak (position + area), white line, "
+                "integrated edge area, and feature SNR. Averages reps and (if "
+                "edge_lo/edge_hi are given) Compton-subtracts first. Returns the numbers "
+                "+ an annotated plot."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "model": _XRS_MODEL_PROP,
+                    "element": _XRS_ELEMENT_PROP,
+                    "edge": _XRS_EDGE_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "interpret_xrs_oxidation_state",
+            "description": (
+                "Oxidation-state / covalency read from a reduced XRS edge. Reports the "
+                "edge-onset shift (absolute only with an elastic + reference calibration; "
+                "otherwise relative), and for an O K-edge the pre-edge covalency / "
+                "oxygen-redox indicator; for a 3d metal L-edge, guidance on the L3/L2 "
+                "branching ratio. Follows the verdict contract with honest confidence gating."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "model": _XRS_MODEL_PROP,
+                    "element": _XRS_ELEMENT_PROP,
+                    "edge": _XRS_EDGE_PROP,
+                    "calibration": {
+                        "type": "object",
+                        "description": "Optional calibration context {calibrated, offset_ev, assigned_reference_ev, reference_source} for an absolute onset shift.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "interpret_q_dependence",
+            "description": (
+                "Classify a feature's momentum-transfer (q) behavior: dipole (low q, "
+                "XANES-like) vs monopole/quadrupole (rising with q). Pass either "
+                "points=[{q,value}] (area-normalized feature intensities you already have) "
+                "or groups=[{q,scan_numbers}] from one file plus edge_lo/edge_hi and a "
+                "feature window — the tool reduces each group, Compton-subtracts, "
+                "area-normalizes, and integrates the feature. ≥3 q points needed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "points": {
+                        "type": "array", "items": {"type": "object"},
+                        "description": "Explicit [{q: Å⁻¹, value: normalized feature intensity}] (≥3).",
+                    },
+                    "groups": {
+                        "type": "array", "items": {"type": "object"},
+                        "description": "[{q: Å⁻¹, scan_numbers: [..]}] to reduce from one file.",
+                    },
+                    "file_name": {"type": "string", "description": "SPEC file name for groups mode."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "feature_lo": {"type": "number", "description": "Loss-window lower bound (eV) of the feature to track vs q (default: edge window)."},
+                    "feature_hi": {"type": "number", "description": "Loss-window upper bound (eV) of the feature."},
+                    "model": _XRS_MODEL_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_xrs_to_references",
+            "description": (
+                "Linear-combination fit (non-negative) of a reduced XRS spectrum to "
+                "reference spectra → phase/valence fractions. References may be other "
+                "files ({name,file_name,scan_numbers}) or explicit arrays "
+                "({name,loss,intensity}). Valid against XANES references in the low-q "
+                "dipole regime. If edge_lo/edge_hi are given, everything is "
+                "Compton-subtracted and area-normalized first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "Target SPEC file name."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "model": _XRS_MODEL_PROP,
+                    "references": {
+                        "type": "array", "items": {"type": "object"},
+                        "description": "Reference spectra: [{name, file_name, scan_numbers}] or [{name, loss, intensity}].",
+                    },
+                },
+                "required": ["references"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assess_xrs_quality",
+            "description": (
+                "Quality gate for a reduced XRS edge: SNR measured on the edge feature "
+                "(not the Compton-dominated whole spectrum), the elastic-line energy "
+                "resolution, and a verdict (publication / usable / marginal / "
+                "noise_limited). Averages reps and Compton-subtracts if edge_lo/edge_hi given."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "model": _XRS_MODEL_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_xrs_chemistry",
+            "description": (
+                "Capstone XRS interpretation: oxidation/covalency verdict + quality + one "
+                "narration paragraph and the annotated descriptor plot. Averages reps, "
+                "Compton-subtracts (edge_lo/edge_hi), extracts descriptors, and interprets. "
+                "The XRS analogue of summarize_sample_chemistry."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "counter": _XRS_COUNTER_PROP,
+                    "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
+                    "elastic_center_ev": _ELASTIC_CENTER_PROP,
+                    "edge_lo": _XRS_EDGE_LO_PROP,
+                    "edge_hi": _XRS_EDGE_HI_PROP,
+                    "model": _XRS_MODEL_PROP,
+                    "element": _XRS_ELEMENT_PROP,
+                    "edge": _XRS_EDGE_PROP,
+                    "calibration": {
+                        "type": "object",
+                        "description": "Optional calibration context for an absolute onset shift.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 # Category map for the sidebar
@@ -2180,5 +2694,15 @@ AUTONOMY_TOOL_CATEGORIES = [
         "record_energy_calibration", "get_energy_calibration",
         "extract_xas_descriptors", "interpret_oxidation_state",
         "interpret_coordination_geometry", "summarize_sample_chemistry",
+    ]),
+    ("CAT-XRS Raman processing", [
+        "calibrate_energy_loss", "build_loss_axis", "average_xrs_scans",
+        "subtract_compton_background", "normalize_xrs", "overlay_xrs_spectra",
+        "sum_crystals", "align_crystals", "tag_crystal_q",
+    ]),
+    ("CAT-XRS Raman interpretation", [
+        "extract_xrs_descriptors", "interpret_xrs_oxidation_state",
+        "interpret_q_dependence", "compare_xrs_to_references",
+        "assess_xrs_quality", "summarize_xrs_chemistry",
     ]),
 ]

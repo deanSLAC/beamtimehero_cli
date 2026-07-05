@@ -17,6 +17,8 @@ from beamtimehero_cli.cli.__main__ import build_parser as _build_parser, main
 EXPECTED_TREES = {
     "ref", "tool", "db", "spec-read", "spec-write",
     "spec-file", "s3df", "slack",
+    # dedicated X-ray Raman (XRS) analysis branch
+    "xrs",
     # bundled agent profiles (curated views over the catalog)
     "bl-aligner",
 }

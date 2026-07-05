@@ -486,6 +486,8 @@ def _analyze_with(
     e_max=None,
     scan_numbers=None,
     include_raw_counts: bool = False,
+    counter=None,
+    normalization: str = "edge_step",
 ):
     """Shared shape for convergence and efficiency: load normalized arrays
     (optionally windowed to [e_min, e_max] and/or restricted to scan_numbers),
@@ -494,15 +496,21 @@ def _analyze_with(
     If include_raw_counts is True, also load the raw active-counter rate stack
     over the SAME energy window and pass it to the analyzer as
     raw_counts_per_point. The analyzer must accept that kwarg.
+
+    ``counter``/``normalization`` are threaded to ``get_normalized_scan_arrays``
+    so callers can override the auto-picked counter and pick a non-edge-step
+    normalization for XRS. See ``ref counter-selection``.
     """
     try:
         combined, file_name, counter, used_scans = scan_data.get_normalized_scan_arrays(
             file_name, e_min=e_min, e_max=e_max, scan_numbers=scan_numbers,
+            counter=counter, normalization=normalization,
         )
     except ValueError as e:
         return {"error": str(e)}
     if len(used_scans) < 2:
         return {"error": f"Need at least 2 scans, found {len(used_scans)}."}
+    counter_warning = combined.attrs.get("counter_warning")
 
     # Drop rows with NaN in any scan to keep a common grid
     combined_clean = combined.dropna()
@@ -512,7 +520,7 @@ def _analyze_with(
     if include_raw_counts:
         try:
             raw_combined, _, _, raw_used = scan_data.get_raw_counter_arrays(
-                file_name, scan_numbers=used_scans,
+                file_name, scan_numbers=used_scans, counter=counter,
             )
             # Align raw counts to the same energy grid as the windowed normalized stack
             raw_aligned = raw_combined.reindex(combined_clean.index)
@@ -528,7 +536,10 @@ def _analyze_with(
         return result
     result["file_name"] = file_name
     result["active_counter"] = counter
+    result["normalization"] = combined.attrs.get("normalization", normalization)
     result["scan_numbers"] = used_scans
+    if counter_warning:
+        result["counter_warning"] = counter_warning
     if e_min is not None and e_max is not None:
         result["energy_window"] = [e_min, e_max]
     return result
@@ -643,13 +654,17 @@ def t_average_scans(arguments: dict) -> tuple[str, list[str]]:
     e_min = arguments.get("e_min")
     e_max = arguments.get("e_max")
     weighting = arguments.get("weighting", "equal")
+    counter = arguments.get("counter")
+    normalization = arguments.get("normalization", "edge_step")
     if file_name:
         result = scan_data.average_energy_scans(
             file_name=file_name, e_min=e_min, e_max=e_max, weighting=weighting,
+            counter=counter, normalization=normalization,
         )
     else:
         result = scan_data.average_latest_energy_scans(
             e_min=e_min, e_max=e_max, weighting=weighting,
+            counter=counter, normalization=normalization,
         )
     return json.dumps(result, indent=2), images_b64
 
@@ -665,6 +680,8 @@ def t_analyze_convergence(arguments: dict) -> tuple[str, list[str]]:
         analyze_scan_quality,
         e_min=e_min,
         e_max=e_max,
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
     )
     return json.dumps(result, indent=2, default=str), images_b64
 
@@ -681,6 +698,8 @@ def t_analyze_efficiency(arguments: dict) -> tuple[str, list[str]]:
         e_min=e_min,
         e_max=e_max,
         include_raw_counts=bool(arguments.get("include_poisson_floor", True)),
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
     )
     return json.dumps(result, indent=2, default=str), images_b64
 
@@ -704,10 +723,15 @@ def t_analyze_feature_evolution(arguments: dict) -> tuple[str, list[str]]:
         )
     try:
         combined, file_name, counter, used_scans = (
-            scan_data.get_normalized_scan_arrays(file_name)
+            scan_data.get_normalized_scan_arrays(
+                file_name,
+                counter=arguments.get("counter"),
+                normalization=arguments.get("normalization", "edge_step"),
+            )
         )
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), images_b64
+    counter_warning = combined.attrs.get("counter_warning")
     combined = combined.dropna()
     energy = combined.index.values.tolist()
     scan_2d = combined.values.T.tolist()
@@ -719,6 +743,8 @@ def t_analyze_feature_evolution(arguments: dict) -> tuple[str, list[str]]:
         result.setdefault("file_name", file_name)
         result.setdefault("active_counter", counter)
         result.setdefault("scan_numbers", used_scans)
+        if counter_warning:
+            result.setdefault("counter_warning", counter_warning)
     return json.dumps(result, indent=2, default=str), images_b64
 
 def t_group_scans_by_spot(arguments: dict) -> tuple[str, list[str]]:
@@ -772,6 +798,8 @@ def t_analyze_per_spot(arguments: dict) -> tuple[str, list[str]]:
                 e_min=e_min,
                 e_max=e_max,
                 scan_numbers=spot["scan_numbers"],
+                counter=arguments.get("counter"),
+                normalization=arguments.get("normalization", "edge_step"),
             )
         except ValueError as e:
             per_spot_results.append({
@@ -819,7 +847,11 @@ def t_plot_averaged_scans(arguments: dict) -> tuple[str, list[str]]:
     file_names = arguments.get("file_names", [])
     if not file_names:
         return "Error: file_names array must not be empty.", images_b64
-    fig, summary = plotting.plot_averaged_scans_overlay(file_names)
+    fig, summary = plotting.plot_averaged_scans_overlay(
+        file_names,
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
+    )
     if fig:
         images_b64.append(fig_to_base64(fig))
         import matplotlib.pyplot as plt
@@ -846,6 +878,8 @@ def t_plot_scan_stack(arguments: dict) -> tuple[str, list[str]]:
         arguments.get("file_name", ""),
         e_min=arguments.get("e_min"),
         e_max=arguments.get("e_max"),
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
     )
     if fig:
         images_b64.append(fig_to_base64(fig))
@@ -859,6 +893,8 @@ def t_plot_first_half_vs_second_half(arguments: dict) -> tuple[str, list[str]]:
         arguments.get("file_name", ""),
         e_min=arguments.get("e_min"),
         e_max=arguments.get("e_max"),
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
     )
     if fig:
         images_b64.append(fig_to_base64(fig))
@@ -872,6 +908,8 @@ def t_plot_running_average(arguments: dict) -> tuple[str, list[str]]:
         arguments.get("file_name", ""),
         e_min=arguments.get("e_min"),
         e_max=arguments.get("e_max"),
+        counter=arguments.get("counter"),
+        normalization=arguments.get("normalization", "edge_step"),
     )
     if fig:
         images_b64.append(fig_to_base64(fig))
@@ -1319,6 +1357,483 @@ def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# XRS (X-ray Raman) processing tools — energy-loss axis, NOT edge-step
+# ---------------------------------------------------------------------------
+
+def _close(fig):
+    import matplotlib.pyplot as plt
+    plt.close(fig)
+
+
+def _xrs_spectrum_summary(loss, values) -> dict:
+    """Compact JSON-safe summary of an XRS loss spectrum (arrays are too big
+    to dump; the plot carries the visual)."""
+    loss = np.asarray(loss, dtype=float)
+    values = np.asarray(values, dtype=float)
+    finite = np.isfinite(values)
+    if not finite.any():
+        return {"n_points": int(len(loss)), "error": "all-NaN spectrum"}
+    i_peak = int(np.nanargmax(values))
+    return {
+        "n_points": int(len(loss)),
+        "loss_min_ev": round(float(loss[finite].min()), 3),
+        "loss_max_ev": round(float(loss[finite].max()), 3),
+        "peak_value": round(float(values[i_peak]), 6),
+        "peak_loss_ev": round(float(loss[i_peak]), 3),
+    }
+
+
+def t_calibrate_energy_loss(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    images_b64: list[str] = []
+    file_name = arguments.get("file_name", "")
+    scan_number = arguments.get("scan_number")
+    counter = arguments.get("counter")
+    if not file_name or scan_number is None:
+        return json.dumps({"error": "file_name and scan_number (the elastic ascan mono) are required."}), []
+    try:
+        result = xrs_data.calibrate_energy_loss(file_name, int(scan_number), counter=counter)
+        energy, signal = xrs_data.load_scan_signal(file_name, int(scan_number), result["counter"])
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    fig, _summary = xrs_plotting.plot_elastic_fit(
+        energy, signal, result, file_name, int(scan_number), result["counter"])
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    return json.dumps(result, indent=2, default=str), images_b64
+
+
+def t_build_loss_axis(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    images_b64: list[str] = []
+    file_name = arguments.get("file_name", "")
+    scan_number = arguments.get("scan_number")
+    if not file_name or scan_number is None:
+        return json.dumps({"error": "file_name and scan_number are required."}), []
+    try:
+        result = xrs_data.reduce_xrs(
+            file_name=file_name, counter=arguments.get("counter"),
+            scan_numbers=[int(scan_number)],
+            elastic_center_ev=arguments.get("elastic_center_ev"),
+        )
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    fig = xrs_plotting.plot_loss_spectrum(
+        result["loss"], result["mean"], None,
+        f"{file_name} #{scan_number} — {result['counter']} on {result['axis']}")
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    out = {k: result[k] for k in ("file_name", "counter", "elastic_center_ev",
+                                   "elastic_center_source", "axis", "counter_warning")
+           if result.get(k) is not None}
+    out["spectrum"] = _xrs_spectrum_summary(result["loss"], result["mean"])
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+def _reduce_for_tool(arguments):
+    """Shared: reduce_xrs from tool arguments (average reps on the loss axis)."""
+    from beamtimehero_cli.spec_data import xrs_data
+    return xrs_data.reduce_xrs(
+        file_name=arguments.get("file_name"),
+        counter=arguments.get("counter"),
+        scan_numbers=arguments.get("scan_numbers"),
+        elastic_center_ev=arguments.get("elastic_center_ev"),
+    )
+
+
+def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.spec_data import xrs_plotting
+    images_b64: list[str] = []
+    try:
+        r = _reduce_for_tool(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    loss, mean, sem = r["loss"], r["mean"], r["sem"]
+    ylabel = "signal / I0"
+    normalization = arguments.get("normalization", "none")
+    if normalization == "area":
+        norm = xrs.area_normalize(loss, mean, arguments.get("e_min"), arguments.get("e_max"))
+        mean = norm["normalized"]
+        sem = sem / norm["area"] if norm["area"] else sem
+        ylabel = "area-normalized signal"
+    fig = xrs_plotting.plot_loss_spectrum(
+        loss, mean, sem,
+        f"{r['file_name']} — averaged XRS ({r['n_reps']} reps, {r['counter']})", ylabel)
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    out = {
+        "file_name": r["file_name"], "counter": r["counter"],
+        "n_reps": r["n_reps"], "scan_numbers": r["scan_numbers"],
+        "elastic_center_ev": r["elastic_center_ev"],
+        "elastic_center_source": r["elastic_center_source"],
+        "axis": r["axis"], "normalization": normalization,
+        "spectrum": _xrs_spectrum_summary(loss, mean),
+    }
+    if r.get("counter_warning"):
+        out["counter_warning"] = r["counter_warning"]
+    if r["elastic_center_ev"] is None:
+        out["note"] = ("No elastic calibration — run calibrate_energy_loss on the "
+                       "elastic (ascan mono) scan so the axis is true energy loss.")
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.spec_data import xrs_plotting
+    images_b64: list[str] = []
+    edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
+    if edge_lo is None or edge_hi is None:
+        return json.dumps({"error": "edge_lo and edge_hi (energy-loss bounds of the edge feature) are required."}), []
+    try:
+        r = _reduce_for_tool(arguments)
+        bg = xrs.subtract_compton_background(
+            r["loss"], r["mean"], float(edge_lo), float(edge_hi),
+            model=arguments.get("model", "linear"))
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    subtracted = bg["subtracted"]
+    normalization = arguments.get("normalization", "none")
+    if normalization == "area":
+        norm = xrs.area_normalize(r["loss"], subtracted, float(edge_lo), float(edge_hi))
+        subtracted = norm["normalized"]
+    fig = xrs_plotting.plot_background_subtraction(
+        r["loss"], r["mean"], bg["background"], subtracted, bg["edge_window"])
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    out = {
+        "file_name": r["file_name"], "counter": r["counter"], "n_reps": r["n_reps"],
+        "elastic_center_ev": r["elastic_center_ev"], "axis": r["axis"],
+        "background_model": bg["model"], "requested_model": bg["requested_model"],
+        "edge_window": bg["edge_window"], "n_flank_points": bg["n_flank_points"],
+        "normalization": normalization,
+        "edge_spectrum": _xrs_spectrum_summary(r["loss"], subtracted),
+        "provenance": bg["provenance"],
+    }
+    if r.get("counter_warning"):
+        out["counter_warning"] = r["counter_warning"]
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+def t_normalize_xrs(arguments: dict) -> tuple[str, list[str]]:
+    """Full reduce → Compton subtract → area/edge-jump normalize."""
+    args = dict(arguments)
+    args["normalization"] = arguments.get("normalization", "area")
+    return t_subtract_compton_background(args)
+
+
+def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    images_b64: list[str] = []
+    file_names = arguments.get("file_names", [])
+    if not file_names:
+        return json.dumps({"error": "file_names array must not be empty."}), []
+    edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
+    model = arguments.get("model", "linear")
+    normalization = arguments.get("normalization", "area")
+    spectra, reports = [], []
+    for fn in file_names:
+        try:
+            r = xrs_data.reduce_xrs(
+                file_name=fn, counter=arguments.get("counter"),
+                elastic_center_ev=arguments.get("elastic_center_ev"))
+            loss, inten = r["loss"], r["mean"]
+            if edge_lo is not None and edge_hi is not None:
+                bg = xrs.subtract_compton_background(loss, inten, float(edge_lo), float(edge_hi), model=model)
+                inten = bg["subtracted"]
+            if normalization == "area":
+                inten = xrs.area_normalize(loss, inten, edge_lo, edge_hi)["normalized"]
+            spectra.append((f"{fn} ({r['n_reps']} reps)", loss, inten))
+            reports.append({"file_name": fn, "counter": r["counter"], "n_reps": r["n_reps"],
+                            "counter_warning": r.get("counter_warning")})
+        except ValueError as e:
+            reports.append({"file_name": fn, "error": str(e)})
+    if not spectra:
+        return json.dumps({"error": "No spectra could be reduced.", "reports": reports}, indent=2), []
+    ylabel = "area-normalized" if normalization == "area" else "signal / I0"
+    fig = xrs_plotting.plot_overlay(spectra, ylabel=ylabel)
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    return json.dumps({"n_overlaid": len(spectra), "normalization": normalization,
+                       "background_subtracted": edge_lo is not None,
+                       "reports": reports}, indent=2, default=str), images_b64
+
+
+def _load_crystal_channels(arguments):
+    """Load per-crystal/ROI channel signals from one scan.
+    Returns (loss_list, channel_list, counters, warning)."""
+    from beamtimehero_cli.spec_data import xrs_data
+    file_name = arguments.get("file_name", "")
+    scan_number = arguments.get("scan_number")
+    counters = arguments.get("counters")
+    if not file_name or scan_number is None or not counters:
+        raise ValueError("file_name, scan_number, and counters (list of channel names) are required.")
+    center, _src = xrs_data._resolve_elastic_center(file_name, arguments.get("elastic_center_ev"))
+    from beamtimehero_cli.analysis import xrs
+    loss_list, chan_list = [], []
+    for c in counters:
+        energy, signal = xrs_data.load_scan_signal(file_name, int(scan_number), c)
+        loss_list.append(xrs.to_energy_loss(energy, center) if center is not None else energy)
+        chan_list.append(signal)
+    return loss_list, chan_list, counters, center
+
+
+def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.spec_data import xrs_plotting
+    images_b64: list[str] = []
+    try:
+        loss_list, chan_list, counters, center = _load_crystal_channels(arguments)
+        res = xrs.sum_crystals(loss_list, chan_list, reject=bool(arguments.get("reject", True)))
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    # interpolate channels onto the result grid for plotting
+    on_grid = [np.interp(res["loss"], lo, ch, left=np.nan, right=np.nan)
+               for lo, ch in zip(loss_list, chan_list)]
+    keep = res["rejection"]["keep"]
+    fig = xrs_plotting.plot_crystal_sum(res["loss"], on_grid, res["summed"], keep, labels=counters)
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    out = {
+        "file_name": arguments.get("file_name"), "counters": counters,
+        "elastic_center_ev": center,
+        "n_channels_used": res["n_channels_used"], "n_channels_total": res["n_channels_total"],
+        "rejected": [{"counter": counters[i], "reason": res["rejection"]["reasons"][i]}
+                     for i in range(len(counters)) if not keep[i]],
+        "summed_spectrum": _xrs_spectrum_summary(res["loss"], res["summed"]),
+    }
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+def t_align_crystals(arguments: dict) -> tuple[str, list[str]]:
+    """Report per-crystal alignment + outlier rejection WITHOUT summing."""
+    from beamtimehero_cli.analysis import xrs
+    try:
+        loss_list, chan_list, counters, center = _load_crystal_channels(arguments)
+        grid = xrs.common_loss_grid(loss_list)
+        on_grid = [np.interp(grid, lo, ch, left=np.nan, right=np.nan)
+                   for lo, ch in zip(loss_list, chan_list)]
+        rej = xrs.reject_outlier_channels(grid, on_grid)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    per = []
+    for i, c in enumerate(counters):
+        pc = rej["per_channel"][i] if i < len(rej["per_channel"]) else {}
+        per.append({"counter": c, "kept": rej["keep"][i], "reason": rej["reasons"][i],
+                    "snr": pc.get("snr"), "shape_deviation_sigma": pc.get("shape_deviation_sigma")})
+    return json.dumps({
+        "file_name": arguments.get("file_name"), "elastic_center_ev": center,
+        "common_loss_range_ev": [round(float(grid.min()), 3), round(float(grid.max()), 3)],
+        "n_channels": len(counters), "channels": per,
+    }, indent=2, default=str), []
+
+
+def t_tag_crystal_q(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    incident = arguments.get("incident_energy_ev")
+    two_thetas = arguments.get("two_thetas")
+    if incident is None or not two_thetas:
+        return json.dumps({"error": "incident_energy_ev and two_thetas (list, deg) are required."}), []
+    counters = arguments.get("counters") or [f"ch{i}" for i in range(len(two_thetas))]
+    try:
+        qs = [xrs.q_from_two_theta(float(incident), float(tt)) for tt in two_thetas]
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    channels = [{"counter": counters[i] if i < len(counters) else f"ch{i}",
+                 "two_theta_deg": float(two_thetas[i]), "q_inv_angstrom": round(qs[i], 4),
+                 "regime": "low-q (dipole/XANES-like)" if qs[i] < 3.0 else "high-q (multipole)"}
+                for i in range(len(two_thetas))]
+    return json.dumps({
+        "incident_energy_ev": float(incident),
+        "q_range_inv_angstrom": [round(min(qs), 4), round(max(qs), 4)],
+        "channels": channels,
+        "note": ("Low q ≈ dipole (compare to XANES); high q turns on monopole/"
+                 "quadrupole transitions. Group crystals by q for q-resolved analysis."),
+    }, indent=2, default=str), []
+
+
+# ---------------------------------------------------------------------------
+# CAT-XRS · X-ray Raman scientific interpretation
+# ---------------------------------------------------------------------------
+
+def _xrs_edge_descriptors(arguments):
+    """Reduce → (Compton subtract if edge window given) → extract XRS descriptors.
+
+    Returns (descriptors, arrays, meta, resolution_fwhm_ev). Raises ValueError.
+    """
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.interpretation import xrs_descriptors as xd
+    from beamtimehero_cli.interpretation import xrs_edges
+    from beamtimehero_cli.spec_data import xrs_data
+
+    r = xrs_data.reduce_xrs(
+        file_name=arguments.get("file_name"), counter=arguments.get("counter"),
+        scan_numbers=arguments.get("scan_numbers"),
+        elastic_center_ev=arguments.get("elastic_center_ev"))
+    loss, inten = r["loss"], r["mean"]
+
+    edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
+    subtracted = False
+    if edge_lo is not None and edge_hi is not None:
+        bg = xrs.subtract_compton_background(loss, inten, float(edge_lo), float(edge_hi),
+                                             model=arguments.get("model", "linear"))
+        inten = bg["subtracted"]
+        subtracted = True
+
+    # element/edge: explicit or auto-suggest from loss window
+    element, edge = arguments.get("element"), arguments.get("edge")
+    edge_info = None
+    if element and edge:
+        edge_info = xrs_edges.get_xrs_edge_info(element, edge)
+    elif r["axis"] == "energy_loss_ev":
+        finite = np.isfinite(loss)
+        sug = xrs_edges.suggest_xrs_edge(float(loss[finite].min()), float(loss[finite].max()))
+        if sug.get("found"):
+            edge_info = sug["best"]
+
+    ew = (float(edge_lo), float(edge_hi)) if subtracted else None
+    descriptors, arrays = xd.extract_xrs_descriptors(loss, inten, edge_info=edge_info,
+                                                     edge_window=ew)
+    if not subtracted:
+        descriptors["flags"].append("no_compton_subtraction — onset/pre-edge unreliable on the raw Compton background")
+    rec = xrs_data.current_elastic(r["file_name"])
+    resolution = rec.get("resolution_fwhm_ev") if rec else None
+    meta = {
+        "file_name": r["file_name"], "counter": r["counter"], "n_reps": r["n_reps"],
+        "elastic_center_ev": r["elastic_center_ev"], "axis": r["axis"],
+        "compton_subtracted": subtracted,
+    }
+    if r.get("counter_warning"):
+        meta["counter_warning"] = r["counter_warning"]
+    return descriptors, arrays, meta, resolution
+
+
+def t_extract_xrs_descriptors(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data import xrs_plotting
+    try:
+        descriptors, arrays, meta, _res = _xrs_edge_descriptors(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    fig = xrs_plotting.plot_xrs_descriptors(
+        arrays["loss"], arrays["intensity"], descriptors,
+        title=f"{meta['file_name']} — XRS descriptors")
+    img = fig_to_base64(fig); _close(fig)
+    return json.dumps({**meta, **descriptors}, indent=2, default=str), [img]
+
+
+def t_interpret_xrs_oxidation_state(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import xrs_interpret
+    try:
+        descriptors, _arrays, meta, _res = _xrs_edge_descriptors(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    verdict = xrs_interpret.interpret_xrs_oxidation_state(descriptors, arguments.get("calibration"))
+    verdict.update(meta)
+    return json.dumps(verdict, indent=2, default=str), []
+
+
+def t_assess_xrs_quality(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import xrs_interpret
+    try:
+        descriptors, _arrays, meta, res = _xrs_edge_descriptors(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    out = xrs_interpret.assess_xrs_quality(descriptors, res)
+    out.update(meta)
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_summarize_xrs_chemistry(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.spec_data import xrs_plotting
+    try:
+        descriptors, arrays, meta, res = _xrs_edge_descriptors(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    summary = xrs_interpret.summarize_xrs_chemistry(descriptors, arguments.get("calibration"), res)
+    summary.update(meta)
+    fig = xrs_plotting.plot_xrs_descriptors(
+        arrays["loss"], arrays["intensity"], descriptors,
+        title=f"{meta['file_name']} — XRS chemistry")
+    img = fig_to_base64(fig); _close(fig)
+    return json.dumps(summary, indent=2, default=str), [img]
+
+
+def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
+    """Classify a feature's q-dependence. Accepts either explicit `points`
+    ([{q, value}]) or `groups` ([{q, scan_numbers}]) reduced from one file."""
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.spec_data import xrs_data
+    points = arguments.get("points")
+    if not points:
+        groups = arguments.get("groups") or []
+        edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
+        feat_lo = arguments.get("feature_lo", edge_lo)
+        feat_hi = arguments.get("feature_hi", edge_hi)
+        if not groups or edge_lo is None or edge_hi is None:
+            return json.dumps({"error": "Provide either points=[{q,value}] or groups=[{q,scan_numbers}] with edge_lo/edge_hi."}), []
+        points = []
+        for g in groups:
+            try:
+                r = xrs_data.reduce_xrs(file_name=arguments.get("file_name"),
+                                        counter=arguments.get("counter"),
+                                        scan_numbers=g.get("scan_numbers"),
+                                        elastic_center_ev=arguments.get("elastic_center_ev"))
+                bg = xrs.subtract_compton_background(r["loss"], r["mean"], float(edge_lo), float(edge_hi),
+                                                     model=arguments.get("model", "linear"))
+                norm = xrs.area_normalize(r["loss"], bg["subtracted"], float(edge_lo), float(edge_hi))
+                from beamtimehero_cli.interpretation import xrs_descriptors as xd
+                value = xd.integrated_area(norm["loss"], norm["normalized"], float(feat_lo), float(feat_hi))
+                points.append({"q": g.get("q"), "value": value})
+            except ValueError as e:
+                points.append({"q": g.get("q"), "value": None, "error": str(e)})
+    verdict = xrs_interpret.interpret_q_dependence([p for p in points if p.get("value") is not None])
+    verdict["points"] = points
+    return json.dumps(verdict, indent=2, default=str), []
+
+
+def t_compare_xrs_to_references(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.spec_data import xrs_data
+    edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
+
+    def _reduce_norm(file_name=None, scan_numbers=None, counter=None):
+        r = xrs_data.reduce_xrs(file_name=file_name, counter=counter, scan_numbers=scan_numbers,
+                                elastic_center_ev=arguments.get("elastic_center_ev"))
+        inten = r["mean"]
+        if edge_lo is not None and edge_hi is not None:
+            inten = xrs.subtract_compton_background(r["loss"], inten, float(edge_lo), float(edge_hi),
+                                                    model=arguments.get("model", "linear"))["subtracted"]
+            inten = xrs.area_normalize(r["loss"], inten, float(edge_lo), float(edge_hi))["normalized"]
+        return r["loss"], inten
+
+    try:
+        loss, inten = _reduce_norm(arguments.get("file_name"), arguments.get("scan_numbers"),
+                                   arguments.get("counter"))
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    refs = []
+    for ref in arguments.get("references", []):
+        try:
+            if ref.get("file_name"):
+                rl, ri = _reduce_norm(ref["file_name"], ref.get("scan_numbers"), ref.get("counter"))
+                refs.append({"name": ref.get("name", ref["file_name"]), "loss": rl, "intensity": ri})
+            elif ref.get("loss") and ref.get("intensity"):
+                refs.append({"name": ref.get("name", f"ref{len(refs)}"),
+                             "loss": ref["loss"], "intensity": ref["intensity"]})
+        except ValueError:
+            continue
+    if not refs:
+        return json.dumps({"error": "No usable references (need file_name or loss+intensity arrays)."}), []
+    result = xrs_interpret.compare_xrs_to_references(loss, inten, refs)
+    result["target_file"] = arguments.get("file_name")
+    return json.dumps(result, indent=2, default=str), []
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
 
@@ -1428,6 +1943,23 @@ _HANDLERS: dict[str, callable] = {
     "interpret_oxidation_state": t_interpret_oxidation_state,
     "interpret_coordination_geometry": t_interpret_coordination_geometry,
     "summarize_sample_chemistry": t_summarize_sample_chemistry,
+    # CAT-XRS · X-ray Raman processing (energy-loss axis, NOT edge-step)
+    "calibrate_energy_loss": t_calibrate_energy_loss,
+    "build_loss_axis": t_build_loss_axis,
+    "average_xrs_scans": t_average_xrs_scans,
+    "subtract_compton_background": t_subtract_compton_background,
+    "normalize_xrs": t_normalize_xrs,
+    "overlay_xrs_spectra": t_overlay_xrs_spectra,
+    "sum_crystals": t_sum_crystals,
+    "align_crystals": t_align_crystals,
+    "tag_crystal_q": t_tag_crystal_q,
+    # CAT-XRS · X-ray Raman interpretation
+    "extract_xrs_descriptors": t_extract_xrs_descriptors,
+    "interpret_xrs_oxidation_state": t_interpret_xrs_oxidation_state,
+    "interpret_q_dependence": t_interpret_q_dependence,
+    "compare_xrs_to_references": t_compare_xrs_to_references,
+    "assess_xrs_quality": t_assess_xrs_quality,
+    "summarize_xrs_chemistry": t_summarize_xrs_chemistry,
     # Slack tools (require the [slack] extra).
     "post_slack_message": lambda args: _t_slack(
         "post_message", args, kw=("channel_id", "text", "thread_ts"),

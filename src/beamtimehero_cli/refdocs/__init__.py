@@ -27,6 +27,10 @@ _DOCS: dict[str, dict] = {
         "file": _DEFAULTS_DIR / "profiles.md",
         "description": "Agent profiles: curated per-agent CLI surfaces over the master catalog.",
     },
+    "counter-selection": {
+        "file": _DEFAULTS_DIR / "counter-selection.md",
+        "description": "Load-bearing convention: multi-scan tools must accept an explicit signal counter and normalization mode; why auto-select + edge-step fails off-XAS (e.g. XRS).",
+    },
 }
 
 

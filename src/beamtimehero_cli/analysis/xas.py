@@ -31,6 +31,16 @@ def pick_active_counter(df: pd.DataFrame) -> tuple[str, str]:
     2. Else among ``vortDT, vortDT2, vortDT3, vortDT4``, the one with the
        highest max wins.
     3. Otherwise default to ``I1``.
+
+    .. warning::
+
+       This is a *convenience default for the XAS/HERFD/XES case only*. The
+       "highest max" heuristic silently picks a flat, high-offset background
+       channel over the true signal when they coexist — the exact ``vortDT``
+       (dark) vs ``vortDT2`` (signal) failure that corrupted an XRS dataset.
+       Any tool that averages/compares/scores repeated scans MUST accept an
+       explicit ``counter`` and only fall back here when none is given.
+       See ``beamtimehero ref counter-selection``.
     """
     cols = set(df.columns)
 
@@ -43,6 +53,62 @@ def pick_active_counter(df: pd.DataFrame) -> tuple[str, str]:
         return best, f"highest max among {list(available_vorts)}"
 
     return "I1", "no ppboff or vortDT counters, defaulting to I1"
+
+
+# ---------------------------------------------------------------------------
+# Counter-selection guardrail (the vortDT-vs-vortDT2 trap)
+# ---------------------------------------------------------------------------
+
+# A channel whose fractional modulation (peak-to-peak / max) is below this is
+# "flat" — the signature of a dark/background channel sitting at a large DC
+# offset. See ``beamtimehero ref counter-selection``.
+_FLAT_MODULATION_FRAC = 0.15
+
+
+def _fractional_modulation(series) -> float:
+    """(max - min) / max for one counter column. 0 for an all-zero channel."""
+    v = np.asarray(series, dtype=float)
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        return 0.0
+    hi = float(np.max(v))
+    if hi <= 0:
+        return 0.0
+    return (hi - float(np.min(v))) / hi
+
+
+def counter_selection_warning(df: pd.DataFrame, chosen: str) -> str | None:
+    """Warn when an auto-picked counter looks like a flat dark/background channel.
+
+    Returns a human-readable warning string, or None if the pick looks safe.
+    The trap this catches: ``pick_active_counter`` chooses the ``vortDT*``
+    channel with the highest max, but a flat dark channel at a large DC offset
+    can out-max the real (small) signal channel. If the chosen counter is flat
+    while a sibling ``vortDT*`` channel has much higher fractional modulation,
+    the sibling is likely the real signal. See ``ref counter-selection``.
+    """
+    if chosen not in df.columns:
+        return None
+    chosen_mod = _fractional_modulation(df[chosen])
+    if chosen_mod >= _FLAT_MODULATION_FRAC:
+        return None
+    siblings = [
+        c for c in _VORT_CANDIDATES
+        if c in df.columns and c != chosen
+        and _fractional_modulation(df[c]) >= 2 * max(chosen_mod, 1e-6)
+        and _fractional_modulation(df[c]) >= _FLAT_MODULATION_FRAC
+    ]
+    if not siblings:
+        return None
+    best_sib = max(siblings, key=lambda c: _fractional_modulation(df[c]))
+    return (
+        f"Auto-picked counter '{chosen}' is nearly flat "
+        f"({chosen_mod * 100:.1f}% peak-to-peak modulation) — the signature of a "
+        f"dark/background channel at a large DC offset. Channel '{best_sib}' "
+        f"({_fractional_modulation(df[best_sib]) * 100:.1f}% modulation) is more "
+        f"likely the real signal. Pass counter='{best_sib}' explicitly if this is "
+        f"XRS or any non-edge technique. See `beamtimehero ref counter-selection`."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +157,58 @@ def edge_step_normalize(
         normalized = (signal - pre_mean) / denom
 
     return energy, normalized
+
+
+# Normalization modes selectable by the multi-scan tools. ``edge_step`` is the
+# XAS default; the others exist so off-edge techniques (XRS) are not forced
+# through an edge-jump they don't have. See ``ref counter-selection``.
+NORMALIZATION_MODES = ("edge_step", "divide_by_i0", "raw")
+
+
+def normalize_series(
+    df: pd.DataFrame, counter: str, normalize_by: str | None = "I0",
+    mode: str = "edge_step",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize one scan's counter under a selectable mode.
+
+    - ``edge_step`` — pre-edge→0, post-edge→1 (absorption-edge normalization).
+      **Wrong for XRS**: there is no edge step to anchor to.
+    - ``divide_by_i0`` — signal / I0 only. The right choice for XRS/non-edge
+      data when a technique-specific normalization (area, Compton-subtracted)
+      hasn't been applied yet — it analyzes the true signal without imposing an
+      edge shape.
+    - ``raw`` — the counter as recorded, no I0 division.
+
+    Returns ``(energy, values)``. Raises KeyError for a missing counter/monitor,
+    ValueError for an unknown mode.
+    """
+    if mode not in NORMALIZATION_MODES:
+        raise ValueError(
+            f"Unknown normalization mode '{mode}'. "
+            f"Use one of {list(NORMALIZATION_MODES)}."
+        )
+    if counter not in df.columns:
+        raise KeyError(
+            f"Counter '{counter}' not found. Available: {list(df.columns)}"
+        )
+    if mode == "edge_step":
+        return edge_step_normalize(df, counter, normalize_by=normalize_by)
+
+    energy = df.index.values.astype(float)
+    signal = df[counter].values.astype(float)
+    if mode == "raw":
+        return energy, signal
+    # divide_by_i0
+    if normalize_by:
+        if normalize_by not in df.columns:
+            raise KeyError(
+                f"Normalization counter '{normalize_by}' not found. "
+                f"Available: {list(df.columns)}"
+            )
+        i0 = df[normalize_by].values.astype(float)
+        i0_safe = np.where(i0 == 0, 1.0, i0)
+        signal = signal / i0_safe
+    return energy, signal
 
 
 # ---------------------------------------------------------------------------

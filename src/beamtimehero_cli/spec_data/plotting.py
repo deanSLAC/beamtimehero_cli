@@ -38,11 +38,12 @@ def plot_scan(file_name, scan_number, counter=None, normalize_by=None):
     )
 
 
-def plot_averaged_scans_overlay(file_names):
-    """Plot edge-step-normalized averaged energy scans for multiple samples.
+def plot_averaged_scans_overlay(file_names, counter=None, normalization="edge_step"):
+    """Plot normalized averaged energy scans for multiple samples.
 
     Each sample is plotted as a separate line on the same axes.
-    Alignment files are skipped.
+    Alignment files are skipped. Pass ``counter`` / ``normalization`` to apply
+    the same choice to every sample (use ``divide_by_i0`` for XRS).
 
     Args:
         file_names: List of SPEC file names (one per sample).
@@ -62,7 +63,9 @@ def plot_averaged_scans_overlay(file_names):
     plotted = []
 
     for fn in sample_names:
-        info, result_df = scans.average_energy_scans_arrays(file_name=fn)
+        info, result_df = scans.average_energy_scans_arrays(
+            file_name=fn, counter=counter, normalization=normalization,
+        )
         if result_df is None or len(result_df) == 0:
             logger.info("Skipping %s: %s", fn, info.get("error", "no result"))
             continue
@@ -81,7 +84,7 @@ def plot_averaged_scans_overlay(file_names):
         return None, "No valid averaged scans to plot."
 
     ax.set_xlabel("Energy (eV)")
-    ax.set_ylabel("Normalized absorption")
+    ax.set_ylabel(_ylabel_for(normalization))
     ax.set_title("Averaged Energy Scans", fontsize=11)
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
@@ -94,11 +97,21 @@ def plot_averaged_scans_overlay(file_names):
     return fig, summary
 
 
-def plot_scan_stack(file_name, e_min=None, e_max=None):
+def _ylabel_for(normalization):
+    return {
+        "edge_step": "Edge-step normalized signal",
+        "divide_by_i0": "signal / I0",
+        "raw": "raw counter signal",
+    }.get(normalization, "signal")
+
+
+def plot_scan_stack(file_name, e_min=None, e_max=None, counter=None,
+                    normalization="edge_step"):
     """Overlay all reps of one file on a single axis, color-progressed by rep order.
 
-    Each rep is edge-step normalized (the standard pipeline) before plotting,
-    so the y-axis is comparable across reps and across spots.
+    Each rep is normalized (edge_step by default) before plotting, so the
+    y-axis is comparable across reps and across spots. Pass ``counter`` and
+    ``normalization="divide_by_i0"`` for XRS / non-edge data.
 
     e_min, e_max are optional numeric eV bounds; when provided, the plot is
     cropped to that window so the agent can inspect a feature directly.
@@ -108,11 +121,13 @@ def plot_scan_stack(file_name, e_min=None, e_max=None):
     try:
         combined, file_name, counter, used = scans.get_normalized_scan_arrays(
             file_name, e_min=e_min, e_max=e_max,
+            counter=counter, normalization=normalization,
         )
     except ValueError as e:
         return None, f"Could not load scans for {file_name}: {e}"
     if combined.shape[1] < 2:
         return None, f"Need >= 2 reps to make a stack plot, got {combined.shape[1]}."
+    warning = combined.attrs.get("counter_warning")
 
     fig, ax = plt.subplots(figsize=(10, 6))
     n_reps = combined.shape[1]
@@ -123,7 +138,7 @@ def plot_scan_stack(file_name, e_min=None, e_max=None):
                 label=col if n_reps <= 12 else None)
 
     ax.set_xlabel("Energy (eV)")
-    ax.set_ylabel("Edge-step normalized signal")
+    ax.set_ylabel(_ylabel_for(normalization))
     title = f"{file_name} — stacked reps ({n_reps} scans, counter={counter})"
     if e_min is not None and e_max is not None:
         title += f"  window=[{e_min:.1f}, {e_max:.1f}] eV"
@@ -138,20 +153,25 @@ def plot_scan_stack(file_name, e_min=None, e_max=None):
     ax.grid(alpha=0.3)
     fig.tight_layout()
     return fig, (
-        f"Stacked reps: {file_name} ({n_reps} scans)" +
-        (f" windowed to [{e_min}, {e_max}] eV" if e_min is not None else "")
+        f"Stacked reps: {file_name} ({n_reps} scans, counter={counter})" +
+        (f" windowed to [{e_min}, {e_max}] eV" if e_min is not None else "") +
+        (f"  ⚠ {warning}" if warning else "")
     )
 
 
-def plot_first_half_vs_second_half(file_name, e_min=None, e_max=None):
+def plot_first_half_vs_second_half(file_name, e_min=None, e_max=None, counter=None,
+                                   normalization="edge_step"):
     """Compare the average of the first half of reps to the second half, with
     SEM bands. Visual cross-check for whether reps are stationary or drifting.
+
+    Pass ``counter`` / ``normalization="divide_by_i0"`` for XRS.
     """
     import numpy as np
 
     try:
         combined, file_name, counter, used = scans.get_normalized_scan_arrays(
             file_name, e_min=e_min, e_max=e_max,
+            counter=counter, normalization=normalization,
         )
     except ValueError as e:
         return None, f"Could not load scans for {file_name}: {e}"
@@ -180,7 +200,7 @@ def plot_first_half_vs_second_half(file_name, e_min=None, e_max=None):
     n_sigma_max = float(np.nanmax(np.abs(diff) / np.where(sem_combined > 0, sem_combined, 1.0)))
 
     ax.set_xlabel("Energy (eV)")
-    ax.set_ylabel("Edge-step normalized signal")
+    ax.set_ylabel(_ylabel_for(normalization))
     title = (
         f"{file_name} — first vs second half (max |Δ|/SEM = {n_sigma_max:.1f}σ)"
     )
@@ -198,15 +218,19 @@ def plot_first_half_vs_second_half(file_name, e_min=None, e_max=None):
     return fig, summary
 
 
-def plot_running_average(file_name, e_min=None, e_max=None):
+def plot_running_average(file_name, e_min=None, e_max=None, counter=None,
+                         normalization="edge_step"):
     """Plot the running average and SEM band as more reps accumulate, on the
     given window. One line per cumulative subset (1..n reps), color-progressed.
+
+    Pass ``counter`` / ``normalization="divide_by_i0"`` for XRS.
     """
     import numpy as np
 
     try:
         combined, file_name, counter, used = scans.get_normalized_scan_arrays(
             file_name, e_min=e_min, e_max=e_max,
+            counter=counter, normalization=normalization,
         )
     except ValueError as e:
         return None, f"Could not load scans for {file_name}: {e}"
@@ -229,7 +253,7 @@ def plot_running_average(file_name, e_min=None, e_max=None):
                     color="black", alpha=0.15, label=f"final ±SEM (n={n})")
 
     ax.set_xlabel("Energy (eV)")
-    ax.set_ylabel("Edge-step normalized running mean")
+    ax.set_ylabel(_ylabel_for(normalization) + " (running mean)")
     title = f"{file_name} — running average through {n} reps"
     if e_min is not None and e_max is not None:
         title += f"  window=[{e_min:.1f}, {e_max:.1f}]"

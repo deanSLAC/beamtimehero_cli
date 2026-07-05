@@ -167,8 +167,20 @@ def _concat_aligned(series_list, decimals=_ENERGY_ALIGN_DECIMALS):
     return pd.concat(series_list, axis=1)
 
 
-def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numbers=None):
+def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numbers=None,
+                               counter=None, normalization="edge_step"):
     """Load all scans for a file, normalize, and return as a DataFrame on a common energy grid.
+
+    .. note::
+
+       This is the single chokepoint for every multi-scan tool (``average_scans``,
+       ``analyze_convergence``, ``analyze_efficiency``, ``plot_scan_stack``, …).
+       It hardcodes ``get_active_counter`` + edge-step normalization, so none of
+       those tools can currently express "use this counter" or "don't
+       edge-step-normalize". That is the fix site: thread an explicit ``counter``
+       and a normalization mode through here and all of them gain override at
+       once. Until then, off-XAS techniques (XRS) cannot be processed correctly.
+       See ``beamtimehero ref counter-selection``.
 
     Parameters
     ----------
@@ -182,6 +194,17 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     scan_numbers : list[int], optional
         If given, restrict to these specific scan numbers (used by per-spot
         analysis to run the same pipeline on a subset).
+    counter : str, optional
+        Signal counter to analyze. If None, auto-selected via
+        ``pick_active_counter`` (highest-max heuristic) and a flat-channel
+        guardrail warning is attached to ``combined.attrs["counter_warning"]``.
+        **Pass this explicitly for XRS / any non-edge technique** — the
+        auto-selector picks the brightest channel, which can be a dark
+        background channel. See ``beamtimehero ref counter-selection``.
+    normalization : {"edge_step", "divide_by_i0", "raw"}, default "edge_step"
+        Per-rep normalization before combining. ``edge_step`` assumes an
+        absorption edge and is wrong for XRS; use ``divide_by_i0`` or ``raw``
+        for non-edge data. See ``ref counter-selection``.
     """
     if file_name is None:
         file_name = get_most_recent_file()
@@ -194,10 +217,19 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     if not scan_numbers:
         raise ValueError(f"No scans found for file '{file_name}'.")
 
-    active = get_active_counter(file_name, scan_numbers[0])
-    if active is None:
-        raise ValueError(f"Could not load scan data for '{file_name}' scan {scan_numbers[0]}.")
-    counter = active["active_counter"]
+    counter_warning = None
+    counter_explicit = counter is not None
+    if counter is None:
+        active = get_active_counter(file_name, scan_numbers[0])
+        if active is None:
+            raise ValueError(f"Could not load scan data for '{file_name}' scan {scan_numbers[0]}.")
+        counter = active["active_counter"]
+        counter_reason = active["reason"]
+        first_df = read_processed_scan(file_name, scan_numbers[0])
+        if first_df is not None:
+            counter_warning = xas.counter_selection_warning(first_df, counter)
+    else:
+        counter_reason = "caller-specified counter"
 
     normalized_scans = []
     used_scans = []
@@ -206,16 +238,25 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
         if df is None:
             continue
         try:
-            energy, norm = _edge_step_normalize(df, counter, normalize_by="I0")
+            energy, norm = xas.normalize_series(
+                df, counter, normalize_by="I0", mode=normalization,
+            )
         except KeyError:
             continue
         normalized_scans.append(pd.Series(norm, index=energy, name=f"S{sn:03d}"))
         used_scans.append(sn)
 
     if not normalized_scans:
-        raise ValueError(f"No valid scans to normalize in '{file_name}'.")
+        raise ValueError(
+            f"No valid scans to normalize in '{file_name}' on counter '{counter}'."
+        )
 
     combined = _concat_aligned(normalized_scans)
+    combined.attrs["counter"] = counter
+    combined.attrs["counter_reason"] = counter_reason
+    combined.attrs["counter_explicit"] = counter_explicit
+    combined.attrs["counter_warning"] = counter_warning
+    combined.attrs["normalization"] = normalization
 
     if e_min is not None and e_max is not None:
         if e_min >= e_max:
@@ -241,6 +282,8 @@ def average_energy_scans_arrays(
     e_max=None,
     weighting: str = "equal",
     scan_numbers=None,
+    counter=None,
+    normalization: str = "edge_step",
 ):
     """Array-returning core of :func:`average_energy_scans`.
 
@@ -255,7 +298,8 @@ def average_energy_scans_arrays(
     """
     try:
         combined, file_name, counter, used_scans = get_normalized_scan_arrays(
-            file_name, e_min=e_min, e_max=e_max, scan_numbers=scan_numbers
+            file_name, e_min=e_min, e_max=e_max, scan_numbers=scan_numbers,
+            counter=counter, normalization=normalization,
         )
     except ValueError as e:
         return {"error": str(e)}, None
@@ -264,7 +308,8 @@ def average_energy_scans_arrays(
         # For weighting we need a baseline estimate from the FULL scan, not the
         # windowed slice (the slice may not include the baseline).
         full_combined, _, _, _ = get_normalized_scan_arrays(
-            file_name, scan_numbers=scan_numbers
+            file_name, scan_numbers=scan_numbers,
+            counter=counter, normalization=normalization,
         )
         sigmas = _estimate_per_rep_noise(full_combined)
         weights = 1.0 / np.square(sigmas)
@@ -290,12 +335,16 @@ def average_energy_scans_arrays(
     info = {
         "file_name": file_name,
         "active_counter": counter,
+        "counter_reason": combined.attrs.get("counter_reason"),
+        "normalization": combined.attrs.get("normalization", normalization),
         "num_scans_averaged": len(used_scans),
         "scan_numbers": used_scans,
         "num_points": len(result_df),
         "weighting": weighting,
         "energy_window": [e_min, e_max] if (e_min is not None and e_max is not None) else None,
     }
+    if combined.attrs.get("counter_warning"):
+        info["counter_warning"] = combined.attrs["counter_warning"]
     if weights_used is not None:
         info["weights_used"] = [round(w, 6) for w in weights_used]
     return info, result_df
@@ -307,6 +356,8 @@ def average_energy_scans(
     e_max=None,
     weighting: str = "equal",
     scan_numbers=None,
+    counter=None,
+    normalization: str = "edge_step",
 ):
     """Average all energy scans in a SPEC file after edge-step normalization.
 
@@ -332,6 +383,7 @@ def average_energy_scans(
     info, result_df = average_energy_scans_arrays(
         file_name=file_name, e_min=e_min, e_max=e_max,
         weighting=weighting, scan_numbers=scan_numbers,
+        counter=counter, normalization=normalization,
     )
     if result_df is None:
         return info
@@ -342,12 +394,16 @@ def average_energy_scans(
     return out
 
 
-def average_latest_energy_scans(e_min=None, e_max=None, weighting: str = "equal"):
+def average_latest_energy_scans(e_min=None, e_max=None, weighting: str = "equal",
+                                counter=None, normalization: str = "edge_step"):
     """Find the latest file with >1 energy-motor scan and return the average."""
     file_name = local_data.average_latest_energy_scans_file()
     if not file_name:
         return {"error": "No file found with more than 1 energy scan."}
-    return average_energy_scans(file_name=file_name, e_min=e_min, e_max=e_max, weighting=weighting)
+    return average_energy_scans(
+        file_name=file_name, e_min=e_min, e_max=e_max, weighting=weighting,
+        counter=counter, normalization=normalization,
+    )
 
 
 def group_scans_by_spot(file_name, tol_mm: float = 0.05):
@@ -470,7 +526,7 @@ def group_scans_by_spot(file_name, tol_mm: float = 0.05):
     }
 
 
-def get_raw_counter_arrays(file_name=None, scan_numbers=None):
+def get_raw_counter_arrays(file_name=None, scan_numbers=None, counter=None):
     """Load raw active-counter arrays per scan (NOT normalized), aligned on a
     common energy grid. Used for counts-based Poisson floor calculations.
 
@@ -478,6 +534,9 @@ def get_raw_counter_arrays(file_name=None, scan_numbers=None):
     holds the active counter divided by count time (rate, in counts/sec) so
     different scans with different count times are comparable in shape; total
     counts per point per scan = rate * count_time, exposed in attrs.
+
+    ``counter`` — if None, auto-selected; pass explicitly to match the counter
+    used by the normalized pipeline (see ``ref counter-selection``).
     """
     if file_name is None:
         file_name = get_most_recent_file()
@@ -488,10 +547,11 @@ def get_raw_counter_arrays(file_name=None, scan_numbers=None):
     if not scan_numbers:
         raise ValueError(f"No scans found for file '{file_name}'.")
 
-    active = get_active_counter(file_name, scan_numbers[0])
-    if active is None:
-        raise ValueError(f"Could not load scan data for '{file_name}' scan {scan_numbers[0]}.")
-    counter = active["active_counter"]
+    if counter is None:
+        active = get_active_counter(file_name, scan_numbers[0])
+        if active is None:
+            raise ValueError(f"Could not load scan data for '{file_name}' scan {scan_numbers[0]}.")
+        counter = active["active_counter"]
 
     series_list = []
     used = []
