@@ -58,6 +58,15 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     "interpret_oxidation_state": "spec-file",
     "interpret_coordination_geometry": "spec-file",
     "summarize_sample_chemistry": "spec-file",
+    # CAT-10 atomic descriptor tools — same file cache, same tree as the
+    # capstones they decompose (no new CLI branch; see categorize header).
+    "identify_edge": "spec-file",
+    "find_edge_e0": "spec-file",
+    "normalize_xas_intensity": "spec-file",
+    "fit_xas_pre_edge": "spec-file",
+    "fit_xas_white_line": "spec-file",
+    "assess_xas_quality": "spec-file",
+    "detect_per_scan_drift": "spec-file",
     # CAT-XRS · dedicated X-ray Raman analysis branch (energy-loss axis).
     # Kept separate from the XAS/HERFD spec-file tools so the Raman-specific
     # processing + interpretation surface is coherent on its own.

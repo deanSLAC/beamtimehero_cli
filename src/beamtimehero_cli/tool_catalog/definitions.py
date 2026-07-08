@@ -56,6 +56,44 @@ _NORMALIZATION_PROP = {
     ),
 }
 
+# Shared across the CAT-10 XAS interpretation tools (capstones + atomic).
+_XAS_FILE_NAME_PROP = {"type": "string", "description": "SPEC file name."}
+_XAS_SCAN_NUMBERS_PROP = {
+    "type": "array",
+    "items": {"type": "integer"},
+    "description": "Restrict to these scan numbers (default: all).",
+}
+_XAS_ELEMENT_PROP = {
+    "type": "string",
+    "description": "Absorber element (default: auto-suggested from the scan energy window).",
+}
+_XAS_EDGE_PROP = {
+    "type": "string",
+    "description": "Edge label ('K','L3','M4','M5'; default: auto).",
+}
+_XAS_NORMALIZATION_PROP = {
+    "type": "string",
+    "enum": ["area", "edge_step", "mback"],
+    "default": "area",
+    "description": "Intensity normalization (see extract_xas_descriptors).",
+}
+_XAS_ASSUME_DILUTE_PROP = {
+    "type": "boolean",
+    "description": "Assert negligible self-absorption (recorded assertion).",
+}
+# The de-duplication hook shared by the three capstones.
+_XAS_DESCRIPTORS_PROP = {
+    "type": "object",
+    "description": (
+        "OPTIONAL precomputed descriptor bundle — the JSON object "
+        "extract_xas_descriptors returns. When provided, the "
+        "load/normalize/fit pipeline is SKIPPED and only the verdict runs on "
+        "this artifact (avoids recomputation); when omitted, descriptors are "
+        "extracted from file_name/scan_numbers exactly as before. "
+        "file_name/element/edge/normalization are ignored when this is given."
+    ),
+}
+
 # Shared across the XRS (CAT-XRS) tools.
 _XRS_COUNTER_PROP = {
     "type": "string",
@@ -2096,31 +2134,24 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "fits, none invented. REFUSES an absolute estimate when no session "
                 "energy calibration exists (record_energy_calibration first); "
                 "shape-based signatures (Ce doublet, U(VI) satellites) still work "
-                "uncalibrated."
+                "uncalibrated. Composes the atomic tools find_edge_e0, "
+                "normalize_xas_intensity, fit_xas_pre_edge and fit_xas_white_line; "
+                "pass a precomputed `descriptors` artifact (from "
+                "extract_xas_descriptors) to run only the verdict and skip the "
+                "load/normalize/fit recomputation."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
-                    "scan_numbers": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Restrict to these scan numbers (default: all).",
-                    },
-                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
-                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
-                    "normalization": {
-                        "type": "string",
-                        "enum": ["area", "edge_step", "mback"],
-                        "default": "area",
-                        "description": "Intensity normalization (see extract_xas_descriptors).",
-                    },
-                    "assume_dilute": {
-                        "type": "boolean",
-                        "description": "Assert negligible self-absorption (recorded assertion).",
-                    },
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                    "assume_dilute": _XAS_ASSUME_DILUTE_PROP,
+                    "descriptors": _XAS_DESCRIPTORS_PROP,
                 },
-                "required": ["file_name"],
+                "required": [],
             },
         },
     },
@@ -2137,31 +2168,23 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "area normalization; confidence is degraded under self-absorption risk, "
                 "edge-step normalization, or non-Fe elements (envelope calibrated for "
                 "Fe). For L3/M edges returns electronic-structure hints only. Same "
-                "structured output contract as interpret_oxidation_state."
+                "structured output contract as interpret_oxidation_state. Composes "
+                "find_edge_e0 + normalize_xas_intensity + fit_xas_pre_edge; pass a "
+                "precomputed `descriptors` artifact (from extract_xas_descriptors) "
+                "to run only the verdict and skip recomputation."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
-                    "scan_numbers": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Restrict to these scan numbers (default: all).",
-                    },
-                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
-                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
-                    "normalization": {
-                        "type": "string",
-                        "enum": ["area", "edge_step", "mback"],
-                        "default": "area",
-                        "description": "Intensity normalization (see extract_xas_descriptors).",
-                    },
-                    "assume_dilute": {
-                        "type": "boolean",
-                        "description": "Assert negligible self-absorption (recorded assertion).",
-                    },
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                    "assume_dilute": _XAS_ASSUME_DILUTE_PROP,
+                    "descriptors": _XAS_DESCRIPTORS_PROP,
                 },
-                "required": ["file_name"],
+                "required": [],
             },
         },
     },
@@ -2171,35 +2194,222 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "name": "summarize_sample_chemistry",
             "description": (
                 "Capstone chemical interpretation of a sample's averaged spectrum: "
-                "runs extract_xas_descriptors + interpret_oxidation_state + "
-                "interpret_coordination_geometry, adds a per-scan drift verdict "
-                "(monotonic E0/white-line/pre-edge trends — the photoreduction/beam-"
-                "damage signature a half-split misses), and returns one consolidated "
-                "narration paragraph plus the annotated descriptor plot. Use after "
-                "convergence analysis to record the chemistry of each sample; feed "
-                "drift verdicts into skip/extend decisions."
+                "composes extract_xas_descriptors + interpret_oxidation_state + "
+                "interpret_coordination_geometry + detect_per_scan_drift (monotonic "
+                "E0/white-line/pre-edge trends — the photoreduction/beam-damage "
+                "signature a half-split misses), and returns one consolidated "
+                "narration paragraph plus the annotated descriptor plot. Pass a "
+                "precomputed `descriptors` artifact (from extract_xas_descriptors) "
+                "to run only the verdicts and skip recomputation (the plot is then "
+                "omitted, since the numeric curves are not carried in the JSON). Use "
+                "after convergence analysis to record the chemistry of each sample; "
+                "feed drift verdicts into skip/extend decisions."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
-                    "scan_numbers": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Restrict to these scan numbers (default: all).",
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                    "assume_dilute": _XAS_ASSUME_DILUTE_PROP,
+                    "descriptors": _XAS_DESCRIPTORS_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    # -----------------------------------------------------------------
+    # CAT-10 · Atomic descriptor tools — each exposes ONE pure function
+    # from the interpretation package on the same load/average/edge
+    # contract as the capstones above. Categorized "spec-file" (no new
+    # CLI branch); the capstones compose these.
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "identify_edge",
+            "description": (
+                "What edge is this: auto-detect the absorber element/edge from the "
+                "scan energy window (tabulated edge energies, labels only) and "
+                "classify the interpretation family (3d/4d/5d K, Ln/An L3, 5d L3, "
+                "An M4/M5). Single responsibility — the edge-identification step the "
+                "descriptor tools and capstones share. Pass element+edge to override "
+                "the auto-detect."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_edge_e0",
+            "description": (
+                "Edge position E0 of the averaged spectrum under both fixed "
+                "definitions — Savitzky-Golay derivative-max (primary, with "
+                "uncertainty) and the half-step crossing (cross-check only) — plus "
+                "the grid step. Single responsibility: locate the edge. Absolute "
+                "position chemistry still needs a session calibration "
+                "(record_energy_calibration)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "normalize_xas_intensity",
+            "description": (
+                "Normalize the averaged spectrum and report the provenance only "
+                "(method, window, scale/reason). 'area' (default, Bugarin/Glatzel "
+                "2024 — preferred for HERFD intensities), 'mback' (Weng/Penner-Hahn "
+                "2005 physics-based background, degrades gracefully if the fit "
+                "fails), or 'edge_step' (upstream flat-anchor). Single "
+                "responsibility: the normalization choice the intensity descriptors "
+                "depend on."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fit_xas_pre_edge",
+            "description": (
+                "Wilke-style pre-edge fit of the averaged spectrum: centroid, "
+                "integrated intensity, component count, and BIC/fit-quality with "
+                "uncertainties and full provenance. For 3d/4d/5d K-edges with a "
+                "tabulated core-hole width, the core-hole re-broadened variant is "
+                "also returned (the valid input for conventional-XANES centroid "
+                "calibrations). Single responsibility: the pre-edge fit."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                    "pre_edge_e_min": {
+                        "type": "number",
+                        "description": "Override pre-edge fit window lower bound (absolute eV).",
                     },
-                    "element": {"type": "string", "description": "Absorber element (default: auto)."},
-                    "edge": {"type": "string", "description": "Edge label (default: auto)."},
-                    "normalization": {
-                        "type": "string",
-                        "enum": ["area", "edge_step", "mback"],
-                        "default": "area",
-                        "description": "Intensity normalization (see extract_xas_descriptors).",
+                    "pre_edge_e_max": {
+                        "type": "number",
+                        "description": "Override pre-edge fit window upper bound (absolute eV).",
                     },
-                    "assume_dilute": {
-                        "type": "boolean",
-                        "description": "Assert negligible self-absorption (recorded assertion).",
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fit_xas_white_line",
+            "description": (
+                "White-line fit of the averaged spectrum: energy, height, and area "
+                "of the main line (by height) plus the fitted components. Set "
+                "white_line_components>1 (or leave 0=auto: 3 for Ln/An L3 and An M "
+                "edges — Ce(IV) doublet / U(VI) satellites — else 1). Single "
+                "responsibility: the white-line fit."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
+                    "white_line_components": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": (
+                            "Max pseudo-Voigt components for the white-line fit. "
+                            "0 = auto (3 for Ln/An L3 and An M edges, else 1)."
+                        ),
                     },
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assess_xas_quality",
+            "description": (
+                "Data-quality gate for the averaged spectrum: monochromator-glitch "
+                "spike count, detector-saturation (flat-top white line) check, and "
+                "the honest self-absorption risk statement, with quality flags. The "
+                "XAS analogue of assess_xrs_quality; assert assume_dilute to lift "
+                "the self-absorption degradation. Single responsibility: quality "
+                "flags."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "assume_dilute": _XAS_ASSUME_DILUTE_PROP,
+                },
+                "required": ["file_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "detect_per_scan_drift",
+            "description": (
+                "Beam-damage / photoreduction test: per-scan trends in E0, "
+                "white-line height/energy, and pre-edge intensity, each with a "
+                "monotonic-drift verdict (Kendall tau p<0.05 AND |Theil-Sen total "
+                "change| > 2x residual MAD) — the monotonic-drift signature a "
+                "first-half/second-half split can hide. Needs >= 4 scans. Single "
+                "responsibility: the drift test."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _XAS_FILE_NAME_PROP,
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "element": _XAS_ELEMENT_PROP,
+                    "edge": _XAS_EDGE_PROP,
+                    "normalization": _XAS_NORMALIZATION_PROP,
                 },
                 "required": ["file_name"],
             },
@@ -2694,6 +2904,9 @@ AUTONOMY_TOOL_CATEGORIES = [
         "record_energy_calibration", "get_energy_calibration",
         "extract_xas_descriptors", "interpret_oxidation_state",
         "interpret_coordination_geometry", "summarize_sample_chemistry",
+        "identify_edge", "find_edge_e0", "normalize_xas_intensity",
+        "fit_xas_pre_edge", "fit_xas_white_line", "assess_xas_quality",
+        "detect_per_scan_drift",
     ]),
     ("CAT-XRS Raman processing", [
         "calibrate_energy_loss", "build_loss_axis", "average_xrs_scans",

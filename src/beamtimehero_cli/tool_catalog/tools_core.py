@@ -1238,6 +1238,31 @@ def _extract_for_interpretation(arguments: dict):
     return descriptors, arrays, meta
 
 
+# Meta keys extract_xas_descriptors prepends to its descriptor bundle. When a
+# capstone is handed that bundle back via ``descriptors=``, they are peeled off
+# so the verdict output keeps the same file/scan provenance it would carry on
+# the recompute path.
+_INTERP_META_KEYS = ("file_name", "active_counter", "scan_numbers", "n_scans")
+
+
+def _resolve_descriptors(arguments: dict):
+    """Descriptor bundle for a capstone: reuse a precomputed one or extract.
+
+    When ``arguments['descriptors']`` holds the JSON object that
+    ``extract_xas_descriptors`` returns, that artifact is used verbatim and the
+    load+normalize+fit pipeline is SKIPPED (the de-duplication) — ``arrays`` is
+    then ``None`` since the numeric curves are not carried in the JSON. Absent
+    it, behaves exactly as before: run ``_extract_for_interpretation``. Returns
+    ``(descriptors, arrays, meta)``; raises ValueError only on the extract path.
+    """
+    precomputed = arguments.get("descriptors")
+    if isinstance(precomputed, dict) and precomputed:
+        descriptors = dict(precomputed)
+        meta = {k: descriptors[k] for k in _INTERP_META_KEYS if k in descriptors}
+        return descriptors, None, meta
+    return _extract_for_interpretation(arguments)
+
+
 def t_record_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
     from beamtimehero_cli.analysis.xas import average_reps
@@ -1313,7 +1338,7 @@ def t_extract_xas_descriptors(arguments: dict) -> tuple[str, list[str]]:
 def _t_interpret(arguments: dict, engine_fn) -> tuple[str, list[str]]:
     from beamtimehero_cli.interpretation import calibration_store
     try:
-        descriptors, _arrays, meta = _extract_for_interpretation(arguments)
+        descriptors, _arrays, meta = _resolve_descriptors(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
     verdict = engine_fn(descriptors, calibration_store.current_calibration())
@@ -1337,23 +1362,234 @@ def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.interpretation import interpret as interp_engine
     from beamtimehero_cli.interpretation import plotting as interp_plotting
     try:
-        descriptors, arrays, meta = _extract_for_interpretation(arguments)
+        descriptors, arrays, meta = _resolve_descriptors(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), images_b64
     summary = interp_engine.summarize_chemistry(
         descriptors, calibration_store.current_calibration(),
     )
-    edge_info = descriptors.get("edge") or {}
-    fig = interp_plotting.annotated_descriptor_figure(
-        descriptors, arrays,
-        title=f"{meta['file_name']} — {edge_info.get('element')} {edge_info.get('edge')} chemistry",
-    )
-    images_b64.append(fig_to_base64(fig))
-    import matplotlib.pyplot as plt
-    plt.close(fig)
+    # The annotated plot needs the numeric curves; those exist only on the
+    # recompute path. A precomputed `descriptors` artifact carries the verdict
+    # inputs but not the arrays, so the plot is simply omitted then.
+    if arrays is not None:
+        edge_info = descriptors.get("edge") or {}
+        fig = interp_plotting.annotated_descriptor_figure(
+            descriptors, arrays,
+            title=f"{meta.get('file_name')} — {edge_info.get('element')} {edge_info.get('edge')} chemistry",
+        )
+        images_b64.append(fig_to_base64(fig))
+        import matplotlib.pyplot as plt
+        plt.close(fig)
     summary.update(meta)
     summary["descriptors"] = descriptors
     return json.dumps(summary, indent=2, default=str), images_b64
+
+
+# ---------------------------------------------------------------------------
+# CAT-10 · Atomic descriptor tools
+#
+# Each wraps ONE interpretation pure function on top of the shared
+# `_interpretation_inputs` load/average/edge-resolution contract — the same
+# contract the capstones use. They are the small, single-responsibility
+# building blocks that `extract_xas_descriptors` (the source-of-truth bundle)
+# and the interpret_* capstones compose; exposing them individually mirrors the
+# XRS branch and lets an agent recompute exactly one piece without re-running
+# the whole pipeline.
+# ---------------------------------------------------------------------------
+
+def _e0_and_normalize(energy, mu, edge_info: dict, arguments: dict):
+    """Find E0 and apply the requested normalization to ``mu``.
+
+    Mirrors the E0 + normalization step of ``extract_descriptors`` so a
+    standalone fit tool and the capstone agree on their inputs. Returns
+    ``(mu_normalized, e0_info, normalization_provenance)``.
+    """
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.interpretation import normalize as interp_norm
+
+    e0_info = interp_desc.find_e0(energy, mu)
+    e0 = e0_info["e0_ev"]
+    mode = arguments.get("normalization", "area")
+    if mode == "area":
+        mu_n, prov = interp_norm.area_normalize(energy, mu, e0)
+    elif mode == "mback":
+        einfo = edge_info or {}
+        mu_n, prov = interp_norm.mback_normalize(
+            energy, mu, e0, einfo.get("element"), einfo.get("edge"),
+        )
+    else:
+        mu_n, prov = mu, interp_norm.edge_step_provenance()
+    return mu_n, e0_info, prov
+
+
+def _edge_context(edge_info: dict) -> dict:
+    """Compact element/edge/family stamp for atomic-tool outputs."""
+    edge_info = edge_info or {}
+    return {k: edge_info.get(k) for k in ("element", "edge", "family")}
+
+
+def t_identify_edge(arguments: dict) -> tuple[str, list[str]]:
+    """What edge is this: element/edge auto-detect + family classification."""
+    try:
+        energy, _mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    out = {
+        **meta,
+        "energy_window_ev": [round(float(energy.min()), 3), round(float(energy.max()), 3)],
+        "edge": edge_info,
+    }
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_find_edge_e0(arguments: dict) -> tuple[str, list[str]]:
+    """Edge position E0 (derivative-max + half-step + uncertainty)."""
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    try:
+        energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    e0 = interp_desc.find_e0(energy, mu)
+    return json.dumps({**meta, "edge": _edge_context(edge_info), "e0": e0},
+                      indent=2, default=str), []
+
+
+def t_normalize_xas_intensity(arguments: dict) -> tuple[str, list[str]]:
+    """Area / MBACK / edge-step normalization of the averaged spectrum."""
+    try:
+        energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    _mu_n, e0_info, prov = _e0_and_normalize(energy, mu, edge_info, arguments)
+    out = {
+        **meta,
+        "edge": _edge_context(edge_info),
+        "e0_ev": e0_info["e0_ev"],
+        "normalization": arguments.get("normalization", "area"),
+        "provenance": prov,
+    }
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_fit_xas_pre_edge(arguments: dict) -> tuple[str, list[str]]:
+    """Wilke-style pre-edge fit (centroid / area / components / BIC).
+
+    Includes the core-hole re-broadened variant when the edge family carries a
+    tabulated core width (the input a conventional-XANES calibration needs).
+    """
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    try:
+        energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    mu_n, e0_info, prov = _e0_and_normalize(energy, mu, edge_info, arguments)
+    e0 = e0_info["e0_ev"]
+
+    kwargs = {}
+    pe_lo, pe_hi = arguments.get("pre_edge_e_min"), arguments.get("pre_edge_e_max")
+    if pe_lo is not None and pe_hi is not None:
+        kwargs["window_rel"] = (float(pe_lo) - e0, float(pe_hi) - e0)
+    pre_edge = interp_desc.fit_pre_edge(energy, mu_n, e0, **kwargs)
+    pre_edge.pop("_arrays", None)
+
+    family = (edge_info or {}).get("family")
+    core_width = (edge_info or {}).get("core_hole_width_ev")
+    pre_edge_rebroadened = None
+    if family in ("3d_K", "4d_K", "5d_K") and core_width and pre_edge.get("fit_ok"):
+        mu_broad = interp_desc.rebroaden(energy, mu_n, core_width)
+        pre_edge_rebroadened = interp_desc.fit_pre_edge(energy, mu_broad, e0, **kwargs)
+        pre_edge_rebroadened.pop("_arrays", None)
+        if pre_edge_rebroadened.get("fit_ok"):
+            pre_edge_rebroadened["provenance"]["calibration_domain"] = "herfd_rebroadened"
+            pre_edge_rebroadened["provenance"]["rebroadened_fwhm_ev"] = core_width
+
+    out = {
+        **meta,
+        "edge": _edge_context(edge_info),
+        "e0_ev": e0,
+        "normalization": prov,
+        "pre_edge": pre_edge,
+        "pre_edge_rebroadened": pre_edge_rebroadened,
+    }
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_fit_xas_white_line(arguments: dict) -> tuple[str, list[str]]:
+    """White-line fit: energy / height / area (+ multi-peak structure)."""
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    try:
+        energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    mu_n, e0_info, prov = _e0_and_normalize(energy, mu, edge_info, arguments)
+    e0 = e0_info["e0_ev"]
+
+    wl_comps = int(arguments.get("white_line_components") or 0)
+    if wl_comps <= 0:
+        wl_comps = 3 if (edge_info or {}).get("family") in ("ln_L3", "an_L3", "an_M") else 1
+    white_line = interp_desc.fit_white_line(energy, mu_n, e0, max_components=wl_comps)
+    white_line.pop("_arrays", None)
+    out = {
+        **meta,
+        "edge": _edge_context(edge_info),
+        "e0_ev": e0,
+        "normalization": prov,
+        "white_line": white_line,
+    }
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_assess_xas_quality(arguments: dict) -> tuple[str, list[str]]:
+    """Glitch / saturation / self-absorption flags for the averaged spectrum.
+
+    The XAS analogue of assess_xrs_quality: composes the quality.* checks that
+    extract_xas_descriptors runs internally, exposed on their own.
+    """
+    from beamtimehero_cli.interpretation import quality as interp_quality
+    try:
+        energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    glitch_mask = interp_quality.detect_glitches(energy, mu)
+    n_glitch = int(glitch_mask.sum())
+    saturation = interp_quality.detect_saturation(mu)
+    self_abs = interp_quality.self_absorption_assessment(arguments.get("assume_dilute"))
+
+    flags: list[str] = []
+    if n_glitch:
+        flags.append("glitches_detected")
+    if saturation["saturated"]:
+        flags.append("saturation_suspected")
+    if self_abs["risk"] == "unknown":
+        flags.append("self_absorption_risk")
+
+    out = {
+        **meta,
+        "edge": _edge_context(edge_info),
+        "glitches": {"n_glitch_points": n_glitch, "detected": bool(n_glitch)},
+        "saturation": saturation,
+        "self_absorption": self_abs,
+        "flags": flags,
+    }
+    return json.dumps(out, indent=2, default=str), []
+
+
+def t_detect_per_scan_drift(arguments: dict) -> tuple[str, list[str]]:
+    """Beam-damage / photoreduction test: monotonic per-scan descriptor trends."""
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    try:
+        energy, mu, reps, edge_info, meta = _interpretation_inputs(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    mu_n, e0_info, _prov = _e0_and_normalize(energy, mu, edge_info, arguments)
+    e0 = e0_info["e0_ev"]
+    wl = interp_desc.fit_white_line(energy, mu_n, e0, max_components=1)
+    wl_energy = wl.get("white_line_energy_ev") if wl.get("fit_ok") else None
+    window = (e0 + interp_desc.PRE_EDGE_WINDOW_REL[0],
+              e0 + interp_desc.PRE_EDGE_WINDOW_REL[1])
+    trends = interp_desc.per_scan_descriptor_trends(energy, reps, e0, wl_energy, window)
+    return json.dumps({**meta, "edge": _edge_context(edge_info), **trends},
+                      indent=2, default=str), []
 
 
 # ---------------------------------------------------------------------------
@@ -1943,6 +2179,14 @@ _HANDLERS: dict[str, callable] = {
     "interpret_oxidation_state": t_interpret_oxidation_state,
     "interpret_coordination_geometry": t_interpret_coordination_geometry,
     "summarize_sample_chemistry": t_summarize_sample_chemistry,
+    # CAT-10 · Atomic descriptor tools (each wraps one pure function)
+    "identify_edge": t_identify_edge,
+    "find_edge_e0": t_find_edge_e0,
+    "normalize_xas_intensity": t_normalize_xas_intensity,
+    "fit_xas_pre_edge": t_fit_xas_pre_edge,
+    "fit_xas_white_line": t_fit_xas_white_line,
+    "assess_xas_quality": t_assess_xas_quality,
+    "detect_per_scan_drift": t_detect_per_scan_drift,
     # CAT-XRS · X-ray Raman processing (energy-loss axis, NOT edge-step)
     "calibrate_energy_loss": t_calibrate_energy_loss,
     "build_loss_axis": t_build_loss_axis,
