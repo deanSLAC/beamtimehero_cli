@@ -8,10 +8,14 @@ Every verdict follows one output contract:
 with ``confidence`` in {high, medium, low, refused}. The narration is
 assembled from the computed numbers — never invented. The rigor gates:
 
-- Absolute oxidation states from POSITIONS (edge, centroid, peak) require
-  a session energy calibration; without one the tools refuse the absolute
-  call (``refused_absolute: true``) and report calibration-independent
-  content only (shapes, relative per-scan trends, descriptors).
+- Absolute oxidation states from POSITIONS (edge, centroid, peak) are read
+  on the session energy axis. Per instrument spec the monochromator is
+  foil-calibrated at beamtime start and its step-loss drift is
+  ``absev``-compensated, so in the absence of an explicit calibration
+  record the axis is ASSUMED foil-calibrated (edges at their tabulated
+  positions, ~0.2 eV systematic; see
+  ``calibration_store.current_calibration``). An explicit recorded
+  calibration takes precedence and tightens the anchor.
 - Conventional-domain calibrations (Wilke 2001) are only applied to the
   re-broadened spectrum; using the sharp HERFD fit instead is flagged
   ``calibration_domain_mismatch`` and capped at low confidence.
@@ -46,18 +50,6 @@ def _degrade(confidence: str, to: str = "low") -> str:
     return order[min(order.index(confidence), order.index(to))]
 
 
-def _uncalibrated_refusal(v: dict, what: str) -> None:
-    v["confidence"] = "refused"
-    v["refused_absolute"] = True
-    v["caveats"].append(
-        f"No session energy calibration: an absolute {what} cannot be "
-        "stated. Monochromator offset/drift is eV-scale — the same size "
-        "as the valence signal. Record a reference-foil calibration "
-        "(record_energy_calibration), or compare spectra measured in this "
-        "session relative to each other."
-    )
-
-
 # ---------------------------------------------------------------------------
 # Oxidation state
 # ---------------------------------------------------------------------------
@@ -70,6 +62,8 @@ def interpret_oxidation_state(descriptors: dict, calibration: dict) -> dict:
 
     handler = {
         "3d_K": _oxidation_3d_k,
+        "4d_K": _oxidation_4d_k,
+        "5d_K": _oxidation_5d_k,
         "ln_L3": _oxidation_ln_l3,
         "an_L3": _oxidation_ln_l3,   # same white-line logic, An-flavored caveat
         "an_M": _oxidation_an_m,
@@ -93,134 +87,199 @@ def _oxidation_3d_k(descriptors: dict, calibration: dict, flags: list[str]) -> d
     element = (descriptors.get("edge") or {}).get("element")
     pre_rb = descriptors.get("pre_edge_rebroadened")
     pre_sharp = descriptors.get("pre_edge")
-    e0 = descriptors["e0"]
 
     pre = pre_rb if (pre_rb and pre_rb.get("fit_ok")) else None
     domain = "herfd_rebroadened"
     if pre is None and pre_sharp and pre_sharp.get("fit_ok"):
-        pre = pre_sharp
-        domain = "herfd_sharp"
-        flags = flags + ["calibration_domain_mismatch"]
+        pre, domain = pre_sharp, "herfd_sharp"
 
+    # Fe has a conventional-XANES pre-edge centroid calibration (Wilke
+    # 2001); every other K-edge falls through to the edge-shift path.
+    if element == "Fe" and pre and pre.get("centroid_ev") is not None:
+        return _oxidation_fe_pre_edge(descriptors, calibration, flags, pre, domain)
+    return _oxidation_k_edge_shift(descriptors, calibration, flags, "3d_K")
+
+
+def _oxidation_4d_k(descriptors: dict, calibration: dict, flags: list[str]) -> dict:
+    return _oxidation_k_edge_shift(descriptors, calibration, flags, "4d_K")
+
+
+def _oxidation_5d_k(descriptors: dict, calibration: dict, flags: list[str]) -> dict:
+    return _oxidation_k_edge_shift(descriptors, calibration, flags, "5d_K")
+
+
+def _oxidation_fe_pre_edge(descriptors: dict, calibration: dict,
+                           flags: list[str], pre: dict, domain: str) -> dict:
+    """Fe K pre-edge centroid on the Wilke 2001 CII axis (conventional domain).
+
+    Under the assume-calibrated model ``offset_ev`` is 0.0 and the centroid
+    is compared to the Wilke reference at face value (~0.2 eV systematic);
+    a recorded calibration supplies a real offset instead.
+    """
+    e0 = descriptors["e0"]
+    if domain == "herfd_sharp":
+        flags = flags + ["calibration_domain_mismatch"]
     used = {
         "e0_ev": e0["e0_ev"], "e0_unc_ev": e0["e0_unc_ev"],
-        "pre_edge_centroid_ev": pre.get("centroid_ev") if pre else None,
-        "pre_edge_centroid_unc_ev": pre.get("centroid_unc_ev") if pre else None,
-        "pre_edge_domain": domain if pre else None,
+        "pre_edge_centroid_ev": pre.get("centroid_ev"),
+        "pre_edge_centroid_unc_ev": pre.get("centroid_unc_ev"),
+        "pre_edge_domain": domain,
     }
-    v = _verdict("3d K-edge: pre-edge centroid (+ calibrated edge shift)",
-                 used, calibration, flags, {"method": "Wilke 2001 CII centroid axis"})
-
-    if not calibration.get("calibrated"):
-        _uncalibrated_refusal(v, "oxidation state (edge/centroid position)")
-        parts = []
-        if pre and pre.get("centroid_ev") is not None:
-            parts.append(
-                f"pre-edge centroid at {pre['centroid_ev']:.2f} eV "
-                f"(uncalibrated mono axis, {domain})"
-            )
-        parts.append(f"E0({e0['e0_definition'].split(' ')[0]}) at {e0['e0_ev']:.2f} eV (uncalibrated)")
-        v["narration"] = (
-            "Absolute oxidation state refused: no session energy "
-            "calibration. Calibration-independent content: " + "; ".join(parts) + "."
-        )
-        return v
+    v = _verdict("3d K-edge: pre-edge centroid (Wilke 2001 CII axis)",
+                 used, calibration, flags,
+                 {"method": "Wilke 2001 CII centroid axis"})
 
     offset = calibration["offset_ev"]
     cal_unc = calibration.get("measured_e0_unc_ev") or 0.05
-
-    if element == "Fe" and pre and pre.get("centroid_ev") is not None:
-        w = cal.WILKE_2001_FE_PRE_EDGE
-        centroid_cal = pre["centroid_ev"] + offset
-        x = (centroid_cal - w["centroid_fe2_ev"]) / w["centroid_separation_ev"]
-        est = 2.0 + float(np.clip(x, 0.0, 1.0))
-        unc_ev = float(np.sqrt(
-            (pre.get("centroid_unc_ev") or 0.1) ** 2
-            + w["centroid_separation_unc_ev"] ** 2 + cal_unc**2
-        ))
-        unc_val = unc_ev / w["centroid_separation_ev"]
-        v["estimate"] = round(est, 2)
-        v["range"] = [round(max(2.0, est - unc_val), 2),
-                      round(min(3.0, est + unc_val), 2)]
-        v["confidence"] = "medium"
-        if domain == "herfd_sharp":
-            v["confidence"] = "low"
-            v["caveats"].append(
-                "Wilke 2001 is a conventional-XANES calibration but only "
-                "the sharp HERFD pre-edge fit was available (no core-hole "
-                "width) — centroid may be biased."
-            )
-        if x < -0.25 or x > 1.25:
-            v["confidence"] = _degrade(v["confidence"])
-            v["caveats"].append(
-                f"Calibrated centroid {centroid_cal:.2f} eV falls outside "
-                "the Fe2+/Fe3+ calibration span — estimate clipped to [2, 3]."
-            )
-        v["provenance"]["calibration_data"] = w["source"]
-        v["caveats"].append(
-            "Literature calibration, not site-matched measured standards "
-            "(none exist yet — Phase 2); a single centroid cannot separate "
-            "an intermediate valence from a mixture."
-        )
-        v["narration"] = (
-            f"Fe K pre-edge centroid {centroid_cal:.2f} eV (calibrated, "
-            f"{domain}) sits {centroid_cal - w['centroid_fe2_ev']:+.2f} eV "
-            f"from the Fe2+ reference ({w['centroid_fe2_ev']} eV) on the "
-            f"Wilke 2001 axis (Fe2+/Fe3+ separation "
-            f"{w['centroid_separation_ev']} eV), indicating an average Fe "
-            f"oxidation state of about {v['estimate']:+.2f} "
-            f"(range {v['range'][0]}-{v['range'][1]})."
-        )
-        return v
-
-    # Non-Fe 3d metal (or no usable pre-edge): calibrated edge shift vs a
-    # same-element session reference.
-    e0_cal = e0["e0_ev"] + offset
-    same_ref = (calibration.get("element") == element)
-    slope_entry = cal.PER_ELEMENT_EDGE_SHIFT.get(element or "")
-    if not same_ref:
+    w = cal.WILKE_2001_FE_PRE_EDGE
+    centroid_cal = pre["centroid_ev"] + offset
+    x = (centroid_cal - w["centroid_fe2_ev"]) / w["centroid_separation_ev"]
+    est = 2.0 + float(np.clip(x, 0.0, 1.0))
+    unc_ev = float(np.sqrt(
+        (pre.get("centroid_unc_ev") or 0.1) ** 2
+        + w["centroid_separation_unc_ev"] ** 2 + cal_unc**2
+    ))
+    unc_val = unc_ev / w["centroid_separation_ev"]
+    v["estimate"] = round(est, 2)
+    v["range"] = [round(max(2.0, est - unc_val), 2),
+                  round(min(3.0, est + unc_val), 2)]
+    v["confidence"] = "medium"
+    if domain == "herfd_sharp":
         v["confidence"] = "low"
         v["caveats"].append(
-            f"Session calibration used a {calibration.get('element')} "
-            f"{calibration.get('edge')} reference, not {element}: the mono "
-            "offset is energy-dependent, so transferring it across edges "
-            "adds unquantified error. Treat the shift as approximate."
+            "Wilke 2001 is a conventional-XANES calibration but only "
+            "the sharp HERFD pre-edge fit was available (no core-hole "
+            "width) — centroid may be biased."
         )
-        v["estimate"] = None
-        v["range"] = None
-        v["narration"] = (
-            f"Calibrated E0 = {e0_cal:.2f} eV (offset {offset:+.2f} eV from "
-            f"a {calibration.get('element')} reference). No same-element "
-            "session reference exists, so no defensible valence number — "
-            "measure an element-matched reference to enable it."
+    if x < -0.25 or x > 1.25:
+        v["confidence"] = _degrade(v["confidence"])
+        v["caveats"].append(
+            f"Calibrated centroid {centroid_cal:.2f} eV falls outside "
+            "the Fe2+/Fe3+ calibration span — estimate clipped to [2, 3]."
         )
-        return v
+    if calibration.get("assumed"):
+        v["caveats"].append(
+            "Centroid placed on the Wilke axis under the assumed-foil-"
+            "calibration model (no recorded offset, ~0.2 eV systematic "
+            "folded in); a recorded Fe reference tightens it."
+        )
+    v["provenance"]["calibration_data"] = w["source"]
+    v["caveats"].append(
+        "Literature calibration, not site-matched measured standards "
+        "(none exist yet — Phase 2); a single centroid cannot separate "
+        "an intermediate valence from a mixture."
+    )
+    v["narration"] = (
+        f"Fe K pre-edge centroid {centroid_cal:.2f} eV (calibrated, "
+        f"{domain}) sits {centroid_cal - w['centroid_fe2_ev']:+.2f} eV "
+        f"from the Fe2+ reference ({w['centroid_fe2_ev']} eV) on the "
+        f"Wilke 2001 axis (Fe2+/Fe3+ separation "
+        f"{w['centroid_separation_ev']} eV), indicating an average Fe "
+        f"oxidation state of about {v['estimate']:+.2f} "
+        f"(range {v['range'][0]}-{v['range'][1]})."
+    )
+    return v
 
-    ref_ev = calibration["assigned_reference_ev"]
+
+# eV-per-valence edge-shift is the fallback for every K-edge without an
+# Fe-style pre-edge calibration: non-Fe 3d, and all 4d and 5d K-edges.
+_K_EDGE_SHELL = {"3d_K": "3d", "4d_K": "4d", "5d_K": "5d"}
+
+
+def _oxidation_k_edge_shift(descriptors: dict, calibration: dict,
+                            flags: list[str], family: str) -> dict:
+    """Calibrated K-edge shift vs a reference E0 (non-Fe 3d / 4d / 5d).
+
+    The reference anchor is, in order of preference, a measured
+    same-element session reference (tightest), or — under the
+    assume-calibrated model, where there usually is none — the tabulated
+    edge energy, with the edge taken to sit at its theoretical position to
+    within the ~0.2 eV foil-calibration systematic. Valence follows from
+    the shift divided by an eV-per-valence slope (per-element if cited,
+    else the generic 1-3 eV bracket).
+    """
+    edge_info = descriptors.get("edge") or {}
+    element = edge_info.get("element")
+    e0 = descriptors["e0"]
+    offset = calibration["offset_ev"]
+    cal_unc = calibration.get("measured_e0_unc_ev") or 0.05
+    e0_cal = e0["e0_ev"] + offset
+    shell = _K_EDGE_SHELL.get(family, "nd")
+
+    used = {
+        "e0_ev": e0["e0_ev"], "e0_unc_ev": e0["e0_unc_ev"],
+        "e0_calibrated_ev": round(e0_cal, 2),
+    }
+    v = _verdict(f"{shell} K-edge: calibrated edge shift vs a reference E0",
+                 used, calibration, flags,
+                 {"method": "edge-shift-vs-reference (E0 position)"})
+
+    same_ref = (calibration.get("element") == element
+                and calibration.get("assigned_reference_ev") is not None)
+    if same_ref:
+        ref_ev = calibration["assigned_reference_ev"]
+        ref_desc = f"the session {element} reference ({ref_ev:.1f} eV)"
+    else:
+        ref_ev = edge_info.get("tabulated_energy_ev")
+        if ref_ev is None:
+            v["confidence"] = "low"
+            v["narration"] = (
+                f"No reference anchor for {element} "
+                f"{edge_info.get('edge')}: neither a same-element session "
+                "reference nor a tabulated edge energy is available, so no "
+                "valence number is assigned."
+            )
+            return v
+        ref_desc = f"the tabulated {element} K edge ({ref_ev:.1f} eV)"
+        v["caveats"].append(
+            "Edge shift anchored on the tabulated edge energy under the "
+            "assumed-foil-calibration model (axis foil-calibrated to "
+            "~0.2 eV; edge taken at its theoretical position). The "
+            "tabulated value is a compilation label carrying its own "
+            "0.3-1 eV offset, so this is a coarse anchor — a recorded "
+            "element-matched reference (record_energy_calibration) "
+            "tightens it substantially."
+        )
+
     shift = e0_cal - ref_ev
+    energy_unc = float(np.hypot(e0.get("e0_unc_ev") or 0.05, cal_unc))
+    slope_entry = cal.PER_ELEMENT_EDGE_SHIFT.get(element or "")
     if slope_entry:
         slope = slope_entry["ev_per_valence"]
         est = shift / slope
+        unc_val = energy_unc / slope
         v["provenance"]["calibration_data"] = slope_entry["source"]
     else:
         lo_s, hi_s = cal.GENERIC_EDGE_SHIFT["ev_per_valence_range"]
-        est = shift / ((lo_s + hi_s) / 2)
+        mid = (lo_s + hi_s) / 2.0
+        est = shift / mid
+        # the 1-3 eV/valence slope range dominates; the energy term (E0 fit
+        # + assumed 0.2 eV calibration) is folded in but is usually small.
+        unc_val = float(np.hypot(
+            max(abs(shift) / lo_s - abs(shift) / hi_s, 0.5), energy_unc / mid))
         v["provenance"]["calibration_data"] = cal.GENERIC_EDGE_SHIFT["source"]
         v["caveats"].append(cal.GENERIC_EDGE_SHIFT["note"])
-    unc_val = max(abs(shift) / 1.0 - abs(shift) / 3.0, 0.5)  # slope-range dominated
+        if family != "3d_K":
+            v["caveats"].append(
+                "The 1-3 eV/valence bracket is a 3d K-edge generalization; "
+                f"{shell} K-edge chemical shifts per valence are typically "
+                "smaller and more element-specific, so this is an "
+                "order-of-magnitude guide only."
+            )
+
     v["estimate"] = round(float(est), 1)
     v["range"] = [round(float(est - unc_val), 1), round(float(est + unc_val), 1)]
     v["confidence"] = "low"
     v["caveats"].append(
-        "Edge-shift-vs-metal-foil valence is a coarse bracket "
+        "Edge-shift-vs-reference valence is a coarse bracket "
         "(ligand/coordination dependent); pre-edge or LCF methods are "
         "preferred when available."
     )
+    direction = "above" if shift >= 0 else "below"
     v["narration"] = (
-        f"Calibrated {element} K edge at {e0_cal:.2f} eV is shifted "
-        f"{shift:+.2f} eV from the session {element} reference "
-        f"({ref_ev:.1f} eV), suggesting an oxidation state above the "
-        f"reference by roughly {v['estimate']:+.1f} units "
+        f"Calibrated {element} K edge at {e0_cal:.2f} eV sits "
+        f"{shift:+.2f} eV {direction} {ref_desc}, indicating an oxidation "
+        f"state about {v['estimate']:+.1f} unit(s) from that reference "
         f"(range {v['range'][0]} to {v['range'][1]})."
     )
     return v
@@ -271,18 +330,6 @@ def _oxidation_ln_l3(descriptors: dict, calibration: dict, flags: list[str]) -> 
                 f"~{v['estimate']:+.2f}), semi-quantitative."
             )
             return v
-
-    if not calibration.get("calibrated"):
-        _uncalibrated_refusal(v, "valence from white-line position")
-        single = wl.get("white_line_energy_ev")
-        v["narration"] = (
-            "Absolute valence refused (no session energy calibration) and "
-            "no calibration-independent multi-peak signature resolved. "
-            + (f"White line at {single:.2f} eV on the uncalibrated axis; "
-               if single is not None else "")
-            + "relative comparisons between this session's spectra remain valid."
-        )
-        return v
 
     v["confidence"] = "low"
     v["caveats"].append(
@@ -341,15 +388,6 @@ def _oxidation_an_m(descriptors: dict, calibration: dict, flags: list[str]) -> d
             "the main line) characteristic of the uranyl U(VI) final-state "
             "pattern (Bes et al. 2016) — a calibration-independent shape "
             "signature."
-        )
-        return v
-
-    if not calibration.get("calibrated"):
-        _uncalibrated_refusal(v, "actinide valence from M4 peak position")
-        v["narration"] = (
-            "No U(VI) satellite signature resolved and no session energy "
-            "calibration — the absolute M4 peak position cannot be "
-            "compared to the U(IV)/U(V)/U(VI) reference positions."
         )
         return v
 
@@ -433,7 +471,10 @@ def interpret_coordination_geometry(descriptors: dict, calibration: dict) -> dic
     element = edge_info.get("element")
     flags = list(descriptors.get("flags", []))
 
-    if family != "3d_K":
+    # Pre-edge centrosymmetry readout applies to K-edges with a 1s->(n)d
+    # pre-edge (3d/4d/5d K). Off Fe the Wilke intensity brackets are only
+    # qualitative — the numeric span does not transfer (caveat below).
+    if family not in ("3d_K", "4d_K", "5d_K"):
         wl = descriptors.get("white_line") or {}
         v = _verdict("L3/M white-line shape (electronic-structure hints only)",
                      {"white_line": {k: wl.get(k) for k in
@@ -444,7 +485,7 @@ def interpret_coordination_geometry(descriptors: dict, calibration: dict) -> dic
         v["confidence"] = "low"
         v["narration"] = (
             "Coordination-geometry readout via pre-edge centrosymmetry "
-            "analysis applies to 3d K-edges; for this family only "
+            "analysis applies to 3d/4d/5d K-edges; for this family only "
             "electronic-structure hints (white-line intensity/shape) are "
             "available, reported in descriptors."
         )

@@ -472,7 +472,7 @@ def extract_descriptors(
 
     ``descriptors`` is JSON-ready; ``arrays`` holds the numeric curves
     (spectrum, fits, windows) for plotting only. When ``edge_info``
-    includes a core-hole width and a 3d K-edge family, a re-broadened
+    includes a core-hole width and a 3d/4d/5d K-edge family, a re-broadened
     pre-edge fit is computed alongside the sharp one so conventional-
     domain calibrations (Wilke) have a valid input.
     """
@@ -516,7 +516,11 @@ def extract_descriptors(
     family = (edge_info or {}).get("family")
     core_width = (edge_info or {}).get("core_hole_width_ev")
     pre_edge_rebroadened = None
-    if family == "3d_K" and core_width and pre_edge.get("fit_ok"):
+    # 3d/4d/5d K-edges all carry a 1s->(n)d pre-edge; the heavier K-edges
+    # have LARGER 1s core-hole widths, so a HERFD spectrum needs
+    # re-broadening even more before a conventional-domain (Wilke)
+    # calibration applies.
+    if family in ("3d_K", "4d_K", "5d_K") and core_width and pre_edge.get("fit_ok"):
         mu_broad = rebroaden(energy, mu_n, core_width)
         pre_edge_rebroadened = fit_pre_edge(energy, mu_broad, e0,
                                             window_rel=pre_edge_window_rel)

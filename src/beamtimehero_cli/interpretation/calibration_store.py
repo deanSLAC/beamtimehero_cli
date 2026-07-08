@@ -3,10 +3,17 @@
 The one place in ``interpretation/`` that touches the filesystem: a JSON
 record in the scan directory documenting how the mono energy axis maps to
 a chosen reference convention (a measured foil/compound scan with a cited
-assigned E0). Interpretation tools read this record and REFUSE absolute
-oxidation-state estimates when it is absent — monochromator offset/drift
-is eV-scale (Jones et al., J. Synchrotron Rad. 27, 2020), the same size
-as the valence signal.
+assigned E0).
+
+Per instrument spec the monochromator is calibrated against a reference
+foil at the start of every beamtime and set to match it, so absolute
+energy is accurate to ~0.1-0.2 eV for the whole run; mono step-loss drift
+is of the same magnitude and is compensated by plotting against ``absev``
+(the mono encoder). The ABSENCE of a stored record therefore does NOT make
+the axis unusable: ``current_calibration`` returns an assume-calibrated
+result (edges taken to sit at their tabulated positions, ~0.2 eV
+systematic). An explicit recorded calibration takes precedence and shrinks
+that uncertainty.
 
 Offset sign convention: ``offset_ev = assigned_reference_ev - measured_e0_ev``,
 i.e. ADD ``offset_ev`` to a measured energy to place it on the reference
@@ -83,19 +90,25 @@ def _age_hours(timestamp: str) -> float | None:
 def current_calibration() -> dict:
     """Latest calibration plus drift across the record series.
 
-    Returns ``{"calibrated": False, ...}`` when no record exists — the
-    signal for interpretation tools to run in relative-only mode.
+    With no explicit record this returns an ASSUME-CALIBRATED result
+    (``assumed: True``, ``offset_ev: 0.0``, ~0.2 eV systematic): per
+    instrument spec the mono is foil-calibrated at beamtime start and
+    step-loss drift is ``absev``-compensated, so edges are taken to sit at
+    their tabulated positions. An explicit recorded calibration takes
+    precedence and behaves as before.
     """
     records = load_records()
     if not records:
         return {
-            "calibrated": False,
+            "calibrated": True,
+            "assumed": True,
+            "offset_ev": 0.0,
+            "measured_e0_unc_ev": 0.2,
             "reason": (
-                "No session energy calibration recorded. Run "
-                "record_energy_calibration on a measured reference "
-                "foil/compound scan first. Absolute edge/centroid "
-                "positions are meaningless without it (mono offset/drift "
-                "is eV-scale)."
+                "No explicit calibration record; per instrument spec the "
+                "mono is foil-calibrated at beamtime start (absolute "
+                "accuracy ~0.1-0.2 eV, step-loss compensated via absev), so "
+                "edges are assumed to sit at their theoretical positions."
             ),
         }
     latest = records[-1]

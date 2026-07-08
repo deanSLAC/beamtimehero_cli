@@ -19,11 +19,15 @@ EDGE_ENERGY_SOURCE = (
 
 # Supported edge families (scope: XANES/HERFD near-edge only).
 #   3d_K   — 3d transition-metal K-edges (Sc..Zn)
+#   4d_K   — 4d transition-metal K-edges (Y..Cd)
+#   5d_K   — 5d transition-metal K-edges (Hf..Au)
 #   ln_L3  — lanthanide L3-edges (La..Lu)
 #   5d_L3  — 5d / heavy-metal L3-edges (Hf..Bi)
 #   an_L3  — actinide L3-edges (Ac..Cm)
 #   an_M   — actinide M4/M5-edges
 _3D_Z = range(21, 31)      # Sc..Zn
+_4D_Z = range(39, 49)      # Y..Cd
+_5D_K_Z = range(72, 80)    # Hf..Au (K-edge scope; the 5d L3 set below runs to Bi)
 _LN_Z = range(57, 72)      # La..Lu
 _5D_Z = range(72, 84)      # Hf..Bi
 _AN_Z = range(89, 97)      # Ac..Cm
@@ -32,14 +36,18 @@ _AN_Z = range(89, 97)      # Ac..Cm
 def classify_edge_family(element: str, edge: str) -> str:
     """Classify (element, edge) into an interpretation family.
 
-    Returns one of ``3d_K``, ``ln_L3``, ``5d_L3``, ``an_L3``, ``an_M``,
-    or ``other`` (measurable but outside the calibrated interpretation
-    scope).
+    Returns one of ``3d_K``, ``4d_K``, ``5d_K``, ``ln_L3``, ``5d_L3``,
+    ``an_L3``, ``an_M``, or ``other`` (measurable but outside the
+    calibrated interpretation scope).
     """
     z = xraydb.atomic_number(element)
     edge = edge.upper()
     if edge == "K" and z in _3D_Z:
         return "3d_K"
+    if edge == "K" and z in _4D_Z:
+        return "4d_K"
+    if edge == "K" and z in _5D_K_Z:
+        return "5d_K"
     if edge == "L3":
         if z in _LN_Z:
             return "ln_L3"
@@ -77,7 +85,7 @@ def _candidate_edges(e_min: float, e_max: float) -> list[dict]:
     """All in-scope edges whose tabulated energy lies inside [e_min, e_max]."""
     candidates = []
     scope = (
-        [(z, "K") for z in _3D_Z]
+        [(z, "K") for z in list(_3D_Z) + list(_4D_Z) + list(_5D_K_Z)]
         + [(z, "L3") for z in list(_LN_Z) + list(_5D_Z) + list(_AN_Z)]
         + [(z, e) for z in _AN_Z for e in ("M4", "M5")]
     )
@@ -104,9 +112,9 @@ def suggest_edge(e_min: float, e_max: float) -> dict:
         return {
             "found": False,
             "reason": (
-                f"No in-scope edge (3d K, Ln/An L3, 5d L3, An M4/M5) has a "
-                f"tabulated energy inside [{e_min:.1f}, {e_max:.1f}] eV. "
-                "Pass element/edge explicitly."
+                f"No in-scope edge (3d/4d/5d K, Ln/An L3, 5d L3, An M4/M5) "
+                f"has a tabulated energy inside [{e_min:.1f}, {e_max:.1f}] "
+                "eV. Pass element/edge explicitly."
             ),
         }
     anchor = e_min + (e_max - e_min) / 3.0
