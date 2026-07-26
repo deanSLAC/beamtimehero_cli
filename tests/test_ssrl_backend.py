@@ -182,3 +182,13 @@ def test_load_mu_full_chain_to_first_shell(collector_dir):
     peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
     assert peak["found"]
     assert abs(peak["r_peak_ang"] - 2.0) < 0.25   # synthetic shell at 2.0 Å
+
+
+def test_is_ssrl_ascii_rejects_binary_variant(collector_dir, tmp_path):
+    assert ssrl_ascii.is_ssrl_ascii(collector_dir / "05_test_sample_019_A.001")
+    # the collector's binary/ variant carries the banner but with NUL bytes
+    (tmp_path / "bin.001").write_bytes(b"SSRL - EXAFS Data Collector 4.0 \n\x00PTS: 71")
+    assert not ssrl_ascii.is_ssrl_ascii(tmp_path / "bin.001")
+    (tmp_path / "junk.txt").write_text("not a collector file\n")
+    assert not ssrl_ascii.is_ssrl_ascii(tmp_path / "junk.txt")
+    assert not ssrl_ascii.is_ssrl_ascii(tmp_path / "missing")

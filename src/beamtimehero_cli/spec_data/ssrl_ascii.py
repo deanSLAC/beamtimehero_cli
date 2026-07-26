@@ -31,6 +31,11 @@ are appended when the 7-element Xspress3 columns are present:
 
 Validated against SSRL BL 4-3 beamtimes 2025-07 (Ti K) and 2025-11 (S K);
 ported from the webxas-data prototype (py-analysis/ssrl_parser.py).
+
+This module is the single source of truth for the format. The chemcatal web
+app carries a copy of the parsing half in chemcatal/xas_core/ssrl_collector.py
+(its notebook image installs xas_core without beamtimehero_cli) — KEEP THE TWO
+IN SYNC when editing the parsers here.
 """
 from __future__ import annotations
 
@@ -48,12 +53,19 @@ SWEEP_RE = re.compile(r"^(?P<stem>.+)_(?P<scan>\d{3})_A\.(?P<sweep>\d{3})$")
 
 
 def is_ssrl_ascii(path: str | Path) -> bool:
-    """Cheap sniff: does this file start with the SSRL Data Collector banner?"""
+    """Cheap sniff: the SSRL Data Collector banner, in a genuinely-ASCII file.
+
+    The collector writes a parallel binary/ variant whose first line carries
+    the same banner but with NUL separators throughout — the NUL check keeps
+    those (and any other binary look-alike) out.
+    """
     try:
-        with open(path, "r", errors="replace") as fh:
-            return "SSRL" in fh.readline()
+        with open(path, "rb") as fh:
+            head = fh.read(256)
     except OSError:
         return False
+    first = head.split(b"\n", 1)[0]
+    return b"SSRL" in first and b"Data Collector" in first and b"\x00" not in head
 
 
 def parse_sweep_name(filename: str) -> dict | None:
