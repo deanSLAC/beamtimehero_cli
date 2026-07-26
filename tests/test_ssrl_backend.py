@@ -63,7 +63,7 @@ def _sweep_text(npts=120, seed=0, e_start=2400.0, e_step=2.0, header_npts=None):
 
 
 @pytest.fixture()
-def ssrl_dir(tmp_path):
+def collector_dir(tmp_path):
     """A dataset directory: one 3-sweep group (one sweep aborted) + an align scan."""
     for sweep, (npts, seed) in enumerate([(120, 0), (120, 1), (6, 2)], start=1):
         (tmp_path / f"05_test_sample_019_A.{sweep:03d}").write_text(
@@ -84,8 +84,8 @@ def ssrl_dir(tmp_path):
 # Parsing layer
 # ---------------------------------------------------------------------------
 
-def test_read_ssrl_scan_shape_and_attrs(ssrl_dir):
-    df = ssrl_ascii.read_ssrl_scan(ssrl_dir / "05_test_sample_019_A.001")
+def test_read_ssrl_scan_shape_and_attrs(collector_dir):
+    df = ssrl_ascii.read_ssrl_scan(collector_dir / "05_test_sample_019_A.001")
     assert df.index.name == "Achieved Energy"
     assert "SCA_sum" in df.columns and "ICR_sum" in df.columns
     np.testing.assert_allclose(
@@ -98,8 +98,8 @@ def test_read_ssrl_scan_shape_and_attrs(ssrl_dir):
     assert a["motor_positions"] == {"MONO": 4999.9989}
 
 
-def test_aborted_sweep_flagged_incomplete(ssrl_dir):
-    df = ssrl_ascii.read_ssrl_scan(ssrl_dir / "05_test_sample_019_A.003")
+def test_aborted_sweep_flagged_incomplete(collector_dir):
+    df = ssrl_ascii.read_ssrl_scan(collector_dir / "05_test_sample_019_A.003")
     assert df.attrs["num_points"] == 6
     assert not df.attrs["is_complete"]
 
@@ -111,25 +111,25 @@ def test_read_rejects_non_ssrl(tmp_path):
         ssrl_ascii.read_ssrl_scan(p)
 
 
-def test_group_sweeps_skips_align(ssrl_dir):
-    groups = ssrl_ascii.group_sweeps(ssrl_dir)
+def test_group_sweeps_skips_align(collector_dir):
+    groups = ssrl_ascii.group_sweeps(collector_dir)
     assert list(groups) == ["05_test_sample_019"]
     assert len(groups["05_test_sample_019"]) == 3
-    assert "align_data_001" in ssrl_ascii.group_sweeps(ssrl_dir, include_align=True)
+    assert "align_data_001" in ssrl_ascii.group_sweeps(collector_dir, include_align=True)
 
 
 # ---------------------------------------------------------------------------
 # Backend protocol
 # ---------------------------------------------------------------------------
 
-def test_backend_satisfies_protocol(ssrl_dir):
+def test_backend_satisfies_protocol(collector_dir):
     from beamtimehero_cli.spec_data.backend import ScansBackend
-    backend = SSRLAsciiBackend(ssrl_dir)
+    backend = SSRLAsciiBackend(collector_dir)
     assert isinstance(backend, ScansBackend)
 
 
-def test_backend_addressing(ssrl_dir):
-    backend = SSRLAsciiBackend(ssrl_dir)
+def test_backend_addressing(collector_dir):
+    backend = SSRLAsciiBackend(collector_dir)
     assert backend.get_scan_numbers_for_file("05_test_sample_019") == [1, 2, 3]
     df = backend.read_scan("05_test_sample_019", 2)
     assert df is not None and len(df) == 120
@@ -143,7 +143,7 @@ def test_backend_addressing(ssrl_dir):
 
 
 def test_backend_requires_directory(tmp_path, monkeypatch):
-    monkeypatch.delenv("SSRL_DATA_DIR", raising=False)
+    monkeypatch.delenv("SSRL_COLLECTOR_DIR", raising=False)
     with pytest.raises(ValueError):
         SSRLAsciiBackend(None)
     with pytest.raises(ValueError):
@@ -154,8 +154,8 @@ def test_backend_requires_directory(tmp_path, monkeypatch):
 # exafs_data chokepoint over the SSRL source
 # ---------------------------------------------------------------------------
 
-def test_load_mu_merges_and_drops_aborted(ssrl_dir):
-    r = exafs_data.load_mu(file_name="05_test_sample_019", ssrl_dir=str(ssrl_dir))
+def test_load_mu_merges_and_drops_aborted(collector_dir):
+    r = exafs_data.load_mu(file_name="05_test_sample_019", collector_dir=str(collector_dir))
     assert r["source"] == "ssrl_ascii"
     assert r["counter"] == "SCA_sum"
     assert r["n_reps"] == 2                      # aborted sweep 3 dropped
@@ -167,12 +167,12 @@ def test_load_mu_merges_and_drops_aborted(ssrl_dir):
     assert post > 3 * pre
 
 
-def test_load_mu_full_chain_to_first_shell(ssrl_dir):
+def test_load_mu_full_chain_to_first_shell(collector_dir):
     from beamtimehero_cli.analysis import exafs
     from beamtimehero_cli.interpretation import normalize as interp_norm
     from beamtimehero_cli.interpretation.descriptors import find_e0
 
-    r = exafs_data.load_mu(file_name="05_test_sample_019", ssrl_dir=str(ssrl_dir))
+    r = exafs_data.load_mu(file_name="05_test_sample_019", collector_dir=str(collector_dir))
     e0 = find_e0(r["energy"], r["mu"])["e0_ev"]
     assert abs(e0 - E0) < 3.0
     _flat, prov = interp_norm.pre_post_normalize(r["energy"], r["mu"], e0)

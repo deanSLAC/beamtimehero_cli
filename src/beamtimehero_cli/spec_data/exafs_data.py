@@ -11,7 +11,7 @@ Two data sources, selected per call:
   ``normalization='divide_by_i0'`` — EXAFS extraction does its own
   pre/post-edge normalization, so the flat-anchor edge-step must NOT be
   applied here).
-- ``ssrl_dir`` given (or ``SSRL_DATA_DIR`` set and file_name matches an
+- ``collector_dir`` given (or ``SSRL_COLLECTOR_DIR`` set and file_name matches an
   SSRL scan group): the ``SSRLAsciiBackend``, where ``file_name`` is the
   scan-group key and scan numbers are sweep numbers. Signal counter
   defaults to ``SCA_sum`` (the summed Xspress3 fluorescence) — explicit
@@ -30,7 +30,7 @@ SSRL_DEFAULT_COUNTER = "SCA_sum"
 
 
 def _load_ssrl_reps(
-    ssrl_dir: str | None,
+    collector_dir: str | None,
     file_name: str | None,
     scan_numbers: list[int] | None,
     counter: str | None,
@@ -38,7 +38,7 @@ def _load_ssrl_reps(
     """Load SSRL sweeps as I0-divided rep columns on an aligned energy grid."""
     from beamtimehero_cli.spec_data.ssrl_backend import SSRLAsciiBackend
 
-    backend = SSRLAsciiBackend(ssrl_dir)
+    backend = SSRLAsciiBackend(collector_dir)
     if file_name is None:
         file_name = backend.get_most_recent_file()
         if file_name is None:
@@ -85,7 +85,7 @@ def load_mu(
     file_name: str | None = None,
     scan_numbers: list[int] | None = None,
     counter: str | None = None,
-    ssrl_dir: str | None = None,
+    collector_dir: str | None = None,
     source: str | None = None,
     mask_glitches: bool = True,
 ) -> dict:
@@ -97,13 +97,13 @@ def load_mu(
     Raises ValueError on any data problem (one shared error path for the
     tool handlers).
     """
-    use_ssrl = source == "ssrl" or ssrl_dir is not None
+    use_ssrl = source == "collector" or collector_dir is not None
     dropped: list[str] = []
     counter_warning = None
 
     if use_ssrl:
         combined, file_name, counter, used = _load_ssrl_reps(
-            ssrl_dir, file_name, scan_numbers, counter)
+            collector_dir, file_name, scan_numbers, counter)
         src = "ssrl_ascii"
     else:
         combined, file_name, counter, used = scans.get_normalized_scan_arrays(

@@ -89,7 +89,7 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     # XANES/HERFD spec-file tools (which stop at normalized mu(E)) so the
     # chi(k)/FT surface is coherent on its own; reads SPEC files or SSRL
     # EXAFS Data Collector ASCII directories via spec_data/exafs_data.py.
-    "list_ssrl_scans": "exafs",
+    "list_collector_scans": "exafs",
     "extract_chi": "exafs",
     "fourier_transform_chi": "exafs",
     "exafs_products": "exafs",

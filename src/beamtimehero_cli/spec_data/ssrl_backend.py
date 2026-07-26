@@ -10,7 +10,7 @@ convention onto the backend addressing scheme:
 so "average scans 1..N of file X" means "merge the N sweeps of scan group X",
 which is exactly the SSRL repeat-sweep semantics.
 
-The data directory comes from the ``SSRL_DATA_DIR`` environment variable or
+The data directory comes from the ``SSRL_COLLECTOR_DIR`` environment variable or
 an explicit ``data_dir`` argument. Groups are re-scanned per call (the
 directories are small, hundreds of files); no sidecar cache is kept.
 
@@ -29,15 +29,15 @@ import pandas as pd
 
 from beamtimehero_cli.spec_data import ssrl_ascii
 
-SSRL_DATA_DIR_ENV = "SSRL_DATA_DIR"
+SSRL_COLLECTOR_DIR_ENV = "SSRL_COLLECTOR_DIR"
 
 
 def _resolve_dir(data_dir: str | Path | None) -> Path:
-    d = data_dir or os.getenv(SSRL_DATA_DIR_ENV)
+    d = data_dir or os.getenv(SSRL_COLLECTOR_DIR_ENV)
     if not d:
         raise ValueError(
             "No SSRL data directory: pass data_dir or set the "
-            f"{SSRL_DATA_DIR_ENV} environment variable."
+            f"{SSRL_COLLECTOR_DIR_ENV} environment variable."
         )
     path = Path(d)
     if not path.is_dir():

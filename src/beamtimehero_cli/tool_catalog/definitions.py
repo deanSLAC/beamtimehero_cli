@@ -138,8 +138,9 @@ _XRS_EDGE_PROP = {
 _EXAFS_FILE_PROP = {
     "type": "string",
     "description": (
-        "SPEC file name, or (with ssrl_dir / SSRL_DATA_DIR) an SSRL scan-group "
-        "key like '07_MOFCoTHT_..._023'. Default: most recent."
+        "SPEC file name, or (with collector_dir / SSRL_COLLECTOR_DIR) an EXAFS "
+        "Data Collector scan-group key like '07_MOFCoTHT_..._023'. Default: "
+        "most recent."
     ),
 }
 _EXAFS_SCAN_NUMBERS_PROP = {
@@ -152,17 +153,20 @@ _EXAFS_SCAN_NUMBERS_PROP = {
 _EXAFS_COUNTER_PROP = {
     "type": "string",
     "description": (
-        "Signal counter. SSRL source defaults to 'SCA_sum' (summed Xspress3 "
-        "fluorescence / I0); SPEC source auto-picks with a flat-channel warning. "
-        "Set explicitly when in doubt. See `ref counter-selection`."
+        "Signal counter. Data Collector source defaults to 'SCA_sum' (summed "
+        "Xspress3 fluorescence / I0); SPEC source auto-picks with a flat-channel "
+        "warning. Set explicitly when in doubt. See `ref counter-selection`."
     ),
 }
-_SSRL_DIR_PROP = {
+_COLLECTOR_DIR_PROP = {
     "type": "string",
     "description": (
-        "Directory of SSRL EXAFS Data Collector ASCII files. Selects the SSRL "
-        "loader (file_name = scan group, scan_numbers = sweeps). Default: the "
-        "SSRL_DATA_DIR environment variable; omit entirely for SPEC data."
+        "Directory of SSRL 'EXAFS Data Collector' ASCII files — the specific "
+        "DAQ format written at SSRL XAS stations like BL 4-3 (sweep files "
+        "named <sample>_<NNN>_A.<MMM>), NOT a general SSRL data browser. "
+        "Selects the Data Collector loader (file_name = scan group, "
+        "scan_numbers = sweeps). Default: the SSRL_COLLECTOR_DIR environment "
+        "variable; omit entirely for SPEC data."
     ),
 }
 _EXAFS_E0_PROP = {
@@ -2900,17 +2904,19 @@ AUTONOMY_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "list_ssrl_scans",
+            "name": "list_collector_scans",
             "description": (
-                "List SSRL EXAFS Data Collector scan groups in a data directory: one row "
-                "per group (sample stem + scan number) with its sweep numbers. Use this "
-                "first to discover the file_name keys the other exafs tools take when "
-                "reading SSRL ASCII data."
+                "List the scan groups in a directory of SSRL 'EXAFS Data Collector' "
+                "ASCII files (the DAQ format of SSRL XAS stations like BL 4-3 — one of "
+                "many formats across SSRL's stations; this tool reads only that one): "
+                "one row per group (sample stem + scan number) with its sweep numbers. "
+                "Use this first to discover the file_name keys the other exafs tools "
+                "take when reading Data Collector files."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "collector_dir": _COLLECTOR_DIR_PROP,
                 },
                 "required": [],
             },
@@ -2935,7 +2941,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": _EXAFS_FILE_PROP,
                     "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
                     "counter": _EXAFS_COUNTER_PROP,
-                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "collector_dir": _COLLECTOR_DIR_PROP,
                     "e0": _EXAFS_E0_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
@@ -2962,7 +2968,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": _EXAFS_FILE_PROP,
                     "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
                     "counter": _EXAFS_COUNTER_PROP,
-                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "collector_dir": _COLLECTOR_DIR_PROP,
                     "e0": _EXAFS_E0_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
@@ -2995,7 +3001,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_name": _EXAFS_FILE_PROP,
                     "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
                     "counter": _EXAFS_COUNTER_PROP,
-                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "collector_dir": _COLLECTOR_DIR_PROP,
                     "e0": _EXAFS_E0_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
@@ -3028,7 +3034,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                         "description": "Scan groups (SPEC files or SSRL group keys) to overlay.",
                     },
                     "counter": _EXAFS_COUNTER_PROP,
-                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "collector_dir": _COLLECTOR_DIR_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
                 },
@@ -3112,7 +3118,7 @@ AUTONOMY_TOOL_CATEGORIES = [
         "assess_xrs_quality", "summarize_xrs_chemistry",
     ]),
     ("CAT-EXAFS k-space processing", [
-        "list_ssrl_scans", "extract_chi", "fourier_transform_chi",
+        "list_collector_scans", "extract_chi", "fourier_transform_chi",
         "exafs_products", "overlay_chi_spectra",
     ]),
 ]

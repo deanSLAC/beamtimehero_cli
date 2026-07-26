@@ -2095,7 +2095,7 @@ def _extract_chi_core(arguments: dict) -> dict:
         file_name=arguments.get("file_name"),
         scan_numbers=arguments.get("scan_numbers"),
         counter=arguments.get("counter"),
-        ssrl_dir=arguments.get("ssrl_dir"),
+        collector_dir=arguments.get("collector_dir"),
     )
     energy, mu = r["energy"], r["mu"]
     e0 = arguments.get("e0")
@@ -2158,10 +2158,10 @@ def _exafs_meta(core: dict) -> dict:
     return out
 
 
-def t_list_ssrl_scans(arguments: dict) -> tuple[str, list[str]]:
+def t_list_collector_scans(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.spec_data.ssrl_backend import SSRLAsciiBackend
     try:
-        backend = SSRLAsciiBackend(arguments.get("ssrl_dir"))
+        backend = SSRLAsciiBackend(arguments.get("collector_dir"))
         groups = backend.list_groups()
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
@@ -2169,6 +2169,8 @@ def t_list_ssrl_scans(arguments: dict) -> tuple[str, list[str]]:
         "data_dir": str(backend.data_dir),
         "n_groups": len(groups),
         "groups": groups,
+        "format": "SSRL EXAFS Data Collector 4.0 ASCII (one of many formats "
+                  "across SSRL's stations; only this one is read here)",
         "note": (
             "Pass a group's file_name (and optionally sweep numbers as "
             "scan_numbers) to the exafs tools; the signal counter defaults "
@@ -2304,7 +2306,7 @@ def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
             core = _extract_chi_core({
                 "file_name": fn,
                 "counter": arguments.get("counter"),
-                "ssrl_dir": arguments.get("ssrl_dir"),
+                "collector_dir": arguments.get("collector_dir"),
                 "rbkg": arguments.get("rbkg", 1.0),
                 "kweight": kweight,
             })
@@ -2462,7 +2464,7 @@ _HANDLERS: dict[str, callable] = {
     "interpret_q_dependence": t_interpret_q_dependence,
     "compare_xrs_to_references": t_compare_xrs_to_references,
     # CAT-EXAFS
-    "list_ssrl_scans": t_list_ssrl_scans,
+    "list_collector_scans": t_list_collector_scans,
     "extract_chi": t_extract_chi,
     "fourier_transform_chi": t_fourier_transform_chi,
     "exafs_products": t_exafs_products,
