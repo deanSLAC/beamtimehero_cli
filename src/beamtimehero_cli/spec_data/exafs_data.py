@@ -19,12 +19,15 @@ Two data sources, selected per call:
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 
 from beamtimehero_cli.analysis import xas
 from beamtimehero_cli.interpretation import quality
 from beamtimehero_cli.spec_data import scans
+from beamtimehero_cli.spec_data.ssrl_backend import SSRL_COLLECTOR_DIR_ENV
 
 SSRL_DEFAULT_COUNTER = "SCA_sum"
 
@@ -97,7 +100,15 @@ def load_mu(
     Raises ValueError on any data problem (one shared error path for the
     tool handlers).
     """
-    use_ssrl = source == "collector" or collector_dir is not None
+    # Explicit source always wins; otherwise an explicit collector_dir or a
+    # session-level SSRL_COLLECTOR_DIR (chemcatal-bth sets it for collector-
+    # format beamtimes) routes to the SSRL backend. Previously the env var
+    # was documented but never consulted here, so env-driven sessions fell
+    # through to the SPEC chain.
+    if source is not None:
+        use_ssrl = source == "collector"
+    else:
+        use_ssrl = collector_dir is not None or bool(os.getenv(SSRL_COLLECTOR_DIR_ENV))
     dropped: list[str] = []
     counter_warning = None
 

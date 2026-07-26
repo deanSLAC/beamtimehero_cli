@@ -192,3 +192,18 @@ def test_is_ssrl_ascii_rejects_binary_variant(collector_dir, tmp_path):
     (tmp_path / "junk.txt").write_text("not a collector file\n")
     assert not ssrl_ascii.is_ssrl_ascii(tmp_path / "junk.txt")
     assert not ssrl_ascii.is_ssrl_ascii(tmp_path / "missing")
+
+
+def test_load_mu_routes_by_collector_env(collector_dir, monkeypatch):
+    """SSRL_COLLECTOR_DIR alone (no collector_dir argument) must select the
+    SSRL backend — chemcatal-bth sets only the env for collector beamtimes."""
+    monkeypatch.setenv("SSRL_COLLECTOR_DIR", str(collector_dir))
+    r = exafs_data.load_mu(file_name="05_test_sample_019")
+    assert r["source"] == "ssrl_ascii"
+    assert r["n_reps"] == 2
+    # an explicit source always wins over the env
+    monkeypatch.setattr(
+        exafs_data.scans, "get_normalized_scan_arrays",
+        lambda *a, **k: (_ for _ in ()).throw(ValueError("spec chain")))
+    with pytest.raises(ValueError, match="spec chain"):
+        exafs_data.load_mu(file_name="05_test_sample_019", source="spec")
