@@ -31,6 +31,10 @@ _DOCS: dict[str, dict] = {
         "file": _DEFAULTS_DIR / "counter-selection.md",
         "description": "Load-bearing convention: multi-scan tools must accept an explicit signal counter and normalization mode; why auto-select + edge-step fails off-XAS (e.g. XRS).",
     },
+    "xrs-analysis": {
+        "file": _DEFAULTS_DIR / "xrs-analysis.md",
+        "description": "X-ray Raman (XRS) analysis: the energy-loss reduction pipeline and interpretation tools on the dedicated `xrs` branch, and why the XAS tools are wrong for XRS by construction.",
+    },
 }
 
 
