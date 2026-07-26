@@ -85,6 +85,15 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     "compare_xrs_to_references": "xrs",
     "assess_xrs_quality": "xrs",
     "summarize_xrs_chemistry": "xrs",
+    # CAT-EXAFS · dedicated k-space analysis branch. Kept separate from the
+    # XANES/HERFD spec-file tools (which stop at normalized mu(E)) so the
+    # chi(k)/FT surface is coherent on its own; reads SPEC files or SSRL
+    # EXAFS Data Collector ASCII directories via spec_data/exafs_data.py.
+    "list_ssrl_scans": "exafs",
+    "extract_chi": "exafs",
+    "fourier_transform_chi": "exafs",
+    "exafs_products": "exafs",
+    "overlay_chi_spectra": "exafs",
 }
 
 

@@ -19,6 +19,8 @@ EXPECTED_TREES = {
     "spec-file", "s3df", "slack",
     # dedicated X-ray Raman (XRS) analysis branch
     "xrs",
+    # dedicated EXAFS k-space analysis branch
+    "exafs",
     # bundled agent profiles (curated views over the catalog)
     "bl-aligner",
 }

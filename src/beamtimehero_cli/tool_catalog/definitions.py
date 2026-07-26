@@ -134,6 +134,57 @@ _XRS_EDGE_PROP = {
     "type": "string", "description": "Edge label ('K', 'L3', ...). Default: auto with element.",
 }
 
+# --- EXAFS branch shared fragments ------------------------------------------
+_EXAFS_FILE_PROP = {
+    "type": "string",
+    "description": (
+        "SPEC file name, or (with ssrl_dir / SSRL_DATA_DIR) an SSRL scan-group "
+        "key like '07_MOFCoTHT_..._023'. Default: most recent."
+    ),
+}
+_EXAFS_SCAN_NUMBERS_PROP = {
+    "type": "array", "items": {"type": "integer"},
+    "description": (
+        "Rep/sweep numbers to merge (default: all). For SSRL groups these are "
+        "the _A.MMM sweep numbers. Aborted short sweeps are dropped automatically."
+    ),
+}
+_EXAFS_COUNTER_PROP = {
+    "type": "string",
+    "description": (
+        "Signal counter. SSRL source defaults to 'SCA_sum' (summed Xspress3 "
+        "fluorescence / I0); SPEC source auto-picks with a flat-channel warning. "
+        "Set explicitly when in doubt. See `ref counter-selection`."
+    ),
+}
+_SSRL_DIR_PROP = {
+    "type": "string",
+    "description": (
+        "Directory of SSRL EXAFS Data Collector ASCII files. Selects the SSRL "
+        "loader (file_name = scan group, scan_numbers = sweeps). Default: the "
+        "SSRL_DATA_DIR environment variable; omit entirely for SPEC data."
+    ),
+}
+_EXAFS_E0_PROP = {
+    "type": "number",
+    "description": "Edge energy E0 (eV). Default: derivative-max from the merged spectrum.",
+}
+_EXAFS_RBKG_PROP = {
+    "type": "number", "default": 1.0,
+    "description": "Background cutoff R_bkg (Å): spline flexibility is capped below this apparent distance (AUTOBK Nyquist knot budget).",
+}
+_EXAFS_KWEIGHT_PROP = {
+    "type": "integer", "default": 2,
+    "description": "k-weight exponent (chi·k^w for plots/FT; also the spline fit weighting).",
+}
+_EXAFS_CHI_ARTIFACT_PROP = {
+    "type": "object",
+    "description": (
+        "Precomputed chi artifact from extract_chi ({'k': [...], 'chi': [...]}). "
+        "When given, the load+normalize+background pipeline is SKIPPED."
+    ),
+}
+
 AUTONOMY_TOOL_DEFINITIONS = [
     # -----------------------------------------------------------------
     # CAT-0 · High-level procedural macros
@@ -2843,6 +2894,148 @@ AUTONOMY_TOOL_DEFINITIONS = [
             },
         },
     },
+    # -----------------------------------------------------------------
+    # CAT-EXAFS · k-space processing (analysis/exafs.py + spec_data/exafs_data.py)
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "list_ssrl_scans",
+            "description": (
+                "List SSRL EXAFS Data Collector scan groups in a data directory: one row "
+                "per group (sample stem + scan number) with its sweep numbers. Use this "
+                "first to discover the file_name keys the other exafs tools take when "
+                "reading SSRL ASCII data."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ssrl_dir": _SSRL_DIR_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_chi",
+            "description": (
+                "Extract EXAFS chi(k) from repeated scans: merge reps (short/aborted "
+                "sweeps dropped, glitches masked), find E0, apply Athena-style pre/post-"
+                "edge polynomial normalization, and remove the post-edge background with "
+                "a quick-look AUTOBK spline (knot budget from R_bkg). Returns E0, edge "
+                "step, chi(k) arrays (reusable as the chi artifact by the FT tools) and "
+                "a two-panel extraction plot. Quick-look background — cross-check "
+                "against Larch/Athena for publication."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": _EXAFS_FILE_PROP,
+                    "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
+                    "counter": _EXAFS_COUNTER_PROP,
+                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "e0": _EXAFS_E0_PROP,
+                    "rbkg": _EXAFS_RBKG_PROP,
+                    "kweight": _EXAFS_KWEIGHT_PROP,
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fourier_transform_chi",
+            "description": (
+                "Fourier transform chi(k) to R-space (Ifeffit convention, Hanning "
+                "window): |chi(R)| with the first-shell apparent distance marked. The R "
+                "axis is PHASE-UNCORRECTED — peaks sit ~0.3-0.5 Å below true bond "
+                "lengths. Pass the chi artifact from extract_chi to skip recomputation, "
+                "or the same load arguments to run the full pipeline first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chi": _EXAFS_CHI_ARTIFACT_PROP,
+                    "file_name": _EXAFS_FILE_PROP,
+                    "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
+                    "counter": _EXAFS_COUNTER_PROP,
+                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "e0": _EXAFS_E0_PROP,
+                    "rbkg": _EXAFS_RBKG_PROP,
+                    "kweight": _EXAFS_KWEIGHT_PROP,
+                    "kmin": {"type": "number", "default": 2.0,
+                             "description": "FT window lower bound (Å⁻¹)."},
+                    "kmax": {"type": "number",
+                             "description": "FT window upper bound (Å⁻¹). Default: k_max − 0.5."},
+                    "dk": {"type": "number", "default": 1.0,
+                           "description": "Hanning sill width (Å⁻¹)."},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "exafs_products",
+            "description": (
+                "Capstone EXAFS reduction: merge reps → normalize → chi(k) → FT → "
+                "|chi(R)| + first-shell apparent distance, with extraction and R-space "
+                "plots. Composes extract_chi + fourier_transform_chi in one call; pass "
+                "their arguments through. Accepts a precomputed chi artifact to skip "
+                "the extraction stage."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chi": _EXAFS_CHI_ARTIFACT_PROP,
+                    "file_name": _EXAFS_FILE_PROP,
+                    "scan_numbers": _EXAFS_SCAN_NUMBERS_PROP,
+                    "counter": _EXAFS_COUNTER_PROP,
+                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "e0": _EXAFS_E0_PROP,
+                    "rbkg": _EXAFS_RBKG_PROP,
+                    "kweight": _EXAFS_KWEIGHT_PROP,
+                    "kmin": {"type": "number", "default": 2.0,
+                             "description": "FT window lower bound (Å⁻¹)."},
+                    "kmax": {"type": "number",
+                             "description": "FT window upper bound (Å⁻¹). Default: k_max − 0.5."},
+                    "dk": {"type": "number", "default": 1.0,
+                           "description": "Hanning sill width (Å⁻¹)."},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "overlay_chi_spectra",
+            "description": (
+                "Extract and overlay chi(k)·k^w for several scan groups on one plot — "
+                "the comparison view for operando/potential series or sample vs "
+                "standards in k-space. Each group runs the full extract_chi pipeline "
+                "with shared counter/rbkg/kweight settings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_names": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "Scan groups (SPEC files or SSRL group keys) to overlay.",
+                    },
+                    "counter": _EXAFS_COUNTER_PROP,
+                    "ssrl_dir": _SSRL_DIR_PROP,
+                    "rbkg": _EXAFS_RBKG_PROP,
+                    "kweight": _EXAFS_KWEIGHT_PROP,
+                },
+                "required": ["file_names"],
+            },
+        },
+    },
 ]
 
 # Category map for the sidebar
@@ -2917,5 +3110,9 @@ AUTONOMY_TOOL_CATEGORIES = [
         "extract_xrs_descriptors", "interpret_xrs_oxidation_state",
         "interpret_q_dependence", "compare_xrs_to_references",
         "assess_xrs_quality", "summarize_xrs_chemistry",
+    ]),
+    ("CAT-EXAFS k-space processing", [
+        "list_ssrl_scans", "extract_chi", "fourier_transform_chi",
+        "exafs_products", "overlay_chi_spectra",
     ]),
 ]

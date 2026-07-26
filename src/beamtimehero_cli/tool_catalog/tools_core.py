@@ -2070,6 +2070,265 @@ def t_compare_xrs_to_references(arguments: dict) -> tuple[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# CAT-EXAFS handlers — k-space processing (analysis/exafs.py; exafs branch)
+# ---------------------------------------------------------------------------
+
+def _jarr(values, decimals=5) -> list[float]:
+    """Round an array for JSON tool output (artifact-sized, not plot-sized)."""
+    import numpy as np
+    return [round(float(v), decimals) for v in np.nan_to_num(np.asarray(values, dtype=float))]
+
+
+def _extract_chi_core(arguments: dict) -> dict:
+    """Shared load → normalize → background pipeline for the exafs tools.
+
+    Returns a dict bundling the loader provenance, E0/edge-step, the
+    normalized flattened spectrum, and the chi(k) arrays. Raises ValueError
+    on any data problem (one shared error path, like _interpretation_inputs).
+    """
+    from beamtimehero_cli.analysis import exafs
+    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.interpretation import normalize as interp_norm
+    from beamtimehero_cli.spec_data import exafs_data
+
+    r = exafs_data.load_mu(
+        file_name=arguments.get("file_name"),
+        scan_numbers=arguments.get("scan_numbers"),
+        counter=arguments.get("counter"),
+        ssrl_dir=arguments.get("ssrl_dir"),
+    )
+    energy, mu = r["energy"], r["mu"]
+    e0 = arguments.get("e0")
+    if e0 is None:
+        e0_info = interp_desc.find_e0(energy, mu)
+        e0 = e0_info["e0_ev"]
+        e0_source = "derivative_max"
+    else:
+        e0 = float(e0)
+        e0_source = "explicit"
+
+    flat, norm_prov = interp_norm.pre_post_normalize(energy, mu, e0)
+    if not norm_prov.get("applied"):
+        raise ValueError(f"Normalization failed: {norm_prov.get('reason')}")
+    edge_step = norm_prov["edge_step"]
+    if edge_step < 0:
+        raise ValueError(
+            f"Negative edge step ({edge_step:.3g}) — this counter shows no "
+            "absorption edge (wrong counter, inverted signal, or no-edge scan). "
+            "Pass counter explicitly; see `ref counter-selection`."
+        )
+
+    bk = exafs.autobk_lite(
+        energy, mu, e0, edge_step=edge_step,
+        rbkg=float(arguments.get("rbkg", 1.0)),
+        kweight=int(arguments.get("kweight", 2)),
+    )
+    return {
+        **r,
+        "e0": float(e0),
+        "e0_source": e0_source,
+        "edge_step": float(edge_step),
+        "flat": flat,
+        "norm_provenance": norm_prov,
+        "k": bk["k"],
+        "chi": bk["chi"],
+        "bkg_provenance": bk["provenance"],
+    }
+
+
+def _exafs_meta(core: dict) -> dict:
+    """Provenance block shared by every exafs tool's JSON output."""
+    out = {
+        "source": core["source"],
+        "file_name": core["file_name"],
+        "counter": core["counter"],
+        "scan_numbers": core["scan_numbers"],
+        "n_reps": core["n_reps"],
+        "dropped_short_reps": core["dropped_short_reps"],
+        "n_glitch_points": core["n_glitch_points"],
+        "e0_ev": core["e0"],
+        "e0_source": core["e0_source"],
+        "edge_step": core["edge_step"],
+        "kmax_inv_ang": float(core["k"].max()),
+        "normalization": core["norm_provenance"],
+        "background": core["bkg_provenance"],
+    }
+    if core.get("counter_warning"):
+        out["counter_warning"] = core["counter_warning"]
+    return out
+
+
+def t_list_ssrl_scans(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data.ssrl_backend import SSRLAsciiBackend
+    try:
+        backend = SSRLAsciiBackend(arguments.get("ssrl_dir"))
+        groups = backend.list_groups()
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    return json.dumps({
+        "data_dir": str(backend.data_dir),
+        "n_groups": len(groups),
+        "groups": groups,
+        "note": (
+            "Pass a group's file_name (and optionally sweep numbers as "
+            "scan_numbers) to the exafs tools; the signal counter defaults "
+            "to SCA_sum (summed Xspress3 fluorescence / I0)."
+        ),
+    }, indent=2, default=str), []
+
+
+def t_extract_chi(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data import exafs_plotting
+    try:
+        core = _extract_chi_core(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    kweight = int(arguments.get("kweight", 2))
+    fig = exafs_plotting.plot_chi_extraction(
+        core["energy"], core["mu"], core["flat"], core["e0"],
+        core["k"], core["chi"], kweight,
+        f"{core['file_name']} — chi extraction ({core['n_reps']} reps, {core['counter']})")
+    images = [fig_to_base64(fig)]
+    _close(fig)
+    out = _exafs_meta(core)
+    out["chi_artifact"] = {"k": _jarr(core["k"]), "chi": _jarr(core["chi"])}
+    out["note"] = (
+        "Pass chi_artifact as the `chi` argument of fourier_transform_chi / "
+        "exafs_products to skip re-extraction."
+    )
+    return json.dumps(out, indent=2, default=str), images
+
+
+def _resolve_chi(arguments: dict) -> tuple[dict | None, dict]:
+    """Chi arrays for the FT tools: precomputed artifact or full pipeline.
+
+    Returns ``(core_or_None, {'k': ..., 'chi': ...})`` — core is None on the
+    artifact path (mirrors _resolve_descriptors: artifact wins, recompute
+    otherwise).
+    """
+    import numpy as np
+    artifact = arguments.get("chi")
+    if isinstance(artifact, dict) and artifact.get("k") and artifact.get("chi") is not None:
+        return None, {
+            "k": np.asarray(artifact["k"], dtype=float),
+            "chi": np.asarray(artifact["chi"], dtype=float),
+        }
+    core = _extract_chi_core(arguments)
+    return core, {"k": core["k"], "chi": core["chi"]}
+
+
+def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.analysis import exafs
+    from beamtimehero_cli.spec_data import exafs_plotting
+    try:
+        core, chi = _resolve_chi(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    kweight = int(arguments.get("kweight", 2))
+    kmin = float(arguments.get("kmin", 2.0))
+    kmax = arguments.get("kmax")
+    ft = exafs.xftf(
+        chi["k"], chi["chi"], kmin=kmin,
+        kmax=float(kmax) if kmax is not None else None,
+        kweight=kweight, dk=float(arguments.get("dk", 1.0)),
+    )
+    peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
+    label = core["file_name"] if core else "chi artifact"
+    fig = exafs_plotting.plot_chir(
+        ft["r"], ft["chir_mag"], ft["provenance"]["kmin_inv_ang"],
+        ft["provenance"]["kmax_inv_ang"], kweight,
+        f"{label} — |chi(R)| (phase-uncorrected)", peak=peak)
+    images = [fig_to_base64(fig)]
+    _close(fig)
+    out = _exafs_meta(core) if core else {"source": "chi_artifact"}
+    out.update({
+        "ft": ft["provenance"],
+        "first_shell": peak,
+        "r": _jarr(ft["r"]),
+        "chir_mag": _jarr(ft["chir_mag"]),
+    })
+    return json.dumps(out, indent=2, default=str), images
+
+
+def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
+    """Capstone: extraction plot + FT plot + the full JSON bundle."""
+    from beamtimehero_cli.analysis import exafs
+    from beamtimehero_cli.spec_data import exafs_plotting
+    try:
+        core, chi = _resolve_chi(arguments)
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    kweight = int(arguments.get("kweight", 2))
+    images: list[str] = []
+    if core is not None:
+        fig = exafs_plotting.plot_chi_extraction(
+            core["energy"], core["mu"], core["flat"], core["e0"],
+            core["k"], core["chi"], kweight,
+            f"{core['file_name']} — chi extraction ({core['n_reps']} reps, {core['counter']})")
+        images.append(fig_to_base64(fig))
+        _close(fig)
+    kmax = arguments.get("kmax")
+    ft = exafs.xftf(
+        chi["k"], chi["chi"], kmin=float(arguments.get("kmin", 2.0)),
+        kmax=float(kmax) if kmax is not None else None,
+        kweight=kweight, dk=float(arguments.get("dk", 1.0)),
+    )
+    peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
+    label = core["file_name"] if core else "chi artifact"
+    fig = exafs_plotting.plot_chir(
+        ft["r"], ft["chir_mag"], ft["provenance"]["kmin_inv_ang"],
+        ft["provenance"]["kmax_inv_ang"], kweight,
+        f"{label} — |chi(R)| (phase-uncorrected)", peak=peak)
+    images.append(fig_to_base64(fig))
+    _close(fig)
+    out = _exafs_meta(core) if core else {"source": "chi_artifact"}
+    out.update({
+        "chi_artifact": {"k": _jarr(chi["k"]), "chi": _jarr(chi["chi"])},
+        "ft": ft["provenance"],
+        "first_shell": peak,
+        "r": _jarr(ft["r"]),
+        "chir_mag": _jarr(ft["chir_mag"]),
+    })
+    return json.dumps(out, indent=2, default=str), images
+
+
+def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
+    from beamtimehero_cli.spec_data import exafs_plotting
+    file_names = arguments.get("file_names", [])
+    if not file_names:
+        return json.dumps({"error": "file_names array must not be empty."}), []
+    kweight = int(arguments.get("kweight", 2))
+    spectra, reports = [], []
+    for fn in file_names:
+        try:
+            core = _extract_chi_core({
+                "file_name": fn,
+                "counter": arguments.get("counter"),
+                "ssrl_dir": arguments.get("ssrl_dir"),
+                "rbkg": arguments.get("rbkg", 1.0),
+                "kweight": kweight,
+            })
+            spectra.append((f"{fn} ({core['n_reps']} reps)", core["k"], core["chi"]))
+            reports.append({
+                "file_name": fn, "n_reps": core["n_reps"], "e0_ev": core["e0"],
+                "edge_step": core["edge_step"],
+                "kmax_inv_ang": float(core["k"].max()),
+                "counter_warning": core.get("counter_warning"),
+            })
+        except ValueError as e:
+            reports.append({"file_name": fn, "error": str(e)})
+    if not spectra:
+        return json.dumps({"error": "No chi spectra could be extracted.",
+                           "reports": reports}, indent=2), []
+    fig = exafs_plotting.plot_chi_overlay(
+        spectra, kweight, f"chi(k)·k^{kweight} overlay ({len(spectra)} groups)")
+    images = [fig_to_base64(fig)]
+    _close(fig)
+    return json.dumps({"n_overlaid": len(spectra), "reports": reports},
+                      indent=2, default=str), images
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
 
@@ -2202,6 +2461,12 @@ _HANDLERS: dict[str, callable] = {
     "interpret_xrs_oxidation_state": t_interpret_xrs_oxidation_state,
     "interpret_q_dependence": t_interpret_q_dependence,
     "compare_xrs_to_references": t_compare_xrs_to_references,
+    # CAT-EXAFS
+    "list_ssrl_scans": t_list_ssrl_scans,
+    "extract_chi": t_extract_chi,
+    "fourier_transform_chi": t_fourier_transform_chi,
+    "exafs_products": t_exafs_products,
+    "overlay_chi_spectra": t_overlay_chi_spectra,
     "assess_xrs_quality": t_assess_xrs_quality,
     "summarize_xrs_chemistry": t_summarize_xrs_chemistry,
     # Slack tools (require the [slack] extra).
