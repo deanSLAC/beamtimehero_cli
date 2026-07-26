@@ -278,3 +278,112 @@ def mback_normalize(
         "rms_residual": float(np.sqrt(np.mean(_residual(result.x) ** 2))),
     })
     return mu_norm, provenance
+
+
+# ---------------------------------------------------------------------------
+# Pre/post-edge polynomial normalization (Athena-style, EXAFS-ready)
+# ---------------------------------------------------------------------------
+
+def pre_post_normalize(
+    energy: np.ndarray,
+    mu: np.ndarray,
+    e0: float,
+    pre1: float | None = None,
+    pre2: float | None = None,
+    norm1: float | None = None,
+    norm2: float | None = None,
+    norm_order: int = 2,
+    flatten: bool = True,
+) -> tuple[np.ndarray, dict]:
+    """Athena-style edge-step normalization: pre-edge line + post-edge poly.
+
+    Fits a line over [e0+pre1, e0+pre2] (pre1 < pre2 < 0) and a polynomial
+    of ``norm_order`` over [e0+norm1, e0+norm2]; the edge step is their
+    difference at E0. With ``flatten`` the post-edge curvature above E0 is
+    removed (Athena's "flattened" spectrum), which is what EXAFS extraction
+    and operando-overlay comparisons want.
+
+    This differs from the flat-anchor ``analysis.xas.edge_step_normalize``
+    (mean of first/last 10% of points): the polynomial version tolerates
+    sloping pre-edges and the long curved post-edge of an EXAFS-length scan.
+    Window defaults scale to the scan range when not given.
+
+    Mirrors :func:`area_normalize`'s contract: returns ``(mu_normalized,
+    provenance)`` and on failure returns ``mu`` unchanged with
+    ``provenance["applied"] = False`` and a ``reason``; never raises. The
+    edge step is reported in ``provenance["edge_step"]``.
+    """
+    energy = np.asarray(energy, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    e0 = float(e0)
+    provenance: dict = {"method": "pre_post_edge_polynomial", "e0_ev": e0}
+
+    def _refuse(reason: str) -> tuple[np.ndarray, dict]:
+        provenance.update({"applied": False, "reason": reason})
+        return mu, provenance
+
+    if energy.size < 15 or not np.all(np.isfinite(mu)):
+        return _refuse("too few points or non-finite spectrum.")
+
+    if pre1 is None:
+        pre1 = max(float(energy.min()) - e0, -200.0) * 0.9
+    if pre2 is None:
+        pre2 = pre1 / 3.0
+    if norm2 is None:
+        norm2 = (float(energy.max()) - e0) * 0.95
+    if norm1 is None:
+        norm1 = min(100.0, norm2 / 3.0)
+    if not (pre1 < pre2 < 0 < norm1 < norm2):
+        return _refuse(
+            f"window ordering violated (pre1={pre1:.1f}, pre2={pre2:.1f}, "
+            f"norm1={norm1:.1f}, norm2={norm2:.1f} relative to E0)."
+        )
+
+    pre_sel = (energy >= e0 + pre1) & (energy <= e0 + pre2)
+    if int(pre_sel.sum()) < 2:
+        pre_sel = energy < e0 - 10
+    post_sel = (energy >= e0 + norm1) & (energy <= e0 + norm2)
+    order = int(norm_order)
+    if int(post_sel.sum()) < order + 2:
+        post_sel = energy > e0 + 20
+        order = 1
+    if int(pre_sel.sum()) < 2 or int(post_sel.sum()) < order + 2:
+        return _refuse(
+            f"pre/post-edge regions too small (pre={int(pre_sel.sum())}, "
+            f"post={int(post_sel.sum())})."
+        )
+
+    pre_line = np.polyval(np.polyfit(energy[pre_sel], mu[pre_sel], 1), energy)
+    post_poly = np.polyval(
+        np.polyfit(energy[post_sel] - e0, mu[post_sel], order), energy - e0
+    )
+    i0e = int(np.argmin(np.abs(energy - e0)))
+    edge_step = float(post_poly[i0e] - pre_line[i0e])
+    if not np.isfinite(edge_step) or edge_step == 0:
+        return _refuse("degenerate edge step (zero or non-finite).")
+
+    norm = (mu - pre_line) / edge_step
+    if flatten:
+        out = norm.copy()
+        above = energy >= e0
+        out[above] = norm[above] - (
+            (post_poly[above] - pre_line[above] - edge_step) / edge_step
+        )
+    else:
+        out = norm
+
+    provenance.update({
+        "applied": True,
+        "edge_step": edge_step,
+        "flattened": bool(flatten),
+        "pre_edge_window_rel_ev": [float(pre1), float(pre2)],
+        "norm_window_rel_ev": [float(norm1), float(norm2)],
+        "norm_poly_order": order,
+        "note": (
+            "Athena-style pre-edge line + post-edge polynomial; edge step "
+            "from their difference at E0. Negative edge_step means the "
+            "channel has no absorption edge (wrong counter or inverted "
+            "signal)."
+        ),
+    })
+    return out, provenance

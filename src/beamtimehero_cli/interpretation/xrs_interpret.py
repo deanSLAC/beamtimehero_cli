@@ -182,41 +182,20 @@ def compare_xrs_to_references(loss, intensity, references: list[dict]) -> dict:
     interpolated onto the target loss grid, then fit with non-negative least
     squares; fractions are normalized to sum 1. Valid against XANES references
     in the LOW-q dipole regime. Returns fractions + fit residual.
-    """
-    from scipy.optimize import nnls
 
-    loss = np.asarray(loss, dtype=float)
-    intensity = np.asarray(intensity, dtype=float)
-    ok = np.isfinite(loss) & np.isfinite(intensity)
-    loss, intensity = loss[ok], intensity[ok]
-    if len(references) < 1 or loss.size < 3:
-        return {"error": "Need a spectrum and ≥1 reference."}
-    cols, names = [], []
-    for ref in references:
-        rl = np.asarray(ref["loss"], dtype=float)
-        ri = np.asarray(ref["intensity"], dtype=float)
-        cols.append(np.interp(loss, rl, ri, left=np.nan, right=np.nan))
-        names.append(ref.get("name", f"ref{len(names)}"))
-    A = np.vstack(cols).T
-    good = np.all(np.isfinite(A), axis=1) & np.isfinite(intensity)
-    A, b = A[good], intensity[good]
-    if A.shape[0] < A.shape[1] + 1:
-        return {"error": "Too little overlap between spectrum and references."}
-    coeffs, resid = nnls(A, b)
-    total = float(coeffs.sum())
-    fractions = (coeffs / total).tolist() if total > 0 else coeffs.tolist()
-    ss_res = float(np.sum((A @ coeffs - b) ** 2))
-    ss_tot = float(np.sum((b - b.mean()) ** 2))
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else None
-    return {
-        "components": [{"name": n, "fraction": round(f, 4), "raw_weight": round(float(c), 6)}
-                       for n, f, c in zip(names, fractions, coeffs)],
-        "fit_r2": round(r2, 4) if r2 is not None else None,
-        "residual_norm": round(float(resid), 6),
-        "n_points_used": int(A.shape[0]),
-        "regime_caveat": ("LCF against XANES references is valid in the low-q dipole "
-                          "limit; at high q multipole intensity breaks the equivalence."),
-    }
+    The fit itself is axis-agnostic and lives in ``generic_data.lcf``
+    (promoted from here); this wrapper keeps the XRS-facing name, the
+    ``loss`` reference key, and the dipole-regime caveat.
+    """
+    from beamtimehero_cli.generic_data.lcf import compare_to_references
+
+    out = compare_to_references(loss, intensity, references)
+    if "error" not in out:
+        out["regime_caveat"] = (
+            "LCF against XANES references is valid in the low-q dipole "
+            "limit; at high q multipole intensity breaks the equivalence."
+        )
+    return out
 
 
 # ---------------------------------------------------------------------------

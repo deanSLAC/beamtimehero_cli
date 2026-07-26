@@ -276,3 +276,71 @@ def average_reps(
     raise ValueError(
         f"Unknown weighting '{weighting}'. Use 'equal' or 'inverse_variance'."
     )
+
+
+# ---------------------------------------------------------------------------
+# Aborted-rep filtering (multi-sweep files where a rep stopped mid-scan)
+# ---------------------------------------------------------------------------
+
+def filter_short_reps(
+    combined: pd.DataFrame, min_span_frac: float = 0.8,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Drop rep columns whose covered energy span is a fraction of the rest.
+
+    Beamline data (notably SSRL BL 4-3 sweep files) includes aborted reps
+    that stop after a handful of points; after tolerance-aligned concat
+    they appear as columns that are NaN over most of the grid. Averaging
+    them in biases the merge toward the pre-edge. A column is kept when
+    the energy span of its non-NaN rows is at least ``min_span_frac`` of
+    the largest span among the columns.
+
+    Returns ``(filtered, dropped_names)``. Never drops everything — if all
+    columns fall below the bar (degenerate input), the input is returned
+    unchanged.
+    """
+    index = combined.index.values.astype(float)
+    spans = {}
+    for col in combined.columns:
+        good = combined[col].notna().values
+        spans[col] = float(index[good].max() - index[good].min()) if good.any() else 0.0
+    best = max(spans.values(), default=0.0)
+    if best <= 0:
+        return combined, []
+    keep = [c for c in combined.columns if spans[c] >= min_span_frac * best]
+    if not keep:
+        return combined, []
+    dropped = [c for c in combined.columns if c not in keep]
+    return combined[keep], dropped
+
+
+# ---------------------------------------------------------------------------
+# Detector deadtime correction (ICR-based, non-paralyzable)
+# ---------------------------------------------------------------------------
+
+def deadtime_correct(
+    sca: np.ndarray, icr: np.ndarray, count_time: np.ndarray, tau: float,
+) -> np.ndarray:
+    """Non-paralyzable per-element deadtime correction for windowed counts.
+
+    corrected = sca / (1 − tau · ICR/count_time), clipped so a pathological
+    ICR cannot flip the sign or blow up the correction (floor at 5% live).
+
+    The ``vortDT*`` counters at BL 15-2 are already deadtime-corrected by
+    the DXP hardware — do NOT run this on them. It exists for detectors
+    whose raw windowed counts and incoming count rates are recorded
+    separately (e.g. the SSRL BL 4-3 Xspress3 ``SCA1_n``/``ICR1_n``
+    columns).
+
+    Parameters
+    ----------
+    sca : (npts, nelem) windowed counts per element
+    icr : (npts, nelem) incoming counts per element (same integration)
+    count_time : (npts,) integration time in seconds
+    tau : per-event dead time in seconds
+    """
+    sca = np.asarray(sca, dtype=float)
+    icr = np.asarray(icr, dtype=float)
+    count_time = np.asarray(count_time, dtype=float)
+    rate = icr / np.maximum(count_time[:, np.newaxis], 1e-9)
+    live = np.clip(1.0 - float(tau) * rate, 0.05, 1.0)
+    return sca / live
