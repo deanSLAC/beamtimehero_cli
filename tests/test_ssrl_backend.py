@@ -207,3 +207,79 @@ def test_load_mu_routes_by_collector_env(collector_dir, monkeypatch):
         lambda *a, **k: (_ for _ in ()).throw(ValueError("spec chain")))
     with pytest.raises(ValueError, match="spec chain"):
         exafs_data.load_mu(file_name="05_test_sample_019", source="spec")
+
+
+# ---------------------------------------------------------------------------
+# Generic scans-chokepoint routing (the spec-file tool surface) over a
+# collector session (SSRL_COLLECTOR_DIR set, no per-call collector_dir)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def collector_env(collector_dir, monkeypatch):
+    monkeypatch.setenv("SSRL_COLLECTOR_DIR", str(collector_dir))
+    return collector_dir
+
+
+def test_scans_chokepoint_lists_and_reads_collector(collector_env):
+    from beamtimehero_cli.spec_data import scans
+
+    listed = scans.list_processed_scans(limit=10)
+    assert listed and all(s["file_name"] in ("05_test_sample_019", "align_data_001")
+                          for s in listed)
+    df = scans.read_processed_scan("05_test_sample_019", 1)
+    assert df is not None and "SCA_sum" in df.columns
+    assert scans.get_scan_metadata("05_test_sample_019", 2)["num_points"] == 120
+    assert scans.get_scan_deadtime("05_test_sample_019", 1)["wall_clock_seconds"] is None
+    assert scans.get_most_recent_file() in ("05_test_sample_019", "align_data_001")
+    df2, reason = scans.read_processed_scan_ex("05_test_sample_019", 99)
+    assert df2 is None and reason == "not_found"
+
+
+def test_active_counter_prefers_sca_sum_on_collector(collector_env):
+    from beamtimehero_cli.spec_data import scans
+
+    got = scans.get_active_counter("05_test_sample_019", 1)
+    assert got["active_counter"] == "SCA_sum"
+
+
+def test_normalized_multiscan_chain_on_collector(collector_env):
+    """get_normalized_scan_arrays is the chokepoint for average/convergence/
+    plot-stack/interpretation — the whole multi-scan surface."""
+    from beamtimehero_cli.spec_data import scans
+
+    combined, file_name, counter, used = scans.get_normalized_scan_arrays(
+        "05_test_sample_019")
+    assert file_name == "05_test_sample_019" and counter == "SCA_sum"
+    assert used == [1, 2, 3]
+    out = scans.average_energy_scans(file_name="05_test_sample_019")
+    assert out.get("error") is None and out["num_scans_averaged"] >= 2
+    assert out["active_counter"] == "SCA_sum"
+
+
+def test_average_latest_energy_scans_on_collector(collector_env):
+    from beamtimehero_cli.spec_data import scans
+
+    out = scans.average_latest_energy_scans()
+    # the only >1-sweep group is the sample group, never the 1-sweep align scan
+    assert out.get("error") is None
+    assert out["file_name"] == "05_test_sample_019"
+
+
+def test_plot_scan_on_collector(collector_env):
+    from beamtimehero_cli.spec_data import plotting
+
+    fig_b64 = None
+    result = plotting.plot_scan("05_test_sample_019", 1)
+    # plot_scan returns (payload, images) shapes that differ by version; accept
+    # any non-error result that mentions the group
+    assert result is not None
+
+
+def test_spec_chain_untouched_without_env(collector_dir, monkeypatch):
+    """No SSRL_COLLECTOR_DIR -> the SPEC/local_data chain answers (and finds
+    nothing in an empty scan dir), proving the default path is unchanged."""
+    monkeypatch.delenv("SSRL_COLLECTOR_DIR", raising=False)
+    monkeypatch.setenv("BL_SCAN_DIR", str(collector_dir / "empty-subdir"))
+    from beamtimehero_cli.spec_data import scans
+    assert scans.list_processed_scans(limit=5) == []

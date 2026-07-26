@@ -1,7 +1,15 @@
-"""Scan data operations -- reads SPEC files directly via silx.
+"""Scan data operations -- the file-backed chokepoint every generic tool uses.
 
-Uses local_data module for metadata queries and scan reading.
-No pickle files required.
+Two on-disk formats hide behind the same function surface:
+
+- SPEC files (default): reads via the ``local_data`` module (silx), with its
+  JSON metadata cache. ``file_name`` = SPEC file, ``scan_number`` = scan.
+- SSRL EXAFS Data Collector ASCII (BL 4-3 style stations): when
+  ``SSRL_COLLECTOR_DIR`` is set — chemcatal-bth sets it for collector-format
+  beamtimes — every function here routes to ``SSRLAsciiBackend`` instead.
+  ``file_name`` = scan-group key ('<sample>_<NNN>'), ``scan_number`` = sweep.
+  A collector directory never contains SPEC files, so the switch is
+  session-wide, not per-file.
 
 Pure-math helpers (edge-step normalization, active-counter selection,
 per-rep noise estimation, averaging) live in ``beamtimehero_cli.analysis.xas``
@@ -10,6 +18,7 @@ so the postgres-backed flow can reuse them without copy-pasting.
 from __future__ import annotations
 
 import logging
+import os
 
 import numpy as np
 import pandas as pd
@@ -18,20 +27,50 @@ logger = logging.getLogger(__name__)
 
 from beamtimehero_cli.analysis import xas
 from beamtimehero_cli.spec_data import local_data
+from beamtimehero_cli.spec_data.ssrl_backend import (
+    SSRL_COLLECTOR_DIR_ENV, SSRLAsciiBackend,
+)
+
+
+def _collector():
+    """SSRLAsciiBackend when the session points at a collector dir, else None.
+
+    Resolved per call (cheap: the backend re-scans its small directory per
+    operation anyway) so a wrapper that sets/clears SSRL_COLLECTOR_DIR per
+    beamtime selection is always honored."""
+    if os.getenv(SSRL_COLLECTOR_DIR_ENV):
+        return SSRLAsciiBackend()
+    return None
+
+
+def _scan_numbers_for_file(file_name):
+    b = _collector()
+    if b is not None:
+        return b.get_scan_numbers_for_file(file_name)
+    return local_data.get_scan_numbers_for_file(file_name)
 
 
 def list_processed_scans(limit=20):
     """List scans, most recent first."""
+    b = _collector()
+    if b is not None:
+        return b.list_scans(limit=limit)
     return local_data.list_processed_scans(limit=limit)
 
 
 def get_scan_metadata(file_name, scan_number):
     """Get full metadata for a single scan."""
+    b = _collector()
+    if b is not None:
+        return b.get_scan_metadata(file_name, scan_number)
     return local_data.get_scan_metadata(file_name, scan_number)
 
 
 def read_processed_scan(file_name, scan_number):
-    """Read scan data from the SPEC file. Returns DataFrame or None."""
+    """Read scan data from the data file. Returns DataFrame or None."""
+    b = _collector()
+    if b is not None:
+        return b.read_scan(file_name, scan_number)
     return local_data.read_processed_scan(file_name, scan_number)
 
 
@@ -39,11 +78,18 @@ def read_processed_scan_ex(file_name, scan_number):
     """Read scan data returning ``(df, reason)`` — reason distinguishes
     ``not_found`` / ``empty_scan`` / ``parse_error: ...`` when df is None.
     """
+    b = _collector()
+    if b is not None:
+        df = b.read_scan(file_name, scan_number)
+        return (df, None) if df is not None else (None, "not_found")
     return local_data.read_processed_scan_ex(file_name, scan_number)
 
 
 def get_scan_deadtime(file_name, scan_number):
     """Get dead time info for a single scan."""
+    b = _collector()
+    if b is not None:
+        return b.get_scan_deadtime(file_name, scan_number)
     return local_data.get_scan_deadtime(file_name, scan_number)
 
 
@@ -128,7 +174,10 @@ def edge_step_normalize_scan(file_name, scan_number, counter=None, normalize_by=
 
 
 def get_most_recent_file():
-    """Find the most recently modified SPEC file (excluding alignment)."""
+    """Find the most recently modified data file (excluding alignment)."""
+    b = _collector()
+    if b is not None:
+        return b.get_most_recent_file()
     return local_data.get_most_recent_file()
 
 
@@ -209,10 +258,10 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     if file_name is None:
         file_name = get_most_recent_file()
         if file_name is None:
-            raise ValueError("No SPEC files found.")
+            raise ValueError("No data files found.")
 
     if scan_numbers is None:
-        scan_numbers = local_data.get_scan_numbers_for_file(file_name)
+        scan_numbers = _scan_numbers_for_file(file_name)
 
     if not scan_numbers:
         raise ValueError(f"No scans found for file '{file_name}'.")
@@ -397,7 +446,14 @@ def average_energy_scans(
 def average_latest_energy_scans(e_min=None, e_max=None, weighting: str = "equal",
                                 counter=None, normalization: str = "edge_step"):
     """Find the latest file with >1 energy-motor scan and return the average."""
-    file_name = local_data.average_latest_energy_scans_file()
+    b = _collector()
+    if b is not None:
+        # collector semantics: the most recent scan group with >1 sweep
+        file_name = next(
+            (m["file_name"] for m in b.list_scans(limit=500)
+             if len(b.get_scan_numbers_for_file(m["file_name"])) > 1), None)
+    else:
+        file_name = local_data.average_latest_energy_scans_file()
     if not file_name:
         return {"error": "No file found with more than 1 energy scan."}
     return average_energy_scans(
@@ -416,7 +472,7 @@ def group_scans_by_spot(file_name, tol_mm: float = 0.05):
     Reads motor_positions from each scan's df.attrs. Scans missing Sx/Sy/Sz are
     grouped under spot_id=-1 (unknown).
     """
-    scan_numbers = local_data.get_scan_numbers_for_file(file_name)
+    scan_numbers = _scan_numbers_for_file(file_name)
     if not scan_numbers:
         return {"error": f"No scans found for file '{file_name}'."}
 
@@ -541,9 +597,9 @@ def get_raw_counter_arrays(file_name=None, scan_numbers=None, counter=None):
     if file_name is None:
         file_name = get_most_recent_file()
         if file_name is None:
-            raise ValueError("No SPEC files found.")
+            raise ValueError("No data files found.")
     if scan_numbers is None:
-        scan_numbers = local_data.get_scan_numbers_for_file(file_name)
+        scan_numbers = _scan_numbers_for_file(file_name)
     if not scan_numbers:
         raise ValueError(f"No scans found for file '{file_name}'.")
 

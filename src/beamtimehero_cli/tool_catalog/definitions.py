@@ -57,7 +57,7 @@ _NORMALIZATION_PROP = {
 }
 
 # Shared across the CAT-10 XAS interpretation tools (capstones + atomic).
-_XAS_FILE_NAME_PROP = {"type": "string", "description": "SPEC file name."}
+_XAS_FILE_NAME_PROP = {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."}
 _XAS_SCAN_NUMBERS_PROP = {
     "type": "array",
     "items": {"type": "integer"},
@@ -1221,7 +1221,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "properties": {
                     "file_name": {
                         "type": "string",
-                        "description": "SPEC file name. If omitted, uses the most recent file with >1 energy scan.",
+                        "description": "Data file name (SPEC file, or collector scan-group key). If omitted, uses the most recent file with >1 energy scan.",
                     },
                     "e_min": {
                         "type": "number",
@@ -1265,7 +1265,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "properties": {
                     "file_name": {
                         "type": "string",
-                        "description": "SPEC file name. If omitted, uses the most recent file.",
+                        "description": "Data file name (SPEC file, or scan-group key on SSRL Data Collector beamtimes). If omitted, uses the most recent file.",
                     },
                     "e_min": {
                         "type": "number",
@@ -1300,7 +1300,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "properties": {
                     "file_name": {
                         "type": "string",
-                        "description": "SPEC file name. If omitted, uses the most recent file.",
+                        "description": "Data file name (SPEC file, or scan-group key on SSRL Data Collector beamtimes). If omitted, uses the most recent file.",
                     },
                     "e_min": {
                         "type": "number",
@@ -1345,7 +1345,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                 "properties": {
                     "file_name": {
                         "type": "string",
-                        "description": "SPEC file name.",
+                        "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes.",
                     },
                     "e_min": {
                         "type": "number",
@@ -1400,7 +1400,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "tol_mm": {
                         "type": "number",
                         "default": 0.05,
@@ -1426,7 +1426,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "e_min": {
                         "type": "number",
                         "description": "Lower bound (eV) of the feature window. REQUIRED.",
@@ -1481,7 +1481,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "file_names": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of SPEC file names (one per sample) to compare.",
+                        "description": "List of data file names (one per sample) to compare.",
                     },
                     "counter": _COUNTER_PROP,
                     "normalization": _NORMALIZATION_PROP,
@@ -1504,7 +1504,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional but strongly recommended."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
                     "counter": _COUNTER_PROP,
@@ -1527,7 +1527,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
                     "counter": _COUNTER_PROP,
@@ -1549,7 +1549,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). Optional."},
                     "e_max": {"type": "number", "description": "Upper bound (eV)."},
                     "counter": _COUNTER_PROP,
@@ -1572,7 +1572,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "e_min": {"type": "number", "description": "Lower bound (eV). REQUIRED."},
                     "e_max": {"type": "number", "description": "Upper bound (eV). REQUIRED."},
                     "statistic": {
@@ -2112,7 +2112,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "scan_numbers": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -2489,7 +2489,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "scan_number": {"type": "integer", "description": "The elastic-line scan number (ascan mono)."},
                     "counter": _XRS_COUNTER_PROP,
                 },
@@ -2510,7 +2510,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "scan_number": {"type": "integer", "description": "Scan number to convert."},
                     "counter": _XRS_COUNTER_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2533,7 +2533,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": {
                         "type": "array", "items": {"type": "integer"},
@@ -2565,7 +2565,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": {"type": "array", "items": {"type": "integer"}, "description": "Data scans to average."},
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2598,7 +2598,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": {"type": "array", "items": {"type": "integer"}, "description": "Data scans to average."},
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2627,7 +2627,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_names": {"type": "array", "items": {"type": "string"}, "description": "SPEC file names to overlay."},
+                    "file_names": {"type": "array", "items": {"type": "string"}, "description": "Data file names to overlay."},
                     "counter": _XRS_COUNTER_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
                     "edge_lo": {"type": "number", "description": "If set with edge_hi, Compton-subtract each spectrum first."},
@@ -2656,7 +2656,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "scan_number": {"type": "integer", "description": "Scan number holding the per-crystal channels."},
                     "counters": {
                         "type": "array", "items": {"type": "string"},
@@ -2682,7 +2682,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name."},
+                    "file_name": {"type": "string", "description": "Data file name: SPEC file, or scan-group key on SSRL Data Collector beamtimes."},
                     "scan_number": {"type": "integer", "description": "Scan number holding the per-crystal channels."},
                     "counters": {"type": "array", "items": {"type": "string"}, "description": "Counter names, one per crystal/ROI channel."},
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2729,7 +2729,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2757,7 +2757,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2855,7 +2855,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
@@ -2880,7 +2880,7 @@ AUTONOMY_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_name": {"type": "string", "description": "SPEC file name (default: most recent)."},
+                    "file_name": {"type": "string", "description": "Data file name (SPEC file, or collector scan-group key; default: most recent)."},
                     "counter": _XRS_COUNTER_PROP,
                     "scan_numbers": _XRS_SCAN_NUMBERS_PROP,
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,

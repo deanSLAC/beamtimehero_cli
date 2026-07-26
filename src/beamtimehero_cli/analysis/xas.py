@@ -27,10 +27,13 @@ def pick_active_counter(df: pd.DataFrame) -> tuple[str, str]:
 
     Returns ``(counter_name, reason)``. Decision logic:
 
-    1. If ``ppboff`` is a counter, it is the active counter.
-    2. Else among ``vortDT, vortDT2, vortDT3, vortDT4``, the one with the
+    1. If ``SCA_sum`` is a counter (SSRL EXAFS Data Collector frames — the
+       parser-synthesized summed Xspress3 fluorescence), it is the active
+       counter.
+    2. Else if ``ppboff`` is a counter, it is the active counter.
+    3. Else among ``vortDT, vortDT2, vortDT3, vortDT4``, the one with the
        highest max wins.
-    3. Otherwise default to ``I1``.
+    4. Otherwise default to ``I1``.
 
     .. warning::
 
@@ -43,6 +46,9 @@ def pick_active_counter(df: pd.DataFrame) -> tuple[str, str]:
        See ``beamtimehero ref counter-selection``.
     """
     cols = set(df.columns)
+
+    if "SCA_sum" in cols:
+        return "SCA_sum", "SCA_sum present (summed Xspress3 fluorescence)"
 
     if "ppboff" in cols:
         return "ppboff", "ppboff counter present"
