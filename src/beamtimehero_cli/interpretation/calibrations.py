@@ -48,6 +48,21 @@ PER_ELEMENT_EDGE_SHIFT = {
     },
 }
 
+# Maximum plausible oxidation-state SPAN per element (|max attainable
+# oxidation state|, basic descriptive chemistry — group maxima / known
+# highest oxides). Used only as a physical clamp on edge-shift valence
+# estimates: a shift-vs-same-element-reference can never convert to more
+# valence units than the element possesses.
+MAX_VALENCE_SPAN = {
+    "Ti": 4, "V": 5, "Cr": 6, "Mn": 7, "Fe": 6, "Co": 4, "Ni": 4,
+    "Cu": 3, "Zn": 2, "Ga": 3, "Ge": 4, "As": 5, "Se": 6, "Br": 7,
+    "Sr": 2, "Y": 3, "Zr": 4, "Nb": 5, "Mo": 6, "Ru": 8, "Rh": 4,
+    "Pd": 4, "Ag": 3, "Cd": 2, "In": 3, "Sn": 4, "Sb": 5, "Te": 6,
+    "I": 7, "Ba": 2, "W": 6, "Re": 7, "Ir": 6, "Pt": 6, "Au": 3,
+    "Pb": 4, "Ce": 4, "U": 6,
+}
+DEFAULT_VALENCE_SPAN = 7  # conservative fallback for unlisted elements
+
 # ---------------------------------------------------------------------------
 # Fe K pre-edge (Wilke 2001) — the centroid/intensity (CII) method
 # ---------------------------------------------------------------------------

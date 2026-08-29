@@ -64,6 +64,7 @@ def interpret_oxidation_state(descriptors: dict, calibration: dict) -> dict:
         "3d_K": _oxidation_3d_k,
         "4d_K": _oxidation_4d_k,
         "5d_K": _oxidation_5d_k,
+        "main_group_K": _oxidation_main_group_k,
         "ln_L3": _oxidation_ln_l3,
         "an_L3": _oxidation_ln_l3,   # same white-line logic, An-flavored caveat
         "an_M": _oxidation_an_m,
@@ -106,6 +107,14 @@ def _oxidation_4d_k(descriptors: dict, calibration: dict, flags: list[str]) -> d
 
 def _oxidation_5d_k(descriptors: dict, calibration: dict, flags: list[str]) -> dict:
     return _oxidation_k_edge_shift(descriptors, calibration, flags, "5d_K")
+
+
+def _oxidation_main_group_k(descriptors: dict, calibration: dict,
+                            flags: list[str]) -> dict:
+    """s/p-block K-edges (As, Se, Sn, ...): same edge-shift logic as the
+    d-metal K path — the K edge still moves up with oxidation — with the
+    generic-slope caveat carrying the extra main-group warning."""
+    return _oxidation_k_edge_shift(descriptors, calibration, flags, "main_group_K")
 
 
 def _oxidation_fe_pre_edge(descriptors: dict, calibration: dict,
@@ -182,8 +191,28 @@ def _oxidation_fe_pre_edge(descriptors: dict, calibration: dict,
 
 
 # eV-per-valence edge-shift is the fallback for every K-edge without an
-# Fe-style pre-edge calibration: non-Fe 3d, and all 4d and 5d K-edges.
-_K_EDGE_SHELL = {"3d_K": "3d", "4d_K": "4d", "5d_K": "5d"}
+# Fe-style pre-edge calibration: non-Fe 3d, all 4d and 5d, and main-group
+# K-edges.
+_K_EDGE_SHELL = {"3d_K": "3d", "4d_K": "4d", "5d_K": "5d",
+                 "main_group_K": "main-group"}
+
+# Honesty gates for the edge-shift valence estimate. A chemical shift within
+# one element is 1-3 eV/valence over at most ~6-8 valence units, so a shift
+# beyond _MAX_PLAUSIBLE_SHIFT_EV is an anchor mismatch (wrong element/edge
+# assignment, uncalibrated axis, or a tabulated-vs-measured E0-convention
+# gap), never chemistry. An estimate whose uncertainty exceeds
+# _MAX_ESTIMATE_UNC is narrated as position-only rather than as a number —
+# "+6.6 units (range -2.2 to 15.3)" is worse than no number.
+_MAX_PLAUSIBLE_SHIFT_EV = 10.0
+_MAX_ESTIMATE_UNC = 2.0
+
+
+def _shift_quality(shift: float) -> str:
+    if shift > 1.0:
+        return "consistent with an oxidized species"
+    if shift < -1.0:
+        return "consistent with a reduced or metallic-like species"
+    return "close to the reference position"
 
 
 def _oxidation_k_edge_shift(descriptors: dict, calibration: dict,
@@ -242,7 +271,45 @@ def _oxidation_k_edge_shift(descriptors: dict, calibration: dict,
         )
 
     shift = e0_cal - ref_ev
+    direction = "above" if shift >= 0 else "below"
     energy_unc = float(np.hypot(e0.get("e0_unc_ev") or 0.05, cal_unc))
+    used["edge_shift_ev"] = round(float(shift), 2)
+
+    # Gate 1 — plausibility. A shift this large is never a chemical shift:
+    # suspect a misidentified element/edge or an energy-axis problem.
+    if abs(shift) > _MAX_PLAUSIBLE_SHIFT_EV:
+        v["confidence"] = "refused"
+        v["flags"].append("shift_implausible")
+        v["narration"] = (
+            f"{element} K edge measured at {e0_cal:.2f} eV, {shift:+.2f} eV "
+            f"{direction} {ref_desc} — far beyond any chemical shift "
+            f"(1-3 eV per valence unit). This indicates a misidentified "
+            "element/edge, an uncalibrated energy axis, or an E0-convention "
+            "mismatch, not chemistry. No valence is assigned; verify the "
+            "edge assignment (pass element/edge explicitly) and the session "
+            "energy calibration."
+        )
+        return v
+
+    # Gate 2 — anchor honesty. The tabulated edge energy is a neutral-metal
+    # compilation label (GENERIC_EDGE_SHIFT's own validity note forbids using
+    # it as a shift anchor: an ordinary M(II) oxide sits several eV above
+    # it). Without a same-element session reference, narrate the position
+    # and the qualitative direction, never a valence number.
+    if not same_ref:
+        v["confidence"] = "low"
+        v["flags"].append("no_session_reference")
+        v["narration"] = (
+            f"{element} K edge at {e0_cal:.2f} eV sits {shift:+.2f} eV "
+            f"{direction} {ref_desc} — {_shift_quality(shift)}. No valence "
+            "number is assigned against a tabulated anchor (a compilation "
+            "label for the neutral element, not a valence reference): "
+            "quantifying the oxidation state needs a same-element measured "
+            "reference (record_energy_calibration, or LCF against measured "
+            "standards)."
+        )
+        return v
+
     slope_entry = cal.PER_ELEMENT_EDGE_SHIFT.get(element or "")
     if slope_entry:
         slope = slope_entry["ev_per_valence"]
@@ -267,15 +334,45 @@ def _oxidation_k_edge_shift(descriptors: dict, calibration: dict,
                 "order-of-magnitude guide only."
             )
 
+    # Gate 3 — usefulness. If the uncertainty spans more than ~2 valence
+    # units either way, a number misleads; report position + direction only.
+    if unc_val > _MAX_ESTIMATE_UNC:
+        v["confidence"] = "low"
+        v["flags"].append("valence_estimate_unreliable")
+        v["narration"] = (
+            f"{element} K edge at {e0_cal:.2f} eV sits {shift:+.2f} eV "
+            f"{direction} {ref_desc} — {_shift_quality(shift)}. The "
+            f"valence conversion is suppressed: its uncertainty "
+            f"(±{unc_val:.1f} units) exceeds what the shift can support. "
+            "A cited per-element slope or LCF against measured standards "
+            "is needed for a number."
+        )
+        return v
+
+    # Gate 4 — physical clamp. Shifts vs a same-element reference cannot
+    # exceed the element's valence span in magnitude.
+    max_span = cal.MAX_VALENCE_SPAN.get(element or "", cal.DEFAULT_VALENCE_SPAN)
+    lo = max(float(est - unc_val), -max_span)
+    hi = min(float(est + unc_val), max_span)
+    if abs(est) > max_span:
+        v["confidence"] = "refused"
+        v["flags"].append("shift_implausible")
+        v["narration"] = (
+            f"{element} K edge shift of {shift:+.2f} eV vs {ref_desc} "
+            f"converts to {est:+.1f} valence units — outside the physically "
+            f"possible span (±{max_span}) for {element}. Anchor or slope "
+            "mismatch; no valence assigned."
+        )
+        return v
+
     v["estimate"] = round(float(est), 1)
-    v["range"] = [round(float(est - unc_val), 1), round(float(est + unc_val), 1)]
+    v["range"] = [round(lo, 1), round(hi, 1)]
     v["confidence"] = "low"
     v["caveats"].append(
         "Edge-shift-vs-reference valence is a coarse bracket "
         "(ligand/coordination dependent); pre-edge or LCF methods are "
         "preferred when available."
     )
-    direction = "above" if shift >= 0 else "below"
     v["narration"] = (
         f"Calibrated {element} K edge at {e0_cal:.2f} eV sits "
         f"{shift:+.2f} eV {direction} {ref_desc}, indicating an oxidation "
@@ -455,8 +552,8 @@ def _oxidation_unsupported(descriptors: dict, calibration: dict,
     v["confidence"] = "refused"
     v["narration"] = (
         "This element/edge is outside the v1 interpretation scope "
-        "(3d K, Ln/An L3, An M4/M5, 5d L3). Descriptors are still "
-        "available from extract_xas_descriptors."
+        "(3d/4d/5d/main-group K, Ln/An L3, An M4/M5, 5d L3). Descriptors "
+        "are still available from extract_xas_descriptors."
     )
     return v
 

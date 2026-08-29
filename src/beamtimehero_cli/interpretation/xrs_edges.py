@@ -81,12 +81,22 @@ def get_xrs_edge_info(element: str, edge: str) -> dict:
     }
 
 
-def suggest_xrs_edge(loss_min: float, loss_max: float) -> dict:
+# Near-tie margin (eV): when the two closest curated edges land within this
+# distance difference of the anchor, the pick is reported as ambiguous.
+_AMBIGUITY_MARGIN_EV = 8.0
+
+
+def suggest_xrs_edge(loss_min: float, loss_max: float,
+                     onset_ev: float | None = None) -> dict:
     """Suggest the most plausible XRS edge for an energy-loss window.
 
-    The edge onset sits in the lower third of a well-planned loss scan (Compton
-    background above), so candidates are ranked by distance from the 1/3 point.
-    Returns ``{found, best, alternatives, note}`` or ``{found: False, reason}``.
+    The anchor is the measured edge onset when the caller has one, else the
+    1/3 point of the window (the onset sits in the lower third of a
+    well-planned loss scan; Compton background above). A near-tie between
+    two curated edges is reported as ``ambiguous`` with a ``competing``
+    list so callers can require an explicit element/edge instead of
+    narrating the wrong edge. Returns ``{found, best, alternatives, ...}``
+    or ``{found: False, reason}``.
     """
     candidates = []
     for (el, edge), (energy, _fam) in _XRS_EDGES.items():
@@ -100,14 +110,32 @@ def suggest_xrs_edge(loss_min: float, loss_max: float) -> dict:
                 f"[{loss_min:.1f}, {loss_max:.1f}] eV. Pass element/edge explicitly."
             ),
         }
-    anchor = loss_min + (loss_max - loss_min) / 3.0
+    anchor = float(onset_ev) if onset_ev is not None \
+        else loss_min + (loss_max - loss_min) / 3.0
     candidates.sort(key=lambda c: abs(c["tabulated_energy_ev"] - anchor))
-    return {
+    dists = [abs(c["tabulated_energy_ev"] - anchor) for c in candidates]
+    ambiguous = len(candidates) > 1 and (dists[1] - dists[0]) < _AMBIGUITY_MARGIN_EV
+    out = {
         "found": True,
         "best": candidates[0],
         "alternatives": candidates[1:4],
+        "anchor_ev": round(anchor, 2),
+        "anchor_source": "measured_onset" if onset_ev is not None else "window_third",
+        "ambiguous": ambiguous,
         "note": (
             "Auto-suggested from the loss window and tabulated edge labels "
             "(not calibration). Override with element/edge if wrong."
         ),
     }
+    if ambiguous:
+        out["competing"] = [
+            {"element": c["element"], "edge": c["edge"],
+             "tabulated_energy_ev": c["tabulated_energy_ev"]}
+            for c in candidates[:3]
+        ]
+        out["note"] = (
+            "AMBIGUOUS auto-detection: two or more curated edges sit "
+            "comparably close to this loss window. Pass element/edge "
+            "explicitly rather than trusting this pick. " + out["note"]
+        )
+    return out

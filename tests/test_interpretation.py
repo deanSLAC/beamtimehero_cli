@@ -58,14 +58,55 @@ def test_xraydb_offline_lookups():
     assert edges.classify_edge_family("Ru", "K") == "4d_K"
     assert edges.classify_edge_family("Zr", "K") == "4d_K"
     assert edges.classify_edge_family("Au", "K") == "5d_K"
-    # Ca (Z=20) sits just below the 3d block — genuinely out of scope
-    assert edges.classify_edge_family("Ca", "K") == "other"
+    # s/p-block K edges are in scope as main_group_K (the As->Au L3
+    # auto-detect failure came from their absence)
+    assert edges.classify_edge_family("Ca", "K") == "main_group_K"
+    assert edges.classify_edge_family("As", "K") == "main_group_K"
+    assert edges.classify_edge_family("Se", "K") == "main_group_K"
+    assert edges.classify_edge_family("Sn", "K") == "main_group_K"
 
 
 def test_suggest_edge_from_window():
     s = edges.suggest_edge(7090, 7220)
     assert s["found"] and s["best"]["element"] == "Fe" and s["best"]["edge"] == "K"
     assert not edges.suggest_edge(1000, 1050)["found"]
+
+
+def test_suggest_edge_prefers_ni_k_over_er_l3():
+    # Ni K (8333) vs Er L3 (8358): the old window-1/3 anchor picked Er on
+    # any scan with a post-edge tail. The K-edge/common-absorber priors must
+    # settle it even without a measured E0...
+    for window in ((8300, 8500), (8300, 8700), (8250, 8800)):
+        s = edges.suggest_edge(*window)
+        assert (s["best"]["element"], s["best"]["edge"]) == ("Ni", "K"), window
+    # ...and a measured E0 anchor settles it decisively.
+    s = edges.suggest_edge(8250, 8800, e0_ev=8346.0)
+    assert (s["best"]["element"], s["best"]["edge"]) == ("Ni", "K")
+    assert s["anchor_source"] == "measured_e0"
+
+
+def test_suggest_edge_finds_as_k():
+    # As K (11867) was previously absent from scope entirely; Au L3 (11919)
+    # won by default.
+    s = edges.suggest_edge(11800, 12100)
+    assert (s["best"]["element"], s["best"]["edge"]) == ("As", "K")
+    s = edges.suggest_edge(11750, 12300, e0_ev=11870.0)
+    assert (s["best"]["element"], s["best"]["edge"]) == ("As", "K")
+
+
+def test_suggest_edge_reports_ambiguity():
+    # A genuine near-tie: two equal-prior edges (Sm L3 6716, Eu L3 6977 —
+    # neither a common absorber, neither a K edge) with the anchor at their
+    # midpoint and no K edge in the window. Scores tie -> ambiguous, with
+    # the competing list surfaced.
+    s = edges.suggest_edge(6600, 7050, e0_ev=(6716.0 + 6977.0) / 2.0)
+    assert s["found"]
+    assert s["ambiguous"] is True
+    assert len(s.get("competing", [])) >= 2
+    assert "AMBIGUOUS" in s["note"]
+    # And the priors mean a clear case is NOT flagged ambiguous.
+    clear = edges.suggest_edge(8300, 8700, e0_ev=8346.0)  # Ni K vs Er L3
+    assert clear["ambiguous"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -253,8 +294,11 @@ def test_assumed_calibration_yields_estimate_not_refusal():
 
 
 def test_ru_k_edge_classified_and_interpreted():
-    # A 4d transition-metal K-edge (Ru, Z=44) is now in scope and must not
-    # be refused as an unsupported family.
+    # A 4d transition-metal K-edge (Ru, Z=44) is in scope: not refused as an
+    # unsupported family. Against a tabulated (neutral-metal label) anchor
+    # the verdict is position-only — narrated shift + direction, but NO
+    # valence number (the "+6.6 units (range -2.2 to 15.3)" class of output
+    # is gone).
     ru = edges.get_edge_info("Ru", "K")
     assert ru["family"] == "4d_K"
     e0_tab = ru["tabulated_energy_ev"]
@@ -267,11 +311,52 @@ def test_ru_k_edge_classified_and_interpreted():
     v = I.interpret_oxidation_state(desc, ASSUMED_CALIB)
     assert v["family"] == "4d_K"
     assert v["confidence"] != "refused"
-    assert v["estimate"] is not None
+    assert v["estimate"] is None
+    assert "no_session_reference" in v["flags"]
+    assert "No valence number" in v["narration"]
+    assert "oxidized" in v["narration"]  # qualitative direction still given
     # anchored on the tabulated edge under the assume-calibrated model
     assert any("tabulated" in c.lower() for c in v["caveats"])
-    assert v["narration"]
     json.dumps(v, default=str)
+
+    # With a same-element session reference the numeric estimate returns.
+    ref_calib = {
+        "calibrated": True, "assumed": False, "offset_ev": 0.0,
+        "measured_e0_unc_ev": 0.1, "element": "Ru",
+        "assigned_reference_ev": desc["e0"]["e0_ev"] - 2.0,  # shift = +2.0 eV
+    }
+    v2 = I.interpret_oxidation_state(desc, ref_calib)
+    assert v2["estimate"] is not None
+    assert v2["estimate"] == pytest.approx(1.0, abs=0.15)  # 2.0 eV / 2 eV-per-unit
+    assert "unit(s) from that reference" in v2["narration"]
+
+
+def test_k_edge_shift_gates():
+    # Gate 1: an implausible shift (>10 eV) is refused with a diagnosis,
+    # even against a same-element reference.
+    ru = edges.get_edge_info("Ru", "K")
+    e0_tab = ru["tabulated_energy_ev"]
+    e = np.arange(e0_tab - 30.0, e0_tab + 100.0, 0.25)
+    edge_c = e0_tab + 13.0  # the George-campaign class of offset
+    mu = 0.5 * (1 + erf((e - edge_c) / 2.0)) \
+        + 0.9 * np.exp(-0.5 * ((e - (edge_c + 6.0)) / 2.5) ** 2)
+    desc, _ = D.extract_descriptors(e, mu, edge_info=ru)
+    v = I.interpret_oxidation_state(desc, ASSUMED_CALIB)
+    assert v["estimate"] is None
+    assert "shift_implausible" in v["flags"]
+    assert "misidentified" in v["narration"]
+
+    # Gate 3: a generic-slope conversion whose uncertainty exceeds ±2 units
+    # is suppressed (position-only), not narrated as a number.
+    ref_calib = {
+        "calibrated": True, "assumed": False, "offset_ev": 0.0,
+        "measured_e0_unc_ev": 0.1, "element": "Ru",
+        "assigned_reference_ev": desc["e0"]["e0_ev"] - 6.0,  # shift = +6 eV
+    }
+    v3 = I.interpret_oxidation_state(desc, ref_calib)
+    assert v3["estimate"] is None
+    assert "valence_estimate_unreliable" in v3["flags"]
+    assert "suppressed" in v3["narration"]
 
 
 def test_calibrated_fe_oxidation_state_moves_with_shift():

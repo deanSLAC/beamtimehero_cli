@@ -1199,11 +1199,26 @@ def _interpretation_inputs(arguments: dict):
     elif element or edge:
         raise ValueError("Pass BOTH element and edge, or neither (auto-detect).")
     else:
-        suggestion = interp_edges.suggest_edge(float(energy.min()), float(energy.max()))
+        # Anchor auto-detection on the measured E0 when it can be fit — the
+        # window 1/3-point proxy misranks neighbors 20-30 eV apart (Ni K vs
+        # Er L3) whenever the scan carries a long post-edge tail.
+        try:
+            from beamtimehero_cli.interpretation import descriptors as interp_desc
+            e0_anchor = float(interp_desc.find_e0(energy, mu)["e0_ev"])
+        except Exception:
+            e0_anchor = None
+        suggestion = interp_edges.suggest_edge(
+            float(energy.min()), float(energy.max()), e0_ev=e0_anchor)
         if not suggestion["found"]:
             raise ValueError(suggestion["reason"])
         edge_info = suggestion["best"]
-        edge_info["detection"] = "auto_from_energy_window"
+        edge_info["detection"] = (
+            "auto_from_measured_e0" if suggestion.get("anchor_source") == "measured_e0"
+            else "auto_from_energy_window")
+        if suggestion.get("ambiguous"):
+            edge_info["ambiguous"] = True
+            edge_info["competing_edges"] = suggestion.get("competing", [])
+            edge_info["detection_note"] = suggestion["note"]
 
     meta = {
         "file_name": file_name,
@@ -1924,9 +1939,15 @@ def _xrs_edge_descriptors(arguments):
         edge_info = xrs_edges.get_xrs_edge_info(element, edge)
     elif r["axis"] == "energy_loss_ev":
         finite = np.isfinite(loss)
-        sug = xrs_edges.suggest_xrs_edge(float(loss[finite].min()), float(loss[finite].max()))
+        onset = float(edge_lo) if edge_lo is not None else None
+        sug = xrs_edges.suggest_xrs_edge(
+            float(loss[finite].min()), float(loss[finite].max()), onset_ev=onset)
         if sug.get("found"):
             edge_info = sug["best"]
+            if sug.get("ambiguous"):
+                edge_info["ambiguous"] = True
+                edge_info["competing_edges"] = sug.get("competing", [])
+                edge_info["detection_note"] = sug["note"]
 
     ew = (float(edge_lo), float(edge_hi)) if subtracted else None
     descriptors, arrays = xd.extract_xrs_descriptors(loss, inten, edge_info=edge_info,
