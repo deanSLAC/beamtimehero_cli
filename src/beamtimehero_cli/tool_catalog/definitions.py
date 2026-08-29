@@ -2471,6 +2471,149 @@ AUTONOMY_TOOL_DEFINITIONS = [
         },
     },
     # -----------------------------------------------------------------
+    # CAT-10 · Cross-file XAS comparison (LCF / registration / differences).
+    # Spectra load through the normalized-arrays chokepoint, so SPEC files,
+    # collector groups AND already-merged two-column ASCII files (e.g.
+    # MERGE/*.dat: energy, normalized intensity) are all accepted.
+    # -----------------------------------------------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_xas_to_references",
+            "description": (
+                "Quantify speciation with XANES linear-combination fitting: "
+                "non-negative (nnls) fit of a target spectrum against measured "
+                "reference spectra → component fractions, fit R², residual RMS, "
+                "and a target/fit/residual plot. Target and references load like "
+                "any multi-scan tool input (reps averaged after normalization), "
+                "and already-merged two-column ASCII files (e.g. MERGE/*.dat) are "
+                "accepted directly. LCF is only meaningful on a common energy "
+                "calibration: per-file E0s are reported so an offset is visible, "
+                "and a warning fires when the reference E0 spread exceeds ~1 eV — "
+                "run align_spectra first when in doubt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {
+                        "type": "string",
+                        "description": (
+                            "Target spectrum: SPEC file, collector scan-group key, "
+                            "or merged two-column ASCII file (relative path or "
+                            "basename, e.g. 'MERGE/sample.dat')."
+                        ),
+                    },
+                    "scan_numbers": _XAS_SCAN_NUMBERS_PROP,
+                    "references": {
+                        "type": "array", "items": {"type": "object"},
+                        "description": (
+                            "Reference spectra (measured standards): "
+                            "[{file_name, scan_numbers?, label?}, ...]. Each loads "
+                            "through the same path as the target (merged files OK)."
+                        ),
+                    },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
+                },
+                "required": ["file_name", "references"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "align_spectra",
+            "description": (
+                "Cross-file energy registration: find each spectrum's E0 "
+                "(derivative maximum), report the shift that lands it on a common "
+                "target (the FIRST spectrum's E0, or an explicit target_e0), and "
+                "return a two-panel before/after overlay plot. A proposed shift "
+                "beyond ±10 eV is REFUSED (glitch-latched E0, not mono drift) and "
+                "that spectrum stays unshifted. Nothing is written — this REPORTS "
+                "per-file {e0_before, shift_applied, e0_after}; quote the shifts "
+                "in reports whenever absolute energies are compared across files. "
+                "Run this BEFORE comparing edge positions across files or feeding "
+                "compare_xas_to_references. Merged two-column ASCII files (e.g. "
+                "MERGE/*.dat) are accepted."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "spectra": {
+                        "type": "array", "items": {"type": "object"},
+                        "description": (
+                            "Spectra to register: [{file_name, scan_numbers?, "
+                            "label?}, ...] (2+). The first entry is the alignment "
+                            "reference unless target_e0 is given."
+                        ),
+                    },
+                    "target_e0": {
+                        "type": "number",
+                        "description": (
+                            "Explicit target E0 (eV) to align every spectrum to "
+                            "(e.g. the tabulated edge energy). Default: the first "
+                            "spectrum's measured E0."
+                        ),
+                    },
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
+                },
+                "required": ["spectra"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "difference_spectrum",
+            "description": (
+                "Difference spectrum A − B on a common interpolated energy grid, "
+                "computed AFTER per-spectrum E0 alignment by default (align=false "
+                "to difference the raw axes — then a calibration offset shows up "
+                "as a derivative-shaped artifact). Returns max |Δ| and its energy, "
+                "RMS Δ, the applied alignment shifts, and a two-panel plot "
+                "(A and B overlaid; A − B). Use it to isolate a speciation change "
+                "between two conditions. Merged two-column ASCII files (e.g. "
+                "MERGE/*.dat) are accepted for either side."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name_a": {
+                        "type": "string",
+                        "description": "Spectrum A (the minuend): SPEC file, collector group key, or merged two-column ASCII.",
+                    },
+                    "file_name_b": {
+                        "type": "string",
+                        "description": "Spectrum B (subtracted from A): same accepted formats.",
+                    },
+                    "scan_numbers_a": {
+                        "type": "array", "items": {"type": "integer"},
+                        "description": "Restrict A to these scan numbers (default: all).",
+                    },
+                    "scan_numbers_b": {
+                        "type": "array", "items": {"type": "integer"},
+                        "description": "Restrict B to these scan numbers (default: all).",
+                    },
+                    "align": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": (
+                            "E0-align B onto A before differencing (default true). "
+                            "Set false only when both files share one calibrated axis "
+                            "and the E0 shift itself is the signal."
+                        ),
+                    },
+                    "label_a": {"type": "string", "description": "Plot label for A (default: file name)."},
+                    "label_b": {"type": "string", "description": "Plot label for B (default: file name)."},
+                    "counter": _COUNTER_PROP,
+                    "normalization": _NORMALIZATION_PROP,
+                },
+                "required": ["file_name_a", "file_name_b"],
+            },
+        },
+    },
+    # -----------------------------------------------------------------
     # CAT-XRS · X-ray Raman scattering (energy-loss axis, NOT edge-step).
     # See `beamtimehero ref counter-selection` and
     # docs/xrs-analysis-branch-plan.md.
@@ -3106,6 +3249,7 @@ AUTONOMY_TOOL_CATEGORIES = [
         "identify_edge", "find_edge_e0", "normalize_xas_intensity",
         "fit_xas_pre_edge", "fit_xas_white_line", "assess_xas_quality",
         "detect_per_scan_drift",
+        "compare_xas_to_references", "align_spectra", "difference_spectrum",
     ]),
     ("CAT-XRS Raman processing", [
         "calibrate_energy_loss", "build_loss_axis", "average_xrs_scans",

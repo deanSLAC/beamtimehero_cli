@@ -1608,6 +1608,247 @@ def t_detect_per_scan_drift(arguments: dict) -> tuple[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# CAT-10 · Cross-file XAS comparison (LCF, energy registration, differences)
+#
+# Every spectrum loads through scans.get_normalized_scan_arrays, so SPEC
+# files, collector groups AND already-merged two-column ASCII files (e.g.
+# MERGE/*.dat) are all accepted.
+# ---------------------------------------------------------------------------
+
+def _load_spectrum_entries(entries, counter=None, normalization="edge_step",
+                           kind="spectra"):
+    """Load ``[{file_name, scan_numbers?, label?}, ...]`` into spectrum dicts.
+
+    Each result: ``{label, file_name, energy, mu, counter, normalization,
+    scan_numbers, e0_ev}`` — reps averaged (equal weights), E0 from the
+    derivative maximum (None when it cannot be fit). Raises ValueError
+    naming the failing entry so handlers share one error path.
+    """
+    from beamtimehero_cli.analysis.xas import average_reps
+    from beamtimehero_cli.interpretation.descriptors import find_e0
+
+    out = []
+    for i, entry in enumerate(entries):
+        entry = entry or {}
+        file_name = entry.get("file_name")
+        if not file_name:
+            raise ValueError(f"{kind}[{i}]: file_name is required.")
+        try:
+            combined, file_name, ctr, used = scan_data.get_normalized_scan_arrays(
+                file_name, scan_numbers=entry.get("scan_numbers"),
+                counter=counter, normalization=normalization,
+            )
+        except ValueError as e:
+            raise ValueError(f"'{file_name}': {e}") from None
+        combined = combined.dropna()
+        if len(combined) < 10:
+            raise ValueError(
+                f"'{file_name}': too few overlapping energy points ({len(combined)})."
+            )
+        energy = combined.index.values.astype(float)
+        if combined.shape[1] == 1:
+            mu = combined.iloc[:, 0].values.astype(float)
+        else:
+            avg, _std, _weights = average_reps(combined)
+            mu = avg.values.astype(float)
+        try:
+            e0 = round(float(find_e0(energy, mu)["e0_ev"]), 4)
+        except Exception:  # noqa: BLE001 — E0 is advisory here
+            e0 = None
+        out.append({
+            "label": entry.get("label") or file_name,
+            "file_name": file_name,
+            "energy": energy,
+            "mu": mu,
+            "counter": combined.attrs.get("counter", ctr),
+            "normalization": combined.attrs.get("normalization", normalization),
+            "scan_numbers": used,
+            "e0_ev": e0,
+        })
+    return out
+
+
+# References measured on visibly different energy calibrations make LCF
+# fractions meaningless; ~1 eV of E0 spread is well beyond mono drift.
+_LCF_E0_SPREAD_WARN_EV = 1.0
+
+_LCF_CALIBRATION_CAVEAT = (
+    "LCF is only meaningful on a common energy calibration — compare the "
+    "per-file E0s reported here and run align_spectra first if they disagree."
+)
+
+
+def t_compare_xas_to_references(arguments: dict) -> tuple[str, list[str]]:
+    """XANES LCF: nnls fit of a target spectrum to measured references."""
+    from beamtimehero_cli.generic_data.lcf import compare_to_references
+
+    counter = arguments.get("counter")
+    normalization = arguments.get("normalization", "edge_step")
+    try:
+        target = _load_spectrum_entries(
+            [{"file_name": arguments.get("file_name"),
+              "scan_numbers": arguments.get("scan_numbers"),
+              "label": "target"}],
+            counter=counter, normalization=normalization, kind="target",
+        )[0]
+        refs = _load_spectrum_entries(
+            arguments.get("references") or [],
+            counter=counter, normalization=normalization, kind="references",
+        )
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+    if not refs:
+        return json.dumps(
+            {"error": "references must hold at least one {file_name, ...} entry."},
+            indent=2), []
+
+    result = compare_to_references(
+        target["energy"], target["mu"],
+        [{"name": r["label"], "axis": r["energy"], "intensity": r["mu"]}
+         for r in refs],
+    )
+    if "error" in result:
+        return json.dumps(result, indent=2), []
+
+    # Reconstruct the fitted curve from the raw nnls weights for the plot
+    # and an interpretable residual RMS (lcf reports only the nnls norm).
+    energy = target["energy"]
+    cols = np.vstack([
+        np.interp(energy, r["energy"], r["mu"], left=np.nan, right=np.nan)
+        for r in refs
+    ]).T
+    weights = np.array([c["raw_weight"] for c in result["components"]], dtype=float)
+    fit = cols @ weights
+    residual = target["mu"] - fit
+    good = np.isfinite(residual)
+    result["residual_rms"] = (
+        round(float(np.sqrt(np.mean(np.square(residual[good])))), 6)
+        if good.any() else None
+    )
+
+    result["target"] = {
+        "file_name": target["file_name"],
+        "scan_numbers": target["scan_numbers"],
+        "counter": target["counter"],
+        "normalization": target["normalization"],
+        "e0_ev": target["e0_ev"],
+    }
+    result["reference_e0s_ev"] = {r["label"]: r["e0_ev"] for r in refs}
+    ref_e0s = [r["e0_ev"] for r in refs if r["e0_ev"] is not None]
+    spread = round(max(ref_e0s) - min(ref_e0s), 4) if len(ref_e0s) > 1 else 0.0
+    result["reference_e0_spread_ev"] = spread
+    result["calibration_caveat"] = _LCF_CALIBRATION_CAVEAT
+    if spread > _LCF_E0_SPREAD_WARN_EV:
+        result["calibration_warning"] = (
+            f"Reference E0s spread over {spread:.2f} eV (> {_LCF_E0_SPREAD_WARN_EV:g} eV) "
+            "— the references are not on a common energy calibration and the "
+            "fractions are unreliable. Check registration with align_spectra."
+        )
+
+    images_b64: list[str] = []
+    fig, _plot_summary = plotting.plot_lcf_fit(
+        energy[good], target["mu"][good], fit[good], residual[good],
+        result["components"],
+        title=f"{target['file_name']} — XANES LCF ({len(refs)} references)",
+    )
+    images_b64.append(fig_to_base64(fig))
+    _close(fig)
+    return json.dumps(result, indent=2, default=str), images_b64
+
+
+def t_align_spectra(arguments: dict) -> tuple[str, list[str]]:
+    """Cross-file E0 registration: report per-file shifts + aligned overlay."""
+    from beamtimehero_cli.analysis import xas as xas_math
+
+    entries = arguments.get("spectra") or []
+    if len(entries) < 2:
+        return json.dumps(
+            {"error": "spectra must hold at least 2 {file_name, ...} entries."},
+            indent=2), []
+    try:
+        specs = _load_spectrum_entries(
+            entries, counter=arguments.get("counter"),
+            normalization=arguments.get("normalization", "edge_step"),
+        )
+        records = xas_math.align_spectra(
+            [(s["energy"], s["mu"]) for s in specs],
+            target_e0=arguments.get("target_e0"),
+        )
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+
+    labels = [s["label"] for s in specs]
+    out = {
+        "target_e0_ev": records[0]["target_e0"],
+        "target_source": records[0]["target_source"],
+        "max_shift_ev": xas_math.MAX_ALIGN_SHIFT_EV,
+        "spectra": [
+            {
+                "label": s["label"],
+                "file_name": s["file_name"],
+                "scan_numbers": s["scan_numbers"],
+                "counter": s["counter"],
+                "e0_before": r["e0_before"],
+                "shift_applied": r["shift_applied"],
+                "e0_after": r["e0_after"],
+                "refused": r["refused"],
+                **({"note": r["note"]} if r["note"] else {}),
+            }
+            for s, r in zip(specs, records)
+        ],
+        "note": (
+            "Shifts are REPORTED, not persisted — no files were modified. "
+            "Quote the shift_applied values when comparing absolute energies "
+            "across these files in reports."
+        ),
+    }
+    fig, _plot_summary = plotting.plot_alignment_overlay(records, labels)
+    images_b64 = [fig_to_base64(fig)]
+    _close(fig)
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+def t_difference_spectrum(arguments: dict) -> tuple[str, list[str]]:
+    """A − B difference spectrum on a common grid, E0-aligned by default."""
+    from beamtimehero_cli.analysis import xas as xas_math
+
+    counter = arguments.get("counter")
+    normalization = arguments.get("normalization", "edge_step")
+    try:
+        spec_a, spec_b = _load_spectrum_entries(
+            [{"file_name": arguments.get("file_name_a"),
+              "scan_numbers": arguments.get("scan_numbers_a")},
+             {"file_name": arguments.get("file_name_b"),
+              "scan_numbers": arguments.get("scan_numbers_b")}],
+            counter=counter, normalization=normalization,
+        )
+        result = xas_math.difference_spectrum(
+            spec_a["energy"], spec_a["mu"], spec_b["energy"], spec_b["mu"],
+            align=bool(arguments.get("align", True)),
+        )
+    except ValueError as e:
+        return json.dumps({"error": str(e)}, indent=2), []
+
+    label_a = arguments.get("label_a") or spec_a["file_name"]
+    label_b = arguments.get("label_b") or spec_b["file_name"]
+    out = {
+        "a": {"file_name": spec_a["file_name"], "scan_numbers": spec_a["scan_numbers"],
+              "counter": spec_a["counter"], "e0_ev": spec_a["e0_ev"]},
+        "b": {"file_name": spec_b["file_name"], "scan_numbers": spec_b["scan_numbers"],
+              "counter": spec_b["counter"], "e0_ev": spec_b["e0_ev"]},
+        "aligned": result["aligned"],
+        "alignment": result["alignment"],
+        **result["stats"],
+    }
+    fig, _plot_summary = plotting.plot_difference_spectrum(
+        result, label_a=label_a, label_b=label_b,
+    )
+    images_b64 = [fig_to_base64(fig)]
+    _close(fig)
+    return json.dumps(out, indent=2, default=str), images_b64
+
+
+# ---------------------------------------------------------------------------
 # XRS (X-ray Raman) processing tools — energy-loss axis, NOT edge-step
 # ---------------------------------------------------------------------------
 
@@ -2469,6 +2710,10 @@ _HANDLERS: dict[str, callable] = {
     "fit_xas_white_line": t_fit_xas_white_line,
     "assess_xas_quality": t_assess_xas_quality,
     "detect_per_scan_drift": t_detect_per_scan_drift,
+    # CAT-10 · Cross-file XAS comparison (merged two-col files accepted)
+    "compare_xas_to_references": t_compare_xas_to_references,
+    "align_spectra": t_align_spectra,
+    "difference_spectrum": t_difference_spectrum,
     # CAT-XRS · X-ray Raman processing (energy-loss axis, NOT edge-step)
     "calibrate_energy_loss": t_calibrate_energy_loss,
     "build_loss_axis": t_build_loss_axis,

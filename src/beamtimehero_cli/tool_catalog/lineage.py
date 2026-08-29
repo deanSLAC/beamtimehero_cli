@@ -1173,6 +1173,72 @@ TOOL_LINEAGE: dict[str, dict] = {
         ),
         "depends_on": [],
     },
+
+    # ---------- Cross-file XAS comparison (LCF / registration / diffs) ----
+
+    "compare_xas_to_references": {
+        "long_description": (
+            "XANES linear-combination fitting: non-negative least-squares "
+            "fit of a target spectrum against measured reference spectra, "
+            "returning speciation fractions with fit quality and a "
+            "target/fit/residual plot. Per-file E0s are reported so a "
+            "calibration offset between files is visible before the "
+            "fractions are trusted. Accepts SPEC files, collector groups, "
+            "and merged two-column ASCII spectra."
+        ),
+        "python_func": (
+            "tool_catalog.tools_core._load_spectrum_entries(...) + "
+            "generic_data.lcf.compare_to_references(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {components[{name,fraction}], fit_r2, residual_rms, reference_e0s_ev, ...} + fit plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Loads every spectrum via spec_data.scans.get_normalized_scan_arrays "
+            "(SPEC cache, collector ASCII, or merged two-column ASCII)."
+        ),
+        "depends_on": ["list_files", "align_spectra"],
+    },
+    "align_spectra": {
+        "long_description": (
+            "Cross-file energy registration check: fit each spectrum's E0 "
+            "(derivative max), report the shift onto a common target E0, "
+            "and return a before/after overlay. Shifts beyond ±10 eV are "
+            "refused as glitch-latched. Report-only — nothing is written."
+        ),
+        "python_func": (
+            "analysis.xas.align_spectra(...) over "
+            "spec_data.scans.get_normalized_scan_arrays(...) loads"
+        ),
+        "spec_command": None,
+        "output": "JSON: per-file {e0_before, shift_applied, e0_after, refused} + two-panel overlay plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Loads every spectrum via spec_data.scans.get_normalized_scan_arrays "
+            "(SPEC cache, collector ASCII, or merged two-column ASCII)."
+        ),
+        "depends_on": ["list_scans", "list_files"],
+    },
+    "difference_spectrum": {
+        "long_description": (
+            "A − B difference spectrum on a common interpolated grid, "
+            "E0-aligned by default so a calibration offset does not "
+            "masquerade as chemistry. Reports max |Δ| and its energy plus "
+            "RMS Δ, with a two-panel overlay/difference plot."
+        ),
+        "python_func": (
+            "analysis.xas.difference_spectrum(...) over "
+            "spec_data.scans.get_normalized_scan_arrays(...) loads"
+        ),
+        "spec_command": None,
+        "output": "JSON: {max_abs_delta, energy_of_max_abs_delta_ev, rms_delta, alignment, ...} + two-panel plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Loads both spectra via spec_data.scans.get_normalized_scan_arrays "
+            "(SPEC cache, collector ASCII, or merged two-column ASCII)."
+        ),
+        "depends_on": ["align_spectra"],
+    },
 }
 
 def extract_inputs(tool_def: dict) -> list[dict]:

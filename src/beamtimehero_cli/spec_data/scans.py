@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -26,7 +27,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 from beamtimehero_cli.analysis import xas
-from beamtimehero_cli.spec_data import local_data
+from beamtimehero_cli.spec_data import local_data, twocol_ascii
 from beamtimehero_cli.spec_data.ssrl_backend import (
     SSRL_COLLECTOR_DIR_ENV, SSRLAsciiBackend,
 )
@@ -216,6 +217,89 @@ def _concat_aligned(series_list, decimals=_ENERGY_ALIGN_DECIMALS):
     return pd.concat(series_list, axis=1)
 
 
+# ---------------------------------------------------------------------------
+# Merged two-column ASCII support (already-processed spectra, e.g. MERGE/*.dat)
+# ---------------------------------------------------------------------------
+
+def _merged_twocol_path(file_name) -> Path | None:
+    """Resolve *file_name* to a merged two-column ASCII under the data roots.
+
+    Roots are the same the scan backends read from: the collector directory
+    when ``SSRL_COLLECTOR_DIR`` is set, plus ``BL_SCAN_DIR``. Tries the name
+    as a root-relative path first (``MERGE/foo.dat``), then falls back to a
+    recursive basename search — ``local_data.list_files`` reports these
+    files by relative path, but users often quote just the basename.
+    """
+    from beamtimehero_cli import config as bl_config
+
+    roots = []
+    collector_dir = os.getenv(SSRL_COLLECTOR_DIR_ENV)
+    if collector_dir:
+        roots.append(Path(collector_dir))
+    if bl_config.BL_SCAN_DIR:
+        roots.append(Path(bl_config.BL_SCAN_DIR))
+
+    name = str(file_name)
+    for root in roots:
+        if not root.is_dir():
+            continue
+        candidate = root / name
+        try:
+            candidate.resolve().relative_to(root.resolve())
+            inside_root = True
+        except (ValueError, OSError):
+            inside_root = False  # path traversal — never resolve outside the root
+        if inside_root and candidate.is_file() and twocol_ascii.is_twocol_ascii(candidate):
+            return candidate
+        for match in sorted(root.rglob(Path(name).name)):
+            if match.is_file() and twocol_ascii.is_twocol_ascii(match):
+                return match
+    return None
+
+
+def _apply_energy_window(combined: pd.DataFrame, e_min, e_max) -> pd.DataFrame:
+    """Shared [e_min, e_max] windowing for normalized-array DataFrames."""
+    if e_min is None or e_max is None:
+        return combined
+    if e_min >= e_max:
+        raise ValueError(f"e_min ({e_min}) must be less than e_max ({e_max}).")
+    windowed = combined.loc[(combined.index >= e_min) & (combined.index <= e_max)]
+    if len(windowed) < 5:
+        raise ValueError(
+            f"Energy window [{e_min}, {e_max}] yielded only {len(windowed)} points. "
+            f"Available range: [{combined.index.min():.2f}, {combined.index.max():.2f}]."
+        )
+    return windowed
+
+
+def _merged_scan_arrays(file_name, e_min=None, e_max=None):
+    """:func:`get_normalized_scan_arrays` result for a merged two-column ASCII.
+
+    Returns ``(combined, file_name, "merged", [1])`` with a single ``merged``
+    column served as ``normalization="raw"`` — the file already holds a
+    processed (typically normalized) spectrum, so no counter selection and no
+    re-normalization apply. Returns None when *file_name* is not such a file.
+    """
+    path = _merged_twocol_path(file_name)
+    if path is None:
+        return None
+    energy, intensity, meta = twocol_ascii.read_twocol(path)
+    combined = pd.DataFrame(
+        {"merged": intensity}, index=pd.Index(energy, name="energy"),
+    )
+    combined.attrs["counter"] = "merged"
+    combined.attrs["counter_reason"] = (
+        "merged two-column ASCII (already processed; served as-is)"
+    )
+    combined.attrs["counter_explicit"] = False
+    combined.attrs["counter_warning"] = None
+    combined.attrs["normalization"] = "raw"
+    combined.attrs["source_path"] = meta["path"]
+    combined.attrs["source_format"] = "twocol_ascii"
+    combined = _apply_energy_window(combined, e_min, e_max)
+    return combined, file_name, "merged", [1]
+
+
 def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numbers=None,
                                counter=None, normalization="edge_step"):
     """Load all scans for a file, normalize, and return as a DataFrame on a common energy grid.
@@ -230,6 +314,15 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
        and a normalization mode through here and all of them gain override at
        once. Until then, off-XAS techniques (XRS) cannot be processed correctly.
        See ``beamtimehero ref counter-selection``.
+
+    .. note::
+
+       Already-merged two-column ASCII spectra (e.g. ``MERGE/*.dat`` written
+       by post-processing pipelines) are also served here: when *file_name*
+       has no scans in any backend but resolves to such a file under the data
+       roots, the result is a single ``merged`` column with
+       ``normalization="raw"``, ``counter="merged"``, ``used_scans=[1]`` —
+       so every multi-scan tool accepts merged files with no extra flags.
 
     Parameters
     ----------
@@ -260,8 +353,16 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
         if file_name is None:
             raise ValueError("No data files found.")
 
+    known_scans = _scan_numbers_for_file(file_name)
+    if not known_scans:
+        # Not a SPEC/collector scan file — maybe an already-merged two-column
+        # ASCII (e.g. MERGE/*.dat written by post-processing pipelines).
+        merged = _merged_scan_arrays(file_name, e_min=e_min, e_max=e_max)
+        if merged is not None:
+            return merged
+
     if scan_numbers is None:
-        scan_numbers = _scan_numbers_for_file(file_name)
+        scan_numbers = known_scans
 
     if not scan_numbers:
         raise ValueError(f"No scans found for file '{file_name}'.")

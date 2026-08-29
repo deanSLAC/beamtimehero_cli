@@ -67,6 +67,11 @@ CATEGORY_OVERRIDES: dict[str, str] = {
     "fit_xas_white_line": "spec-file",
     "assess_xas_quality": "spec-file",
     "detect_per_scan_drift": "spec-file",
+    # CAT-10 cross-file comparison leaves (LCF / registration / differences)
+    # — same file cache, and the merged two-col ingest lives on that path too.
+    "compare_xas_to_references": "spec-file",
+    "align_spectra": "spec-file",
+    "difference_spectrum": "spec-file",
     # CAT-XRS · dedicated X-ray Raman analysis branch (energy-loss axis).
     # Kept separate from the XAS/HERFD spec-file tools so the Raman-specific
     # processing + interpretation surface is coherent on its own.
