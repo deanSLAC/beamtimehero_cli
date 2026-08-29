@@ -316,6 +316,8 @@ def _oxidation_k_edge_shift(descriptors: dict, calibration: dict,
         est = shift / slope
         unc_val = energy_unc / slope
         v["provenance"]["calibration_data"] = slope_entry["source"]
+        if slope_entry.get("note"):
+            v["caveats"].append(slope_entry["note"])
     else:
         lo_s, hi_s = cal.GENERIC_EDGE_SHIFT["ev_per_valence_range"]
         mid = (lo_s + hi_s) / 2.0

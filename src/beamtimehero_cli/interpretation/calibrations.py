@@ -36,6 +36,13 @@ GENERIC_EDGE_SHIFT = {
     ),
 }
 
+# Every slope below is convention-bound (first-inflection vs half-height vs
+# white-line conventions give measurably different slopes — Mn is the
+# canonical example: ~3.3-3.5 eV/valence at half-height vs ~4.2 at the
+# derivative peak) and assumes a ligand environment similar to the cited
+# reference series; ligand changes alone can shift an edge by of order one
+# valence unit. The `note` on each entry records the convention/validity
+# range and is surfaced as a verdict caveat.
 PER_ELEMENT_EDGE_SHIFT = {
     # element -> eV per oxidation unit (approximate slope), with citation
     "Cr": {
@@ -46,6 +53,83 @@ PER_ELEMENT_EDGE_SHIFT = {
             "first-derivative edge 6003.3 eV Cr(III) vs 6005.6 eV Cr(VI)."
         ),
     },
+    "Mn": {
+        "ev_per_valence": 3.5,
+        "domain": "any",
+        "source": (
+            "Ressler, Wong, Roos & Smith, Environ. Sci. Technol. 34, "
+            "950-958 (2000), DOI 10.1021/es990787x: linear edge-shift "
+            "calibration across MnO/Mn2O3/MnO2 (Mn 2+ to 4+)."
+        ),
+        "note": (
+            "Valid Mn(II)-Mn(IV), oxide-like coordination, half-height "
+            "convention (derivative-peak convention gives ~4.2 eV/unit; "
+            "nonlinear if Mn(VII) is included — Gilbert 2003; mixed-valent "
+            "layered manganates need LCF instead — Manceau 2012)."
+        ),
+    },
+    "Ni": {
+        "ev_per_valence": 1.5,
+        "domain": "any",
+        "source": (
+            "Mansour & Melendres, J. Phys. Chem. A 102, 65-81 (1998), DOI "
+            "10.1021/jp9619853: ~1.5 eV per unit valency across NiO, "
+            "alpha/beta-Ni(OH)2, LiNiO2, KNiIO6 (Ni 2+ to 4+)."
+        ),
+        "note": (
+            "Main-edge convention, oxide/hydroxide series Ni(II)-Ni(IV); "
+            "later rising-edge work quotes up to 1.85 eV/unit (Sarangi "
+            "2014), so treat as ±20%."
+        ),
+    },
+    "Co": {
+        "ev_per_valence": 2.76,
+        "domain": "any",
+        "source": (
+            "Schrapers et al., PLoS ONE 11(7), e0158681 (2016), DOI "
+            "10.1371/journal.pone.0158681: E(K-edge at 50% level) = "
+            "7712.77 eV + 2.76 eV x oxidation state, Co(I)/(II)/(III) "
+            "coordination-complex references."
+        ),
+        "note": (
+            "Derived from coordination complexes (Co I-III) at the "
+            "50%-of-edge-jump convention, not an oxide series."
+        ),
+    },
+    "V": {
+        "ev_per_valence": 2.5,
+        "domain": "any",
+        "source": (
+            "Wong, Lytle, Messmer & Maylotte, Phys. Rev. B 30, 5596-5610 "
+            "(1984), DOI 10.1103/PhysRevB.30.5596: linear fit of edge "
+            "position (first-derivative peak) vs valence, vanadium oxides "
+            "V(II)-V(V)."
+        ),
+        "note": (
+            "First-derivative-peak convention, vanadium oxides only — "
+            "interpolation is robust only among standards with similar "
+            "bonding (Wong 1984; Chaurand 2007)."
+        ),
+    },
+    "As": {
+        "ev_per_valence": 2.0,
+        "domain": "any",
+        "source": (
+            "Smith et al., Environ. Sci. Technol. 39, 248-254 (2005), DOI "
+            "10.1021/es049358b: white-line energies arsenite ~11871.7 eV "
+            "vs arsenate ~11875.3 eV (~4 eV across As III->V)."
+        ),
+        "note": (
+            "Valid ONLY for the As(III)/As(V) couple, white-line (peak-top) "
+            "convention — reduced As (sulfide/As(0)/As(-I)) clusters at "
+            "11867-11869 eV and does not follow this slope."
+        ),
+    },
+    # Deliberately absent (literature does not support a clean E0 slope):
+    # Cu (feature-based 1s->4p diagnostics, no linear calibration), Mo
+    # (linear fit exists only for an above-edge feature, not E0), Sn/W
+    # (bracketing statements only), Se (0->IV vs IV->VI slopes differ ~55%
+    # — use LCF against measured references instead).
 }
 
 # Maximum plausible oxidation-state SPAN per element (|max attainable
