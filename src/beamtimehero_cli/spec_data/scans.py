@@ -585,9 +585,15 @@ def group_scans_by_spot(file_name, tol_mm: float = 0.05):
         """
         if not motors:
             return None
-        # Direct lookup — works when names parsed correctly.
+        # Direct lookup — works when names parsed correctly. Sy is optional:
+        # stations with a 2-axis sample stage (Sx/Sz only) group on those
+        # two, with Sy pinned to 0 so the tolerance test degrades gracefully.
         try:
-            return float(motors["Sx"]), float(motors["Sy"]), float(motors["Sz"])
+            return (
+                float(motors["Sx"]),
+                float(motors.get("Sy", 0.0)),
+                float(motors["Sz"]),
+            )
         except (KeyError, TypeError, ValueError):
             pass
         # Fallback: silx joined the motor names. Each key is a long string;
@@ -629,9 +635,10 @@ def group_scans_by_spot(file_name, tol_mm: float = 0.05):
                 except ValueError:
                     return None
                 idx = {n: i for i, n in enumerate(names)}
-                if "Sx" in idx and "Sy" in idx and "Sz" in idx:
+                if "Sx" in idx and "Sz" in idx:
                     try:
-                        return vals[idx["Sx"]], vals[idx["Sy"]], vals[idx["Sz"]]
+                        sy = vals[idx["Sy"]] if "Sy" in idx else 0.0
+                        return vals[idx["Sx"]], sy, vals[idx["Sz"]]
                     except IndexError:
                         return None
                 return None

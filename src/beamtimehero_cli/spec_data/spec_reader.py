@@ -11,6 +11,7 @@ for the caller to manage.
 """
 from __future__ import annotations
 
+import os
 import time
 import logging
 from pathlib import Path
@@ -20,8 +21,13 @@ from silx.io.spech5 import SpecH5
 
 logger = logging.getLogger(__name__)
 
-# Default y-column preferences (first match wins)
-DEFAULT_Y_COLUMNS = ["vortDT", "I0", "I1"]
+# Default y-column preferences (first match wins). Stations can override
+# via BTH_DEFAULT_Y_COLUMNS (comma-separated); the default stays BL15-2.
+DEFAULT_Y_COLUMNS = [
+    c.strip()
+    for c in os.environ.get("BTH_DEFAULT_Y_COLUMNS", "vortDT,I0,I1").split(",")
+    if c.strip()
+] or ["vortDT", "I0", "I1"]
 
 
 def open_spec_file(filepath: str) -> SpecH5:

@@ -64,9 +64,12 @@ TOOLS_MODE = os.getenv("TOOLS_MODE", "cli")
 # ---------------------------------------------------------------------------
 # EPICS PVs (reference only — not wired here)
 # ---------------------------------------------------------------------------
-EPICS_PV_SPEAR_CURRENT = "SPEAR:BeamCurrAvg"
-EPICS_PV_BL_STATE = "BL15:State"
-EPICS_PV_GAP_OWNER = "BL15:GapOwnerNode"
+# Station-specific PVs are env-overridable (BTH_-prefixed to avoid clashing
+# with unrelated EPICS software's environment) so other beamlines can consume
+# this package; defaults remain the BL15-2 values.
+EPICS_PV_SPEAR_CURRENT = os.getenv("BTH_EPICS_PV_SPEAR_CURRENT", "SPEAR:BeamCurrAvg")
+EPICS_PV_BL_STATE = os.getenv("BTH_EPICS_PV_BL_STATE", "BL15:State")
+EPICS_PV_GAP_OWNER = os.getenv("BTH_EPICS_PV_GAP_OWNER", "BL15:GapOwnerNode")
 
 # ---------------------------------------------------------------------------
 # Beamline data directories and timezone
