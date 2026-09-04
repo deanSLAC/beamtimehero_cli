@@ -408,16 +408,7 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     combined.attrs["counter_warning"] = counter_warning
     combined.attrs["normalization"] = normalization
 
-    if e_min is not None and e_max is not None:
-        if e_min >= e_max:
-            raise ValueError(f"e_min ({e_min}) must be less than e_max ({e_max}).")
-        windowed = combined.loc[(combined.index >= e_min) & (combined.index <= e_max)]
-        if len(windowed) < 5:
-            raise ValueError(
-                f"Energy window [{e_min}, {e_max}] yielded only {len(windowed)} points. "
-                f"Available range: [{combined.index.min():.2f}, {combined.index.max():.2f}]."
-            )
-        combined = windowed
+    combined = _apply_energy_window(combined, e_min, e_max)
 
     return combined, file_name, counter, used_scans
 
