@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>beamtimehero_cli — where the science lives</title>
+<style>
+:root {
+  --paper: #f6f2ea; --panel: #fdfbf6; --ink: #221d14; --dim: #6f6656;
+  --rule: #d9d1bf; --rule-strong: #a89c82; --accent: #9a3412;
+  --code-bg: #ede7d9; --shadow: 0 1px 3px rgba(60, 48, 20, .08);
+  /* chart series — validated on surface #fdfbf6 (all six checks PASS) */
+  --s-now: #a33b0f; --s-after: #1d5a96;
+  --sci: #1d5a96; --glue: #a33b0f; --neutral: #6f6656;
+  --grid: rgba(120, 100, 60, .16);
+}
+:root[data-theme="dark"] {
+  --paper: #17130c; --panel: #201a11; --ink: #e9e1cf; --dim: #a2937a;
+  --rule: #3a3323; --rule-strong: #5c5138; --accent: #e8863c;
+  --code-bg: #2c2517; --shadow: 0 1px 3px rgba(0, 0, 0, .5);
+  /* chart series — validated on surface #201a11 (all six checks PASS) */
+  --s-now: #cf6f26; --s-after: #4f93cc;
+  --sci: #4f93cc; --glue: #cf6f26; --neutral: #a2937a;
+  --grid: rgba(233, 225, 207, .13);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 16px/1.6 Charter, "Iowan Old Style", Cambria, Georgia, serif;
+  background-image: radial-gradient(rgba(120, 100, 60, .06) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .86em; }
+code { background: var(--code-bg); padding: .1em .35em; border-radius: 3px; }
+a { color: var(--accent); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 110px; }
+
+header { padding: 56px 0 0; }
+.eyebrow { letter-spacing: .22em; text-transform: uppercase; font-size: .72rem;
+  color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+h1 { font-size: 2.6rem; margin: .2em 0 .1em; font-weight: 600; letter-spacing: -.01em; }
+h1 .thin { color: var(--accent); font-style: italic; font-weight: 400; }
+.lede { max-width: 66ch; color: var(--dim); margin-top: .4em; }
+.statstrip { display: flex; flex-wrap: wrap; gap: 0 34px; margin: 28px 0 0;
+  border-top: 3px double var(--rule-strong); border-bottom: 1px solid var(--rule); padding: 12px 0; }
+.stat b { display: block; font-size: 1.45rem; font-weight: 600; }
+.stat span { font-size: .66rem; letter-spacing: .13em; text-transform: uppercase; color: var(--dim); }
+#themetoggle { margin-left: auto; align-self: center; cursor: pointer;
+  background: none; border: 1px solid var(--rule-strong); color: var(--ink);
+  border-radius: 999px; padding: .35em .9em; font: inherit; font-size: .8rem; }
+
+h2 { margin: 68px 0 6px; font-size: 1.5rem; display: flex; align-items: baseline; gap: .6em; }
+h2 .no { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size: .8em; font-weight: 400; }
+h3 { margin: 36px 0 6px; font-size: 1.08rem; }
+.sectionnote { color: var(--dim); margin: 0 0 22px; max-width: 72ch; }
+p { max-width: 76ch; }
+ul.tight { max-width: 76ch; } ul.tight li { margin: .35em 0; }
+
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 18px 22px; margin: 14px 0; box-shadow: var(--shadow); }
+.card > h4 { margin: 0 0 .4em; font-size: 1rem; display: flex; gap: .6em; align-items: baseline; flex-wrap: wrap; }
+.card p:last-child { margin-bottom: 0; }
+.card .ev { margin: .7em 0 0; padding: .55em .8em; background: var(--code-bg);
+  border-left: 3px solid var(--rule-strong); border-radius: 0 4px 4px 0;
+  font-size: .87rem; color: var(--dim); }
+.card .ev b { color: var(--ink); font-weight: 600; }
+
+.tag { font-family: ui-monospace, Menlo, monospace; font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase; padding: .2em .6em;
+  border-radius: 999px; white-space: nowrap; color: var(--c);
+  border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.t-sci { --c: var(--sci); } .t-glue { --c: var(--glue); } .t-new { --c: var(--accent); }
+.t-neutral { --c: var(--dim); }
+
+/* ---- the rule ---- */
+.therule { border: 3px double var(--rule-strong); border-radius: 6px; background: var(--panel);
+  padding: 26px 30px; margin: 24px 0; box-shadow: var(--shadow); }
+.therule blockquote { margin: 0; font-size: 1.22rem; line-height: 1.5; max-width: 56ch; }
+.therule blockquote b { color: var(--accent); }
+.therule .then { margin: 1em 0 0; color: var(--dim); font-size: .95rem; max-width: 66ch; }
+
+/* ---- trees ---- */
+.treecols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+@media (max-width: 780px) { .treecols { grid-template-columns: 1fr; } }
+.treebox { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 16px 18px; box-shadow: var(--shadow); }
+.treebox h4 { margin: 0 0 2px; font-size: .95rem; }
+.treebox .hint { color: var(--dim); font-size: .82rem; margin: 0 0 12px; }
+pre.tree { font-family: ui-monospace, Menlo, monospace; font-size: .775rem; line-height: 1.62;
+  margin: 0; white-space: pre; overflow-x: auto; color: var(--ink); }
+pre.tree .d { color: var(--dim); }
+pre.tree .s { color: var(--sci); font-weight: 600; }
+pre.tree .g { color: var(--glue); font-weight: 600; }
+pre.tree .n { color: var(--accent); font-weight: 600; }
+pre.tree .c { color: var(--dim); font-style: italic; }
+
+/* ---- chart ---- */
+figure { margin: 26px 0 8px; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 20px 22px 14px; box-shadow: var(--shadow); }
+figcaption { font-size: .95rem; font-weight: 600; margin-bottom: .15em; }
+.subcap { color: var(--dim); font-size: .84rem; margin-bottom: 18px; max-width: 68ch; }
+.legend { display: flex; gap: 20px; margin: 0 0 16px; font-size: .82rem; color: var(--dim); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  background: var(--c); margin-right: 6px; vertical-align: middle; }
+.bars { display: grid; grid-template-columns: 250px 1fr; gap: 4px 14px; align-items: center; }
+.blabel { font-size: .85rem; text-align: right; color: var(--ink); line-height: 1.3; }
+.blabel small { display: block; color: var(--dim); font-size: .73rem;
+  font-family: ui-monospace, Menlo, monospace; }
+.grp { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; }
+.btrack { position: relative; height: 15px;
+  background: linear-gradient(to right, var(--grid) 0 1px, transparent 1px) repeat-x;
+  background-size: 20% 100%; }
+.bfill { height: 15px; border-radius: 0 4px 4px 0; background: var(--c); position: relative;
+  cursor: default; transition: filter .12s; min-width: 2px; }
+.bfill:hover { filter: brightness(1.14); }
+.bval { position: absolute; left: calc(100% + 7px); top: 0; line-height: 15px;
+  font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--ink); white-space: nowrap; }
+.axis { grid-column: 2; display: flex; justify-content: space-between;
+  font-family: ui-monospace, Menlo, monospace; font-size: .7rem; color: var(--dim);
+  border-top: 1px solid var(--rule); padding-top: 4px; margin-top: 6px; }
+#tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--ink); color: var(--paper); font-size: .78rem; line-height: 1.4;
+  padding: .45em .7em; border-radius: 4px; max-width: 280px; z-index: 20;
+  font-family: ui-monospace, Menlo, monospace; }
+details.tableview { margin-top: 14px; font-size: .86rem; }
+details.tableview summary { cursor: pointer; color: var(--dim); }
+
+table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: .88rem; }
+th, td { text-align: left; padding: .5em .7em; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-size: .67rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+tbody tr:hover { background: color-mix(in srgb, var(--rule) 25%, transparent); }
+td.mono, th.mono { font-family: ui-monospace, Menlo, monospace; font-size: .79rem; }
+td.mono code { background: none; padding: 0; }
+
+ol.steps { padding-left: 0; list-style: none; counter-reset: s; max-width: 76ch; }
+ol.steps > li { counter-increment: s; position: relative; padding-left: 44px; margin: 0 0 24px; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0;
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--rule-strong);
+  display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace;
+  font-size: .8rem; color: var(--accent); }
+ol.steps h4 { margin: .2em 0 .3em; font-size: 1rem; }
+ol.steps p { margin: .35em 0; }
+
+pre.snip { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 5px;
+  padding: 12px 14px; overflow-x: auto; font-family: ui-monospace, Menlo, monospace;
+  font-size: .78rem; line-height: 1.6; margin: 12px 0; }
+pre.snip .c { color: var(--dim); font-style: italic; }
+pre.snip .k { color: var(--accent); }
+
+hr.sep { border: 0; border-top: 1px solid var(--rule); margin: 46px 0; }
+footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-strong);
+  color: var(--dim); font-size: .84rem; }
+@media (max-width: 620px) {
+  .bars { grid-template-columns: 1fr; } .blabel { text-align: left; }
+  .bval { position: static; display: inline-block; margin-left: 8px; }
+}
+</style>
+</head>
+<body data-palette="#a33b0f,#1d5a96">
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Code organization · implemented 2026-09-04</div>
+  <h1>Where the science lives — <span class="thin">and how to tell a collaborator</span></h1>
+  <p class="lede">
+    One repo, no forks. The question is purely layout: how should this code be
+    arranged so that the scientific and mathematical functions are immediately
+    findable, obviously separable from the plumbing, and cheap for a scientist to
+    iterate on without reading the toolbelt machinery first.
+  </p>
+  <div class="statstrip">
+    <div class="stat"><b>35</b><span>modules under science/</span></div>
+    <div class="stat"><b>7</b><span>directories, by technique</span></div>
+    <div class="stat"><b>19</b><span>policy call sites de-duplicated</span></div>
+    <div class="stat"><b>0</b><span>upward imports from science/</span></div>
+    <div class="stat"><b>213</b><span>tests green</span></div>
+    <button id="themetoggle">◐ theme</button>
+  </div>
+</header>
+
+<!-- ============================================================= -->
+<h2><span class="no">00</span> Status — implemented</h2>
+<p class="sectionnote">
+  This plan was executed on 2026-09-04. The sections below are kept as the
+  rationale; this one records what actually landed and where it diverged.
+</p>
+
+<div class="card">
+  <h4>Done <span class="tag t-sci">213 tests green</span></h4>
+  <p>
+    <code>science/</code> exists with 35 modules across the seven directories.
+    Every old module path is a re-export shim, so the five consuming apps are
+    untouched — and because the test suite still imports through the old paths,
+    those 213 passing tests are themselves the shim-compatibility check
+    (baseline was 212; the extra one is new).
+  </p>
+  <p>
+    The duplicated science is gone from the handler layer:
+    <code>tools_core.py</code> now calls
+    <code>xas_policy.white_line_components_for()</code>,
+    <code>xas_policy.window_rel_from_absolute()</code>,
+    <code>xas_policy.resolve_edge()</code>,
+    <code>xas_policy.check_overlap()</code> and the
+    <code>ex_policy.DEFAULT_*</code> constants — 8 and 11 call sites
+    respectively, each previously a hard-coded copy.
+  </p>
+  <p class="ev">
+    Audited after the move: <b>no code under <code>science/</code> reads an
+    environment variable, opens a file, imports <code>config</code>, touches
+    SPEC, or imports argparse</b> — and <code>science/</code> imports nothing
+    outside <code>science/</code>. The rule holds mechanically, not just by
+    intent.
+  </p>
+</div>
+
+<div class="card">
+  <h4>Diverged from the plan, with reasons <span class="tag t-neutral">5 items</span></h4>
+  <p>
+    <strong>1. <code>normalize_series</code> and <code>edge_step_normalize</code>
+    went to <code>reduce/normalize.py</code></strong>, not to
+    <code>reduce/reps.py</code> and <code>xas/normalize.py</code> as drafted.
+    Splitting <code>normalize_series</code> from the
+    <code>edge_step_normalize</code> it delegates to would have created a
+    backwards <code>reduce → xas</code> dependency. Both are per-scan monitor
+    normalization — the stage before technique-specific work — so they belong
+    together, and the rigorous XAS normalizations (area, MBACK, Athena-style)
+    keep <code>xas/normalize.py</code> to themselves.
+  </p>
+  <p>
+    <strong>2. A second violation of the rule turned up during the move.</strong>
+    <code>pick_active_counter</code> read
+    <code>BTH_ACTIVE_COUNTER_PRIORITY</code> from the environment. The env read
+    moved to <code>config.active_counter_priority()</code> and the counter
+    priority is now passed in as an argument. That variable is set by
+    <code>autonomous_fourone</code>, and no app calls
+    <code>pick_active_counter</code> directly, so the four
+    <code>spec_data</code> call sites now supply it and the override behaves
+    exactly as before.
+  </p>
+  <p>
+    <strong>3. <code>fitting/</code> holds only <code>similarity.py</code></strong>
+    — <code>generic_data/fitter.py</code> stays unrouted, as you asked. The
+    directory exists so the eventual home is obvious.
+  </p>
+  <p>
+    <strong>4. <code>plots/</code> holds <code>xas.py</code> and
+    <code>scan.py</code></strong>. The <code>spec_data/*_plotting.py</code>
+    split was an open question and was left alone.
+  </p>
+  <p>
+    <strong>5. <code>calibration_store.py</code> moved up a layer</strong> to
+    <code>beamtimehero_cli/calibration_store.py</code>. It writes a JSON file
+    to a configured directory — session state, not science.
+  </p>
+</div>
+
+<div class="card">
+  <h4>What a collaborator now reads <span class="tag t-new">2 new docs</span></h4>
+  <p>
+    <code>src/beamtimehero_cli/science/README.md</code> — the rule, the layout,
+    the "you want to change X → go to Y" table, the conventions (citations,
+    provenance, degrade-don't-crash), and the moved-from map.
+    <code>CONTRIBUTING.md</code> at the repo root points scientists straight at
+    it and names the three files to raise rather than edit
+    (<code>definitions.py</code>, <code>categorize.py</code>,
+    <code>cli/</code>) — so the narrow off-limits set is explicit and
+    everything else is visibly fair game.
+  </p>
+  <p>
+    Still outstanding from §05: the generated
+    <code>docs/science_index.html</code> (every science function with its
+    signature, citations, and which tools call it) and the uniform
+    <code>CITATIONS</code> convention. Those are additive and independent of
+    the move.
+  </p>
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="no">01</span> Why the science is hard to find today</h2>
+<p class="sectionnote">
+  Four navigation problems, all fixable by moving files. None of them is about
+  code quality — the functions themselves are good.
+</p>
+
+<div class="card">
+  <h4>The three directory names don't describe their contents <span class="tag t-glue">naming</span></h4>
+  <p>
+    Science currently lives in <code>analysis/</code>, <code>interpretation/</code>
+    and <code>generic_data/</code>. Nothing about those names tells a scientist
+    which one holds edge-step normalization, which holds the χ(k) Fourier
+    transform, or which holds the Compton subtraction. Worse, the split between
+    them is by <em>abstraction level</em> — raw math vs. verdict-forming vs.
+    technique-agnostic — which is a programmer's axis. A scientist navigates by
+    <strong>technique first, then pipeline stage</strong>: "XAS → normalization",
+    "XRS → background", "EXAFS → Fourier transform."
+  </p>
+</div>
+
+<div class="card">
+  <h4>One technique's code is split across two dirs, inconsistently <span class="tag t-glue">structure</span></h4>
+  <p>
+    XAS math is in <code>analysis/xas.py</code> <em>and</em> spread over nine
+    unprefixed files in <code>interpretation/</code>
+    (<code>normalize</code>, <code>descriptors</code>, <code>edges</code>,
+    <code>quality</code>, <code>interpret</code>, <code>calibrations</code>…).
+    XRS code in the same directory <em>is</em> prefixed
+    (<code>xrs_descriptors</code>, <code>xrs_edges</code>,
+    <code>xrs_interpret</code>). So the convention is "XRS is labelled, XAS is
+    whatever's left" — you have to already know that to read the directory.
+  </p>
+</div>
+
+<div class="card">
+  <h4><code>analysis/xas.py</code> is two unrelated modules in one file <span class="tag t-glue">structure</span></h4>
+  <p>
+    Half of it is detector- and scan-level reduction that has nothing to do with
+    XAS — <code>pick_active_counter</code>, <code>average_reps</code>,
+    <code>filter_short_reps</code>, <code>estimate_per_rep_noise</code>,
+    <code>deadtime_correct</code>. Those apply equally to XRS and EXAFS. The other
+    half is genuinely XAS — <code>edge_step_normalize</code>,
+    <code>align_spectra</code>, <code>difference_spectrum</code>. A scientist
+    working on Raman has to read an XAS file to find the rep-averaging they need.
+  </p>
+</div>
+
+<div class="card">
+  <h4>Real scientific decisions live in the tool handler file <span class="tag t-glue">the important one</span></h4>
+  <p>
+    <code>tool_catalog/tools_core.py</code> is 2,931 lines of glue — and it
+    contains policy that is unambiguously science, in several cases duplicated,
+    because each handler needed it independently. A scientist who wants to change
+    any of these has to go into the toolbelt machinery and find every copy:
+  </p>
+  <p class="ev">
+    <b>The Ce(IV)-doublet / U(VI)-satellite rule</b> — <code>3 if family in
+    ("ln_L3","an_L3","an_M") else 1</code> — appears verbatim at
+    <b>lines 1240 and 1544</b>.<br>
+    <b>The pre-edge window absolute→relative conversion</b> at
+    <b>1245 and 1506</b>, and the window re-derived again at <b>1603</b>.<br>
+    <b>The default EXAFS k-weight of 2</b> hard-coded at
+    <b>2386, 2450, 2491, 2525, 2564</b> — five copies.<br>
+    <b>The element/edge auto-detection policy</b> — explicit-vs-auto branching,
+    E₀ anchoring, ambiguity flagging — in <code>_interpretation_inputs</code>
+    (1195–1225), with only the scoring in <code>interpretation/edges.py</code>.<br>
+    <b>The "≥20 overlapping points" data-adequacy rule</b> at <b>1181</b>.<br>
+    <b>Convergence targets</b> <code>sem_threshold_frac=0.01</code>,
+    <code>drift_threshold_frac=0.01</code> at <b>715–716</b>.<br>
+    And <b>seven handlers do raw numpy math inline</b> —
+    <code>t_compare_xas_to_references</code>, <code>t_difference_spectrum</code>,
+    <code>t_align_crystals</code>, <code>t_sum_crystals</code>,
+    <code>t_tag_crystal_q</code>, <code>t_extract_chi</code>,
+    <code>t_compare_xrs_to_references</code>.
+  </p>
+</div>
+
+<figure>
+  <figcaption>How many places you must find and edit to change one scientific choice</figcaption>
+  <p class="subcap">
+    Verified by grep against the current working tree. This is the number that
+    actually decides whether a collaborator can iterate — not how the code reads,
+    but how many copies of a decision they have to notice.
+  </p>
+  <div class="legend">
+    <span><i style="--c: var(--s-now)"></i>Today</span>
+    <span><i style="--c: var(--s-after)"></i>After the regroup</span>
+  </div>
+  <div class="bars">
+    <div class="blabel">Default EXAFS k-weight<small>kweight = 2</small></div>
+    <div class="grp">
+      <div class="btrack"><div class="bfill" style="--c: var(--s-now); width: 100%"
+        data-tip="Today: 5 hard-coded copies in tools_core.py (lines 2386, 2450, 2491, 2525, 2564)."><span class="bval">5</span></div></div>
+      <div class="btrack"><div class="bfill" style="--c: var(--s-after); width: 20%"
+        data-tip="After: one named constant in science/exafs/policy.py."><span class="bval">1</span></div></div>
+    </div>
+
+    <div class="blabel">Pre-edge fit window<small>PRE_EDGE_WINDOW_REL</small></div>
+    <div class="grp">
+      <div class="btrack"><div class="bfill" style="--c: var(--s-now); width: 80%"
+        data-tip="Today: canonical constant in descriptors.py, plus 3 sites in tools_core.py (1245, 1506, 1603) that re-derive or convert it."><span class="bval">4</span></div></div>
+      <div class="btrack"><div class="bfill" style="--c: var(--s-after); width: 20%"
+        data-tip="After: one constant plus one conversion helper, both in science/xas/policy.py."><span class="bval">1</span></div></div>
+    </div>
+
+    <div class="blabel">Ce(IV) / U(VI) component rule<small>white_line_components</small></div>
+    <div class="grp">
+      <div class="btrack"><div class="bfill" style="--c: var(--s-now); width: 40%"
+        data-tip="Today: the same one-line family test duplicated at tools_core.py 1240 and 1544."><span class="bval">2</span></div></div>
+      <div class="btrack"><div class="bfill" style="--c: var(--s-after); width: 20%"
+        data-tip="After: science/xas/policy.py::white_line_components_for(family)."><span class="bval">1</span></div></div>
+    </div>
+
+    <div class="blabel">Element / edge auto-detection<small>suggest_edge + anchoring policy</small></div>
+    <div class="grp">
+      <div class="btrack"><div class="bfill" style="--c: var(--s-now); width: 40%"
+        data-tip="Today: scoring in interpretation/edges.py, policy in tools_core._interpretation_inputs — two files, two layers."><span class="bval">2</span></div></div>
+      <div class="btrack"><div class="bfill" style="--c: var(--s-after); width: 20%"
+        data-tip="After: both in science/xas/policy.py, calling science/tables/edges.py."><span class="bval">1</span></div></div>
+    </div>
+
+    <div class="blabel">Add a per-element edge shift<small>PER_ELEMENT_EDGE_SHIFT</small></div>
+    <div class="grp">
+      <div class="btrack"><div class="bfill" style="--c: var(--s-now); width: 20%"
+        data-tip="Today: one table in interpretation/calibrations.py. Already correct — nothing to fix."><span class="bval">1</span></div></div>
+      <div class="btrack"><div class="bfill" style="--c: var(--s-after); width: 20%"
+        data-tip="After: unchanged, just relocated to science/tables/edge_shifts.py."><span class="bval">1</span></div></div>
+    </div>
+
+    <div class="axis"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+  </div>
+  <details class="tableview">
+    <summary>Table view</summary>
+    <table>
+      <thead><tr><th>Scientific choice</th><th class="mono">Sites today</th><th class="mono">After</th><th>Where they are now</th></tr></thead>
+      <tbody>
+        <tr><td>Default EXAFS k-weight</td><td class="mono">5</td><td class="mono">1</td><td class="mono">tools_core.py 2386, 2450, 2491, 2525, 2564</td></tr>
+        <tr><td>Pre-edge fit window</td><td class="mono">4</td><td class="mono">1</td><td class="mono">descriptors.py 35; tools_core.py 1245, 1506, 1603</td></tr>
+        <tr><td>Ce(IV) / U(VI) component rule</td><td class="mono">2</td><td class="mono">1</td><td class="mono">tools_core.py 1240, 1544</td></tr>
+        <tr><td>Element / edge auto-detection</td><td class="mono">2</td><td class="mono">1</td><td class="mono">edges.py 145; tools_core.py 1195–1225</td></tr>
+        <tr><td>Per-element edge shift table</td><td class="mono">1</td><td class="mono">1</td><td class="mono">calibrations.py 46 — already correct</td></tr>
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<!-- ============================================================= -->
+<h2><span class="no">02</span> The one rule</h2>
+<p class="sectionnote">
+  Everything below follows from a single sentence. It is the thing to put at the
+  top of the science directory, and it is already ~95% true of the existing code —
+  so this is mostly formalising a boundary you've been respecting by instinct.
+</p>
+
+<div class="therule">
+  <blockquote>
+    Everything under <code>science/</code> takes <b>numbers in</b> and returns
+    <b>numbers out</b>. No file paths, no environment variables, no SPEC, no
+    database, no argparse.
+  </blockquote>
+  <p class="then">
+    The corollaries are what make it usable as a routing rule. If your function
+    needs to know <em>where the data lives</em> → it belongs in
+    <code>spec_data/</code>. If it needs to know <em>what the agent asked for</em>
+    → it belongs in <code>tool_catalog/</code>. If it takes arrays and returns a
+    dict of numbers, it is science and it goes here, no matter which technique it
+    serves.
+  </p>
+  <p class="then">
+    That rule is checkable at a glance from the function signature alone, which is
+    the property that matters. A collaborator never has to ask permission or trace
+    imports to know whether they're in the right place.
+  </p>
+</div>
+
+<p>
+  There is exactly <strong>one</strong> place the existing code violates it:
+  <code>interpretation/calibration_store.py</code> reads
+  <code>beamtimehero_cli.config</code> to find a directory to write a JSON file
+  into. That's session state, not science — it moves up a layer, or takes the
+  directory as an argument. Everything else in
+  <code>analysis/</code>, <code>interpretation/</code> and
+  <code>generic_data/</code> already obeys the rule.
+</p>
+
+<!-- ============================================================= -->
+<h2><span class="no">03</span> The layout</h2>
+<p class="sectionnote">
+  One top-level <code>science/</code> package, organized by <strong>technique →
+  pipeline stage</strong>. Nothing is rewritten; every existing function has a
+  destination, listed in full below.
+</p>
+
+<div class="treecols">
+  <div class="treebox">
+    <h4>Today</h4>
+    <p class="hint">Three dirs, opaque names, one technique split across two of them.</p>
+<pre class="tree"><span class="d">src/beamtimehero_cli/</span>
+├── <span class="g">analysis/</span>
+│   ├── xas.py          <span class="c">reduction + XAS, mixed</span>
+│   ├── xrs.py
+│   ├── exafs.py
+│   └── render.py
+├── <span class="g">interpretation/</span>
+│   ├── normalize.py    <span class="c">XAS (unlabelled)</span>
+│   ├── descriptors.py  <span class="c">XAS (unlabelled)</span>
+│   ├── edges.py        <span class="c">XAS tables</span>
+│   ├── calibrations.py <span class="c">XAS tables</span>
+│   ├── interpret.py    <span class="c">XAS verdicts</span>
+│   ├── quality.py      <span class="c">technique-agnostic</span>
+│   ├── plotting.py
+│   ├── calibration_store.py <span class="c">← writes files</span>
+│   ├── xrs_descriptors.py
+│   ├── xrs_edges.py
+│   └── xrs_interpret.py
+├── <span class="g">generic_data/</span>
+│   ├── fitter.py       <span class="c">beam/alignment fits</span>
+│   ├── lcf.py          <span class="c">XAS</span>
+│   └── cosine_similarity.py
+└── <span class="g">tool_catalog/tools_core.py</span>
+    <span class="c">…and science policy in here</span></pre>
+  </div>
+
+  <div class="treebox">
+    <h4>Proposed</h4>
+    <p class="hint">Technique, then stage. The directory name answers the question.</p>
+<pre class="tree"><span class="d">src/beamtimehero_cli/</span>
+└── <span class="s">science/</span>
+    ├── <span class="n">README.md</span>     <span class="c">the rule + the map</span>
+    ├── <span class="s">tables/</span>       <span class="c">tabulated physics, cited</span>
+    │   ├── edges.py
+    │   ├── edge_shifts.py
+    │   ├── emission_lines.py
+    │   └── xrs_edges.py
+    ├── <span class="s">reduce/</span>       <span class="c">counts → one spectrum</span>
+    │   ├── counters.py
+    │   ├── reps.py
+    │   ├── deadtime.py
+    │   └── artifacts.py
+    ├── <span class="s">xas/</span>          <span class="c">XANES / HERFD</span>
+    │   ├── normalize.py
+    │   ├── e0.py
+    │   ├── fits.py
+    │   ├── descriptors.py
+    │   ├── compare.py
+    │   ├── interpret.py
+    │   └── <span class="n">policy.py</span>  <span class="c">← from tools_core</span>
+    ├── <span class="s">exafs/</span>
+    │   ├── kspace.py
+    │   ├── background.py
+    │   ├── fourier.py
+    │   └── <span class="n">policy.py</span>  <span class="c">← from tools_core</span>
+    ├── <span class="s">xrs/</span>
+    │   ├── calibrate.py
+    │   ├── reduce.py
+    │   ├── descriptors.py
+    │   └── interpret.py
+    ├── <span class="s">fitting/</span>      <span class="c">beam/alignment, not spectra</span>
+    │   ├── models.py
+    │   ├── peaks.py
+    │   ├── edges.py
+    │   └── similarity.py
+    └── <span class="s">plots/</span>        <span class="c">figures over arrays</span>
+        ├── xas.py
+        ├── xrs.py
+        └── exafs.py</pre>
+  </div>
+</div>
+
+<h3>Four decisions worth calling out</h3>
+<ul class="tight">
+  <li>
+    <strong><code>tables/</code> separates data from algorithms.</strong> Edge
+    energies, per-element edge shifts, core-hole widths, valence spans, emission
+    lines, XRS edge assignments — these are the things a scientist most often wants
+    to correct or extend, and they need no code reading at all. Today they're
+    scattered across four files that also contain fitting logic. Pulling them into
+    one directory of pure, cited tables makes the most-editable content the most
+    findable content.
+  </li>
+  <li>
+    <strong><code>reduce/</code> holds what isn't technique-specific.</strong>
+    Counter selection, rep averaging, dead-time, glitch and saturation detection.
+    This is the half of <code>analysis/xas.py</code> that was never about XAS,
+    plus <code>interpretation/quality.py</code>. Naming it <code>reduce/</code>
+    says what stage it is, and its absence from <code>xas/</code> says it applies
+    to everything.
+  </li>
+  <li>
+    <strong><code>policy.py</code> per technique is the new idea.</strong> Every
+    scientific default and heuristic currently embedded in the handler file gets a
+    name, a home and a citation: <code>DEFAULT_KWEIGHT</code>,
+    <code>white_line_components_for(family)</code>,
+    <code>pre_edge_window_for(e0, …)</code>, <code>autodetect_edge(...)</code>,
+    <code>MIN_OVERLAPPING_POINTS</code>. This is where the biggest iteration win
+    is — see §04.
+  </li>
+  <li>
+    <strong><code>fitting/</code> is deliberately not spectroscopy.</strong>
+    <code>generic_data/fitter.py</code> is knife-edge, aperture and emission-peak
+    fitting for beam diagnostics and alignment. Grouping it with the spectroscopy
+    would mislead; giving it its own named directory tells a scientist "this is
+    alignment maths, not your XANES."
+  </li>
+</ul>
+
+<h3>Full destination map</h3>
+<p class="sectionnote">Every existing science function, and where it goes. No rewrites — these are moves.</p>
+<table>
+  <thead><tr><th>Destination</th><th>What lands there</th><th>From</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">tables/edges.py</td><td class="mono">classify_edge_family · get_edge_info · suggest_edge · EDGE_ENERGY_SOURCE</td><td class="mono">interpretation/edges.py</td></tr>
+    <tr><td class="mono">tables/edge_shifts.py</td><td class="mono">PER_ELEMENT_EDGE_SHIFT · GENERIC_EDGE_SHIFT · MAX_VALENCE_SPAN · CORE_HOLE_WIDTH_SOURCE</td><td class="mono">interpretation/calibrations.py</td></tr>
+    <tr><td class="mono">tables/emission_lines.py</td><td class="mono">_EDGE_EMISSION_LINES · _emission_energy_ev</td><td class="mono">interpretation/normalize.py</td></tr>
+    <tr><td class="mono">tables/xrs_edges.py</td><td class="mono">classify_xrs_family · get_xrs_edge_info · suggest_xrs_edge</td><td class="mono">interpretation/xrs_edges.py</td></tr>
+    <tr><td class="mono">reduce/counters.py</td><td class="mono">pick_active_counter · counter_selection_warning</td><td class="mono">analysis/xas.py</td></tr>
+    <tr><td class="mono">reduce/reps.py</td><td class="mono">average_reps · filter_short_reps · estimate_per_rep_noise · normalize_series</td><td class="mono">analysis/xas.py</td></tr>
+    <tr><td class="mono">reduce/deadtime.py</td><td class="mono">deadtime_correct</td><td class="mono">analysis/xas.py</td></tr>
+    <tr><td class="mono">reduce/artifacts.py</td><td class="mono">detect_glitches · detect_saturation · self_absorption_assessment · interpolate_over_mask</td><td class="mono">interpretation/quality.py</td></tr>
+    <tr><td class="mono">xas/normalize.py</td><td class="mono">area_normalize · mback_normalize · pre_post_normalize · edge_step_provenance · edge_step_normalize</td><td class="mono">interpretation/normalize.py + analysis/xas.py</td></tr>
+    <tr><td class="mono">xas/e0.py</td><td class="mono">find_e0 · rebroaden</td><td class="mono">interpretation/descriptors.py</td></tr>
+    <tr><td class="mono">xas/fits.py</td><td class="mono">fit_peak_region · fit_white_line · fit_pre_edge</td><td class="mono">interpretation/descriptors.py</td></tr>
+    <tr><td class="mono">xas/descriptors.py</td><td class="mono">extract_descriptors · per_scan_descriptor_trends</td><td class="mono">interpretation/descriptors.py</td></tr>
+    <tr><td class="mono">xas/compare.py</td><td class="mono">align_spectra · difference_spectrum · compare_to_references</td><td class="mono">analysis/xas.py + generic_data/lcf.py</td></tr>
+    <tr><td class="mono">xas/interpret.py</td><td class="mono">interpret_oxidation_state · interpret_coordination_geometry · summarize_chemistry · all _oxidation_* branches</td><td class="mono">interpretation/interpret.py</td></tr>
+    <tr><td class="mono">xas/policy.py <span class="tag t-new">new</span></td><td class="mono">white_line_components_for · pre_edge_window_for · autodetect_edge · MIN_OVERLAPPING_POINTS · PRE_EDGE_WINDOW_REL · WHITE_LINE_WINDOW_REL</td><td class="mono">tools_core.py + descriptors.py</td></tr>
+    <tr><td class="mono">exafs/kspace.py</td><td class="mono">etok · ktoe · rebin_k</td><td class="mono">analysis/exafs.py</td></tr>
+    <tr><td class="mono">exafs/background.py</td><td class="mono">autobk_lite</td><td class="mono">analysis/exafs.py</td></tr>
+    <tr><td class="mono">exafs/fourier.py</td><td class="mono">ft_window · xftf · first_shell_peak</td><td class="mono">analysis/exafs.py</td></tr>
+    <tr><td class="mono">exafs/policy.py <span class="tag t-new">new</span></td><td class="mono">DEFAULT_KWEIGHT · DEFAULT_KMIN · DEFAULT_DK · DEFAULT_RBKG</td><td class="mono">tools_core.py (5 + 2 + 2 + 2 sites)</td></tr>
+    <tr><td class="mono">xrs/calibrate.py</td><td class="mono">fit_elastic_line · to_energy_loss · q_from_two_theta · common_loss_grid</td><td class="mono">analysis/xrs.py</td></tr>
+    <tr><td class="mono">xrs/reduce.py</td><td class="mono">align_and_average · sum_crystals · subtract_compton_background · area_normalize · reject_outlier_channels</td><td class="mono">analysis/xrs.py</td></tr>
+    <tr><td class="mono">xrs/descriptors.py</td><td class="mono">edge_onset · peak_in_window · integrated_area · feature_snr · extract_xrs_descriptors</td><td class="mono">interpretation/xrs_descriptors.py</td></tr>
+    <tr><td class="mono">xrs/interpret.py</td><td class="mono">interpret_xrs_oxidation_state · interpret_q_dependence · compare_xrs_to_references · assess_xrs_quality · summarize_xrs_chemistry</td><td class="mono">interpretation/xrs_interpret.py</td></tr>
+    <tr><td class="mono">fitting/models.py</td><td class="mono">FitResult · _gaussian · _erf_step · _pseudo_voigt · _compute_r_squared</td><td class="mono">generic_data/fitter.py</td></tr>
+    <tr><td class="mono">fitting/peaks.py</td><td class="mono">fit_peak · fit_emission_peak · detect_peaks_survey</td><td class="mono">generic_data/fitter.py</td></tr>
+    <tr><td class="mono">fitting/edges.py</td><td class="mono">fit_aperture_edges · fit_knife_edge</td><td class="mono">generic_data/fitter.py</td></tr>
+    <tr><td class="mono">fitting/similarity.py</td><td class="mono">compute_cosine_similarity · analyze_scan_quality</td><td class="mono">generic_data/cosine_similarity.py</td></tr>
+    <tr><td class="mono">plots/xas.py</td><td class="mono">annotated_descriptor_figure</td><td class="mono">interpretation/plotting.py</td></tr>
+    <tr><td class="mono"><i>stays put</i></td><td class="mono">calibration_store.py — writes JSON to a configured dir; session state, not science</td><td class="mono">→ up a layer</td></tr>
+  </tbody>
+</table>
+
+<p>
+  The rule for <code>plots/</code>: a figure function that takes
+  <strong>arrays or a descriptor dict</strong> is science and moves here; a figure
+  function that takes a <strong>file name</strong> stays in
+  <code>spec_data/</code>. That keeps the same one-sentence test working for
+  plotting, which is otherwise the fuzziest category.
+</p>
+
+<!-- ============================================================= -->
+<h2><span class="no">04</span> Getting the science out of the handler file</h2>
+<p class="sectionnote">
+  This is the part that actually changes what iteration feels like. The moves in
+  §03 are bookkeeping; this one removes the reason a scientist ever has to open
+  <code>tools_core.py</code>.
+</p>
+
+<p>
+  The handler layer's only job should be: unpack the argument dict, ask
+  <code>spec_data</code> for arrays, call one science function, serialise the
+  result. Where it currently makes a scientific <em>choice</em>, that choice moves
+  into a <code>policy.py</code> and the handler calls it by name. Concretely:
+</p>
+
+<pre class="snip"><span class="c"># today — tools_core.py, twice (1240 and 1544), inside 2,931 lines of glue</span>
+wl_comps = int(arguments.get("white_line_components") or 0)
+<span class="k">if</span> wl_comps &lt;= 0:
+    wl_comps = 3 <span class="k">if</span> edge_info[<span class="k">"family"</span>] <span class="k">in</span> (<span class="k">"ln_L3"</span>, <span class="k">"an_L3"</span>, <span class="k">"an_M"</span>) <span class="k">else</span> 1
+
+<span class="c"># after — science/xas/policy.py, once, findable and citable</span>
+<span class="c"># Ce(IV) shows a final-state L3 doublet and U(VI) M4 carries satellites, so</span>
+<span class="c"># these families need a multi-component white line. Bugarin & Glatzel 2024;</span>
+<span class="c"># Bes et al. 2016.</span>
+MULTI_COMPONENT_FAMILIES = (<span class="k">"ln_L3"</span>, <span class="k">"an_L3"</span>, <span class="k">"an_M"</span>)
+
+<span class="k">def</span> white_line_components_for(family: str) -> int:
+    <span class="k">return</span> 3 <span class="k">if</span> family <span class="k">in</span> MULTI_COMPONENT_FAMILIES <span class="k">else</span> 1
+
+<span class="c"># and the handler becomes a single line with no scientific opinion in it</span>
+wl_comps = arguments.get(<span class="k">"white_line_components"</span>) <span class="k">or</span> policy.white_line_components_for(family)</pre>
+
+<p>
+  Same treatment for the five copies of <code>kweight=2</code>, the pre-edge
+  window conversion, the <code>≥20 points</code> adequacy rule, the convergence
+  targets, and the element/edge auto-detection policy in
+  <code>_interpretation_inputs</code> — which is the largest single piece, and the
+  one with an actual physics argument in its comment (E₀ anchoring, because the
+  window one-third-point proxy misranks Ni K against Er L3). That comment is
+  scientific reasoning and it should not be buried in a private helper in the glue
+  layer.
+</p>
+<p>
+  The seven handlers doing inline numpy get the same treatment: the LCF residual
+  RMSE in <code>t_compare_xas_to_references</code>, the crystal interpolation in
+  <code>t_align_crystals</code> and <code>t_sum_crystals</code>, the peak search in
+  <code>t_tag_crystal_q</code>. Each is a few lines, each becomes a named function
+  in the matching <code>science/</code> module.
+</p>
+<p>
+  Once that's done there's a clean statement you can make to a collaborator, which
+  is worth more than any of the individual moves:
+  <strong>if you're editing a file outside <code>science/</code>, you're probably
+  in the wrong place.</strong>
+</p>
+
+<!-- ============================================================= -->
+<h2><span class="no">05</span> What you actually hand a collaborator</h2>
+<p class="sectionnote">
+  Four artifacts. The layout above is only useful if someone is told about it, and
+  the last one keeps that telling from going stale.
+</p>
+
+<ol class="steps">
+  <li>
+    <h4><code>science/README.md</code> — the rule and the map</h4>
+    <p>
+      Opens with the one rule from §02, then the routing table: a scientist arrives
+      with a question, and the table answers it in one hop. This is the whole
+      onboarding document; it should stay under two screens.
+    </p>
+    <table>
+      <thead><tr><th>You want to change…</th><th class="mono">Go to</th></tr></thead>
+      <tbody>
+        <tr><td>an edge energy, core-hole width, or edge-shift slope</td><td class="mono">science/tables/</td></tr>
+        <tr><td>which counter is picked, or how reps are averaged</td><td class="mono">science/reduce/</td></tr>
+        <tr><td>how μ(E) is normalized (area, edge-step, MBACK)</td><td class="mono">science/xas/normalize.py</td></tr>
+        <tr><td>how E₀ is found, or the pre-edge / white-line fits</td><td class="mono">science/xas/e0.py · fits.py</td></tr>
+        <tr><td>how an oxidation state or geometry verdict is reached</td><td class="mono">science/xas/interpret.py</td></tr>
+        <tr><td>a default window, k-weight, or auto-detection rule</td><td class="mono">science/&lt;technique&gt;/policy.py</td></tr>
+        <tr><td>χ(k) extraction, background, or the Fourier transform</td><td class="mono">science/exafs/</td></tr>
+        <tr><td>the energy-loss axis, Compton background, or crystal summing</td><td class="mono">science/xrs/</td></tr>
+        <tr><td>a knife-edge / aperture / emission-peak fit for alignment</td><td class="mono">science/fitting/</td></tr>
+        <tr><td>what a plot looks like</td><td class="mono">science/plots/</td></tr>
+      </tbody>
+    </table>
+  </li>
+
+  <li>
+    <h4><code>CONTRIBUTING.md</code> — and one honest paragraph about what not to touch</h4>
+    <p>
+      Short, and pointed at <code>science/README.md</code> for anything scientific.
+      The one thing it must say plainly: <strong>the files that define what the
+      agents see are <code>tool_catalog/definitions.py</code>,
+      <code>tool_catalog/categorize.py</code> and <code>cli/</code></strong>.
+      Changing a tool's name, its parameters, or which branch it sits on changes
+      what five separate applications see, so those are the files to raise rather
+      than edit.
+    </p>
+    <p>
+      Everything inside <code>science/</code> is fair game — and it's worth saying
+      that explicitly, because the default assumption in a repo this dense is that
+      nothing is safe to touch. Naming the small off-limits set is what makes the
+      large safe set usable.
+    </p>
+  </li>
+
+  <li>
+    <h4>A generated science index, next to the tool catalog</h4>
+    <p>
+      <code>docgen.py</code> already renders <code>docs/tool_catalog.html</code>
+      from the live registry, which is why that page can't drift. Point the same
+      machinery at <code>science/</code> and emit
+      <code>docs/science_index.html</code>: every function, its signature, the
+      first line of its docstring, its citations, and <em>which tools call it</em>.
+    </p>
+    <p>
+      That last column is the one that makes the science "directly identifiable"
+      in the sense you asked for — a scientist reading
+      <code>fit_white_line</code> can see it backs
+      <code>extract_xas_descriptors</code> and <code>interpret_oxidation_state</code>,
+      so they know what their change affects without tracing imports. And because
+      it's generated by walking the package, a new function appears on the page by
+      existing.
+    </p>
+  </li>
+
+  <li>
+    <h4>A citation convention, since you're already 80% doing it</h4>
+    <p>
+      The code already carries <code>AREA_NORM_CITATION</code>,
+      <code>MBACK_CITATION</code>, <code>EDGE_ENERGY_SOURCE</code>,
+      <code>CORE_HOLE_WIDTH_SOURCE</code>, and inline references to Wilke 2001,
+      Bugarin &amp; Glatzel 2024, Weng &amp; Penner-Hahn 2005, Bes 2016. Make it
+      uniform: every module under <code>science/</code> declares a module-level
+      <code>CITATIONS</code> dict, and docgen collects them into a bibliography on
+      the index page.
+    </p>
+    <p>
+      This is a small thing that does disproportionate work with scientific
+      collaborators — it makes the directory read like a methods section, and it
+      gives someone adding a new method an obvious slot to justify it in.
+    </p>
+  </li>
+</ol>
+
+<!-- ============================================================= -->
+<h2><span class="no">06</span> How the move avoided breaking the apps</h2>
+<p>
+  Five applications import from this package as sibling checkouts, several of them
+  reaching directly at <code>analysis/</code> and <code>interpretation/</code>
+  module paths. So the moves had to be non-breaking: every old module stayed in
+  place as a re-export shim. These are generated from the new modules' public
+  names, so they cannot silently omit a symbol.
+</p>
+<pre class="snip"><span class="c"># analysis/xas.py — after the move</span>
+<span class="c">"""Moved to science/. Kept as a shim so existing imports keep working."""</span>
+<span class="k">from</span> beamtimehero_cli.science.reduce.counters <span class="k">import</span> pick_active_counter, counter_selection_warning
+<span class="k">from</span> beamtimehero_cli.science.reduce.reps <span class="k">import</span> average_reps, filter_short_reps, estimate_per_rep_noise
+<span class="k">from</span> beamtimehero_cli.science.xas.normalize <span class="k">import</span> edge_step_normalize
+<span class="k">from</span> beamtimehero_cli.science.xas.compare <span class="k">import</span> align_spectra, difference_spectrum</pre>
+<p>
+  That makes the whole reorganisation a pure addition from every consumer's point
+  of view — nothing downstream has to change on the same day. Then update the
+  in-repo callers (<code>tools_core.py</code> and <code>spec_data/</code>) to the
+  new paths, migrate the apps whenever convenient, and delete the shims once
+  they're unused. The <code>policy.py</code> extraction in §04 is independent and
+  can happen before or after; it touches only <code>tools_core.py</code>, which no
+  app should be importing from anyway.
+</p>
+<p>
+  Sequencing suggestion, if it helps: <code>tables/</code> first (pure data, zero
+  risk, and immediately the most useful thing for a collaborator), then
+  <code>reduce/</code> (breaks up the mixed <code>xas.py</code>), then the three
+  technique directories, then <code>policy.py</code> last since it's the only step
+  that changes behaviour boundaries rather than just locations.
+</p>
+
+<hr class="sep">
+
+<h3>Open questions</h3>
+<ul class="tight">
+  <li>
+    <strong><code>generic_data/fitter.py</code> and
+    <code>experiment_planning/decisions.py</code> — in or out?</strong> Together
+    that's about 1,600 lines of fitting and decision logic that nothing currently
+    imports (<code>fitter.py</code> is reachable only through
+    <code>decisions.py</code>, which has no callers). It's also the most
+    scientific-looking code in the repo, so it's where a new collaborator will
+    gravitate first. Either wire it up under <code>science/fitting/</code> or
+    delete it — leaving it in place unrouted will cost every newcomer a day.
+  </li>
+  <li>
+    <strong>Does <code>experiment_planning/</code> belong under
+    <code>science/</code>?</strong> <code>scan_features.py</code> and
+    <code>scan_efficiency.py</code> are live and array-shaped, so by the rule in
+    §02 they qualify — probably as <code>science/planning/</code>. But the README
+    currently claims experiment-planning lives in consuming projects, so the
+    intent here needs settling before it gets a home.
+  </li>
+  <li>
+    <strong>Should <code>spec_data/*_plotting.py</code> split?</strong> Those files
+    mix file-name-taking figures with array-taking figures. The rule sorts them
+    cleanly, but it's a handful of functions to reassign and worth confirming
+    you want the churn.
+  </li>
+</ul>
+
+<footer>
+  Prepared from the working tree at <code class="mono">c23f8ac</code>. Function
+  inventories, duplicate-site line numbers, and edit-site counts were taken by
+  grep against the current source rather than estimated. Chart palettes validated
+  for colour-vision separation and surface contrast in both themes.
+</footer>
+
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById('themetoggle');
+  var saved = null;
+  try { saved = localStorage.getItem('bth-arch-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+  else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
+    root.setAttribute('data-theme', 'dark');
+  btn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('bth-arch-theme', next); } catch (e) {}
+  });
+
+  var tip = document.getElementById('tip');
+  document.querySelectorAll('.bfill[data-tip]').forEach(function (el) {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', el.dataset.tip);
+    function show(e) {
+      tip.textContent = el.dataset.tip;
+      tip.style.opacity = '1';
+      var r = el.getBoundingClientRect();
+      var x = (e && e.clientX != null ? e.clientX + 14 : r.left + 14);
+      var y = (e && e.clientY != null ? e.clientY + 16 : r.bottom + 8);
+      tip.style.left = Math.min(x, window.innerWidth - 300) + 'px';
+      tip.style.top = y + 'px';
+    }
+    function hide() { tip.style.opacity = '0'; }
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mousemove', show);
+    el.addEventListener('mouseleave', hide);
+    el.addEventListener('focus', show);
+    el.addEventListener('blur', hide);
+  });
+})();
+</script>
+</body>
+</html>
