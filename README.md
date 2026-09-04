@@ -50,6 +50,17 @@ Discover leaves with `--help` at any depth. Agent profiles (curated alias
 views over the catalog, e.g. `bl-aligner`) are listed with
 `beamtimehero --list-profiles`.
 
+## Tool catalog (human-readable)
+
+The nested `--help` surface is aimed at LLM agents. For humans there is a
+generated one-page catalog — the full CLI tree plus an A–Z list of every tool
+with descriptions, parameters, and backend lineage:
+
+```bash
+open docs/tool_catalog.html                 # view
+python -m beamtimehero_cli.docgen           # regenerate after catalog changes
+```
+
 ## Env vars
 
 | Var | Default | Meaning |
