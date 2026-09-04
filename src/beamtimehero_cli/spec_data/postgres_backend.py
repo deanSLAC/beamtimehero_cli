@@ -25,7 +25,8 @@ from typing import Optional
 
 import pandas as pd
 
-from beamtimehero_cli.analysis import xas
+from beamtimehero_cli import config as bl_config
+from beamtimehero_cli.science.reduce import counters as _counters
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,7 @@ class PostgresBackend:
         df = self.read_scan(file_name, scan_number)
         if df is None:
             return None
-        counter, reason = xas.pick_active_counter(df)
+        counter, reason = _counters.pick_active_counter(df, priority=bl_config.active_counter_priority())
         return {
             "file_name": file_name,
             "scan_number": scan_number,

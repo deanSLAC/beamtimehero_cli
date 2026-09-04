@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from beamtimehero_cli.analysis import xas
+from beamtimehero_cli import config as bl_config
+from beamtimehero_cli.science.reduce import counters as _counters
 from beamtimehero_cli.spec_data import local_data
 
 
@@ -48,12 +49,12 @@ class FilesBackend:
 
     def get_active_counter(self, file_name: str, scan_number: int) -> dict | None:
         """Active counter for one scan. Delegates the column-inspection logic
-        to ``analysis.xas.pick_active_counter`` so file and Postgres backends
+        to ``analysis._counters.pick_active_counter`` so file and Postgres backends
         agree on which counter wins."""
         df = self.read_scan(file_name, scan_number)
         if df is None:
             return None
-        counter, reason = xas.pick_active_counter(df)
+        counter, reason = _counters.pick_active_counter(df, priority=bl_config.active_counter_priority())
         return {
             "file_name": file_name,
             "scan_number": scan_number,

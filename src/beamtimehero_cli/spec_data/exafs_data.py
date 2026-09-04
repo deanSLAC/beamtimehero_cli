@@ -1,6 +1,6 @@
 """EXAFS data loading + reduction — the exafs-branch chokepoint.
 
-Bridges scan data to the pure math in ``analysis/exafs.py`` the way
+Bridges scan data to the pure math in ``science/exafs/`` the way
 ``xrs_data.py`` does for the Raman branch: load reps on the chosen counter,
 divide by I0, drop aborted sweeps, glitch-mask, merge, then hand a clean
 merged mu(E) to normalization + chi extraction.
@@ -24,8 +24,8 @@ import os
 import numpy as np
 import pandas as pd
 
-from beamtimehero_cli.analysis import xas
-from beamtimehero_cli.interpretation import quality
+from beamtimehero_cli.science.reduce import reps as _reps
+from beamtimehero_cli.science.reduce import artifacts as quality
 from beamtimehero_cli.spec_data import scans
 from beamtimehero_cli.spec_data.ssrl_backend import SSRL_COLLECTOR_DIR_ENV
 
@@ -124,7 +124,7 @@ def load_mu(
         counter_warning = combined.attrs.get("counter_warning")
         src = "spec"
 
-    combined, dropped = xas.filter_short_reps(combined)
+    combined, dropped = _reps.filter_short_reps(combined)
     combined = combined.dropna()
     if combined.empty or len(combined) < 20:
         raise ValueError(

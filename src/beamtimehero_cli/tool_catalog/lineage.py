@@ -182,7 +182,7 @@ TOOL_LINEAGE: dict[str, dict] = {
             "each scan to the running mean, plus cumulative convergence "
             "and standard error."
         ),
-        "python_func": "generic_data.cosine_similarity.analyze_scan_quality (via spec_data.scans.get_normalized_scan_arrays)",
+        "python_func": "science.fitting.similarity.analyze_scan_quality (via spec_data.scans.get_normalized_scan_arrays)",
         "spec_command": None,
         "output": "JSON: {per_scan_similarity, cumulative, std_error, verdict}",
         "source": "spec_datafile",
@@ -1188,7 +1188,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         ),
         "python_func": (
             "tool_catalog.tools_core._load_spectrum_entries(...) + "
-            "generic_data.lcf.compare_to_references(...)"
+            "science.xas.compare.compare_to_references(...)"
         ),
         "spec_command": None,
         "output": "JSON: {components[{name,fraction}], fit_r2, residual_rms, reference_e0s_ev, ...} + fit plot",
@@ -1207,7 +1207,7 @@ TOOL_LINEAGE: dict[str, dict] = {
             "refused as glitch-latched. Report-only — nothing is written."
         ),
         "python_func": (
-            "analysis.xas.align_spectra(...) over "
+            "science.xas.compare.align_spectra(...) over "
             "spec_data.scans.get_normalized_scan_arrays(...) loads"
         ),
         "spec_command": None,
@@ -1227,7 +1227,7 @@ TOOL_LINEAGE: dict[str, dict] = {
             "RMS Δ, with a two-panel overlay/difference plot."
         ),
         "python_func": (
-            "analysis.xas.difference_spectrum(...) over "
+            "science.xas.compare.difference_spectrum(...) over "
             "spec_data.scans.get_normalized_scan_arrays(...) loads"
         ),
         "spec_command": None,

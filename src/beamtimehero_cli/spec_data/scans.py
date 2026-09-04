@@ -12,7 +12,7 @@ Two on-disk formats hide behind the same function surface:
   session-wide, not per-file.
 
 Pure-math helpers (edge-step normalization, active-counter selection,
-per-rep noise estimation, averaging) live in ``beamtimehero_cli.analysis.xas``
+per-rep noise estimation, averaging) live in ``beamtimehero_cli.science.reduce``
 so the postgres-backed flow can reuse them without copy-pasting.
 """
 from __future__ import annotations
@@ -26,7 +26,10 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from beamtimehero_cli.analysis import xas
+from beamtimehero_cli import config as bl_config
+from beamtimehero_cli.science.reduce import counters as _counters
+from beamtimehero_cli.science.reduce import normalize as _norm
+from beamtimehero_cli.science.reduce import reps as _reps
 from beamtimehero_cli.spec_data import local_data, twocol_ascii
 from beamtimehero_cli.spec_data.ssrl_backend import (
     SSRL_COLLECTOR_DIR_ENV, SSRLAsciiBackend,
@@ -97,13 +100,13 @@ def get_scan_deadtime(file_name, scan_number):
 def get_active_counter(file_name, scan_number):
     """Determine the 'active' fluorescence/absorption counter for a scan.
 
-    Selection logic lives in ``analysis.xas.pick_active_counter`` and is
+    Selection logic lives in ``science.reduce.counters.pick_active_counter`` and is
     shared with the postgres backend.
     """
     df = read_processed_scan(file_name, scan_number)
     if df is None:
         return None
-    counter, reason = xas.pick_active_counter(df)
+    counter, reason = _counters.pick_active_counter(df, priority=bl_config.active_counter_priority())
     return {
         "file_name": file_name,
         "scan_number": scan_number,
@@ -139,9 +142,9 @@ def df_to_llm_text(df, max_rows: int = _LLM_MAX_ROWS) -> str:
     )
 
 
-# Backward-compat shim: re-export the pure math from the analysis layer
+# Backward-compat shim: re-export the pure math from the science layer
 # so callers that still import ``scans._edge_step_normalize`` keep working.
-_edge_step_normalize = xas.edge_step_normalize
+_edge_step_normalize = _norm.edge_step_normalize
 
 
 def edge_step_normalize_scan(file_name, scan_number, counter=None, normalize_by="I0"):
@@ -230,7 +233,6 @@ def _merged_twocol_path(file_name) -> Path | None:
     recursive basename search — ``local_data.list_files`` reports these
     files by relative path, but users often quote just the basename.
     """
-    from beamtimehero_cli import config as bl_config
 
     roots = []
     collector_dir = os.getenv(SSRL_COLLECTOR_DIR_ENV)
@@ -377,7 +379,7 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
         counter_reason = active["reason"]
         first_df = read_processed_scan(file_name, scan_numbers[0])
         if first_df is not None:
-            counter_warning = xas.counter_selection_warning(first_df, counter)
+            counter_warning = _counters.counter_selection_warning(first_df, counter)
     else:
         counter_reason = "caller-specified counter"
 
@@ -388,7 +390,7 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
         if df is None:
             continue
         try:
-            energy, norm = xas.normalize_series(
+            energy, norm = _norm.normalize_series(
                 df, counter, normalize_by="I0", mode=normalization,
             )
         except KeyError:
@@ -413,8 +415,8 @@ def get_normalized_scan_arrays(file_name=None, e_min=None, e_max=None, scan_numb
     return combined, file_name, counter, used_scans
 
 
-# Backward-compat shim — implementation lives in ``analysis.xas``.
-_estimate_per_rep_noise = xas.estimate_per_rep_noise
+# Backward-compat shim — implementation lives in ``science.reduce.reps``.
+_estimate_per_rep_noise = _reps.estimate_per_rep_noise
 
 
 def average_energy_scans_arrays(

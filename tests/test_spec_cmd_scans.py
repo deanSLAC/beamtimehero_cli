@@ -201,3 +201,37 @@ def test_mock_inject_gscan_and_absenergy():
     out = transport._MockScreen.inject("absenergy 7112")
     assert "absev=7112" in out
     assert transport._MockScreen._positions["mono"] == 7112.0
+
+
+def test_counter_priority_default_unchanged():
+    """With no priority supplied, pick_active_counter keeps historical behavior."""
+    import pandas as pd
+
+    from beamtimehero_cli.science.reduce import counters
+
+    df = pd.DataFrame({"vortDT": [1.0, 5.0], "I1": [2.0, 2.1]})
+    counter, _reason = counters.pick_active_counter(df)
+    assert counter == "vortDT"
+
+
+def test_counter_priority_override_is_honored():
+    """The science function is pure: the override arrives as an argument."""
+    import pandas as pd
+
+    from beamtimehero_cli.science.reduce import counters
+
+    df = pd.DataFrame({"vortDT": [1.0, 5.0], "I1": [2.0, 2.1]})
+    counter, reason = counters.pick_active_counter(df, priority=("I1", "I2"))
+    assert counter == "I1"
+    assert "override" in reason
+
+
+def test_counter_priority_read_from_env_by_config(monkeypatch):
+    """config owns the env read; science/ never touches os.environ."""
+    from beamtimehero_cli import config as bl_config
+
+    monkeypatch.delenv("BTH_ACTIVE_COUNTER_PRIORITY", raising=False)
+    assert bl_config.active_counter_priority() == ()
+
+    monkeypatch.setenv("BTH_ACTIVE_COUNTER_PRIORITY", "I1, I2 ,")
+    assert bl_config.active_counter_priority() == ("I1", "I2")

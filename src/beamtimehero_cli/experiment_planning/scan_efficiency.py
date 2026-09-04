@@ -12,7 +12,7 @@ import numpy as np
 import warnings
 from typing import Any
 
-from beamtimehero_cli.generic_data.cosine_similarity import analyze_scan_quality
+from beamtimehero_cli.science.fitting.similarity import analyze_scan_quality
 
 
 def analyze_scan_efficiency(

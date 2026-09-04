@@ -20,7 +20,7 @@ def plot_scan(file_name, scan_number, counter=None, normalize_by=None):
     delegates the actual matplotlib work to ``analysis.render.render_scan``
     so the postgres-backed s3df flow can share the renderer.
     """
-    from beamtimehero_cli.analysis.render import render_scan
+    from beamtimehero_cli.science.plots.scan import render_scan
 
     df = scans.read_processed_scan(file_name, scan_number)
     if df is None:

@@ -45,4 +45,4 @@ beamtimehero = "beamtimehero_cli.cli.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-beamtimehero_cli = ["refdocs/defaults/*.md"]
+beamtimehero_cli = ["refdocs/defaults/*.md", "science/README.md"]

@@ -28,6 +28,8 @@ from beamtimehero_cli.spec_data import scans as scan_data
 from beamtimehero_cli.spec_data import plotting
 from beamtimehero_cli.spec_data.plotting import fig_to_base64
 from beamtimehero_cli.spec_logs import log_reader
+from beamtimehero_cli.science.exafs import policy as ex_policy
+from beamtimehero_cli.science.xas import policy as xas_policy
 
 logger = logging.getLogger(__name__)
 
@@ -670,7 +672,7 @@ def t_average_scans(arguments: dict) -> tuple[str, list[str]]:
 
 def t_analyze_convergence(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.generic_data.cosine_similarity import analyze_scan_quality
+    from beamtimehero_cli.science.fitting.similarity import analyze_scan_quality
     e_min = arguments.get("e_min")
     e_max = arguments.get("e_max")
     if e_min is None or e_max is None:
@@ -1175,50 +1177,20 @@ def _interpretation_inputs(arguments: dict):
     Returns ``(energy, mu, reps, edge_info, meta)``; raises ValueError on
     any data problem so handlers share one error path.
     """
-    from beamtimehero_cli.analysis.xas import average_reps
-    from beamtimehero_cli.interpretation import edges as interp_edges
+    from beamtimehero_cli.science.reduce.reps import average_reps
 
     combined, file_name, counter, used_scans = scan_data.get_normalized_scan_arrays(
         arguments.get("file_name"), scan_numbers=arguments.get("scan_numbers"),
     )
     combined = combined.dropna()
-    if combined.empty or len(combined) < 20:
-        raise ValueError(
-            "Too few overlapping energy points across the selected scans "
-            f"({len(combined)}) for descriptor fits."
-        )
+    xas_policy.check_overlap(len(combined) if not combined.empty else 0)
     energy = combined.index.values.astype(float)
     reps = combined.values.T  # (n_scans, n_points)
     avg, _std, _weights = average_reps(combined)
     mu = avg.values.astype(float)
 
-    element, edge = arguments.get("element"), arguments.get("edge")
-    if element and edge:
-        edge_info = interp_edges.get_edge_info(element, edge)
-        edge_info["detection"] = "explicit"
-    elif element or edge:
-        raise ValueError("Pass BOTH element and edge, or neither (auto-detect).")
-    else:
-        # Anchor auto-detection on the measured E0 when it can be fit — the
-        # window 1/3-point proxy misranks neighbors 20-30 eV apart (Ni K vs
-        # Er L3) whenever the scan carries a long post-edge tail.
-        try:
-            from beamtimehero_cli.interpretation import descriptors as interp_desc
-            e0_anchor = float(interp_desc.find_e0(energy, mu)["e0_ev"])
-        except Exception:
-            e0_anchor = None
-        suggestion = interp_edges.suggest_edge(
-            float(energy.min()), float(energy.max()), e0_ev=e0_anchor)
-        if not suggestion["found"]:
-            raise ValueError(suggestion["reason"])
-        edge_info = suggestion["best"]
-        edge_info["detection"] = (
-            "auto_from_measured_e0" if suggestion.get("anchor_source") == "measured_e0"
-            else "auto_from_energy_window")
-        if suggestion.get("ambiguous"):
-            edge_info["ambiguous"] = True
-            edge_info["competing_edges"] = suggestion.get("competing", [])
-            edge_info["detection_note"] = suggestion["note"]
+    edge_info = xas_policy.resolve_edge(
+        energy, mu, element=arguments.get("element"), edge=arguments.get("edge"))
 
     meta = {
         "file_name": file_name,
@@ -1231,18 +1203,17 @@ def _interpretation_inputs(arguments: dict):
 
 def _extract_for_interpretation(arguments: dict):
     """Shared descriptor pipeline for all CAT-10 handlers."""
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
 
     energy, mu, reps, edge_info, meta = _interpretation_inputs(arguments)
     wl_comps = int(arguments.get("white_line_components") or 0)
     if wl_comps <= 0:
-        # Ce(IV) doublet / U(VI) satellites need the multi-peak path
-        wl_comps = 3 if edge_info["family"] in ("ln_L3", "an_L3", "an_M") else 1
+        wl_comps = xas_policy.white_line_components_for(edge_info["family"])
     kwargs = {}
     pe_lo, pe_hi = arguments.get("pre_edge_e_min"), arguments.get("pre_edge_e_max")
     if pe_lo is not None and pe_hi is not None:
-        e0 = interp_desc.find_e0(energy, mu)["e0_ev"]
-        kwargs["pre_edge_window_rel"] = (float(pe_lo) - e0, float(pe_hi) - e0)
+        kwargs["pre_edge_window_rel"] = xas_policy.window_rel_from_absolute(
+            energy, mu, pe_lo, pe_hi)
     descriptors, arrays = interp_desc.extract_descriptors(
         energy, mu, reps=reps, edge_info=edge_info,
         normalization=arguments.get("normalization", "area"),
@@ -1280,10 +1251,10 @@ def _resolve_descriptors(arguments: dict):
 
 def t_record_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.analysis.xas import average_reps
-    from beamtimehero_cli.interpretation import calibration_store
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
-    from beamtimehero_cli.interpretation import edges as interp_edges
+    from beamtimehero_cli.science.reduce.reps import average_reps
+    from beamtimehero_cli import calibration_store
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
+    from beamtimehero_cli.science.tables import edges as interp_edges
 
     element = arguments.get("element")
     edge = arguments.get("edge")
@@ -1328,7 +1299,7 @@ def t_record_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_get_energy_calibration(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import calibration_store
+    from beamtimehero_cli import calibration_store
     return json.dumps(calibration_store.current_calibration(), indent=2, default=str), []
 
 
@@ -1338,7 +1309,7 @@ def t_extract_xas_descriptors(arguments: dict) -> tuple[str, list[str]]:
         descriptors, arrays, meta = _extract_for_interpretation(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), images_b64
-    from beamtimehero_cli.interpretation import plotting as interp_plotting
+    from beamtimehero_cli.science.plots import xas as interp_plotting
     edge_info = descriptors.get("edge") or {}
     fig = interp_plotting.annotated_descriptor_figure(
         descriptors, arrays,
@@ -1351,7 +1322,7 @@ def t_extract_xas_descriptors(arguments: dict) -> tuple[str, list[str]]:
 
 
 def _t_interpret(arguments: dict, engine_fn) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import calibration_store
+    from beamtimehero_cli import calibration_store
     try:
         descriptors, _arrays, meta = _resolve_descriptors(arguments)
     except ValueError as e:
@@ -1362,20 +1333,20 @@ def _t_interpret(arguments: dict, engine_fn) -> tuple[str, list[str]]:
 
 
 def t_interpret_oxidation_state(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import interpret as interp_engine
+    from beamtimehero_cli.science.xas import interpret as interp_engine
     return _t_interpret(arguments, interp_engine.interpret_oxidation_state)
 
 
 def t_interpret_coordination_geometry(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import interpret as interp_engine
+    from beamtimehero_cli.science.xas import interpret as interp_engine
     return _t_interpret(arguments, interp_engine.interpret_coordination_geometry)
 
 
 def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.interpretation import calibration_store
-    from beamtimehero_cli.interpretation import interpret as interp_engine
-    from beamtimehero_cli.interpretation import plotting as interp_plotting
+    from beamtimehero_cli import calibration_store
+    from beamtimehero_cli.science.xas import interpret as interp_engine
+    from beamtimehero_cli.science.plots import xas as interp_plotting
     try:
         descriptors, arrays, meta = _resolve_descriptors(arguments)
     except ValueError as e:
@@ -1419,8 +1390,8 @@ def _e0_and_normalize(energy, mu, edge_info: dict, arguments: dict):
     standalone fit tool and the capstone agree on their inputs. Returns
     ``(mu_normalized, e0_info, normalization_provenance)``.
     """
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
-    from beamtimehero_cli.interpretation import normalize as interp_norm
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import normalize as interp_norm
 
     e0_info = interp_desc.find_e0(energy, mu)
     e0 = e0_info["e0_ev"]
@@ -1459,7 +1430,7 @@ def t_identify_edge(arguments: dict) -> tuple[str, list[str]]:
 
 def t_find_edge_e0(arguments: dict) -> tuple[str, list[str]]:
     """Edge position E0 (derivative-max + half-step + uncertainty)."""
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
     try:
         energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
     except ValueError as e:
@@ -1492,7 +1463,7 @@ def t_fit_xas_pre_edge(arguments: dict) -> tuple[str, list[str]]:
     Includes the core-hole re-broadened variant when the edge family carries a
     tabulated core width (the input a conventional-XANES calibration needs).
     """
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
     try:
         energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
     except ValueError as e:
@@ -1503,7 +1474,8 @@ def t_fit_xas_pre_edge(arguments: dict) -> tuple[str, list[str]]:
     kwargs = {}
     pe_lo, pe_hi = arguments.get("pre_edge_e_min"), arguments.get("pre_edge_e_max")
     if pe_lo is not None and pe_hi is not None:
-        kwargs["window_rel"] = (float(pe_lo) - e0, float(pe_hi) - e0)
+        kwargs["window_rel"] = xas_policy.window_rel_from_absolute(
+            energy, mu, pe_lo, pe_hi)
     pre_edge = interp_desc.fit_pre_edge(energy, mu_n, e0, **kwargs)
     pre_edge.pop("_arrays", None)
 
@@ -1531,7 +1503,7 @@ def t_fit_xas_pre_edge(arguments: dict) -> tuple[str, list[str]]:
 
 def t_fit_xas_white_line(arguments: dict) -> tuple[str, list[str]]:
     """White-line fit: energy / height / area (+ multi-peak structure)."""
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
     try:
         energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
     except ValueError as e:
@@ -1541,7 +1513,7 @@ def t_fit_xas_white_line(arguments: dict) -> tuple[str, list[str]]:
 
     wl_comps = int(arguments.get("white_line_components") or 0)
     if wl_comps <= 0:
-        wl_comps = 3 if (edge_info or {}).get("family") in ("ln_L3", "an_L3", "an_M") else 1
+        wl_comps = xas_policy.white_line_components_for((edge_info or {}).get("family"))
     white_line = interp_desc.fit_white_line(energy, mu_n, e0, max_components=wl_comps)
     white_line.pop("_arrays", None)
     out = {
@@ -1560,7 +1532,7 @@ def t_assess_xas_quality(arguments: dict) -> tuple[str, list[str]]:
     The XAS analogue of assess_xrs_quality: composes the quality.* checks that
     extract_xas_descriptors runs internally, exposed on their own.
     """
-    from beamtimehero_cli.interpretation import quality as interp_quality
+    from beamtimehero_cli.science.reduce import artifacts as interp_quality
     try:
         energy, mu, _reps, edge_info, meta = _interpretation_inputs(arguments)
     except ValueError as e:
@@ -1591,7 +1563,7 @@ def t_assess_xas_quality(arguments: dict) -> tuple[str, list[str]]:
 
 def t_detect_per_scan_drift(arguments: dict) -> tuple[str, list[str]]:
     """Beam-damage / photoreduction test: monotonic per-scan descriptor trends."""
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
     try:
         energy, mu, reps, edge_info, meta = _interpretation_inputs(arguments)
     except ValueError as e:
@@ -1600,8 +1572,8 @@ def t_detect_per_scan_drift(arguments: dict) -> tuple[str, list[str]]:
     e0 = e0_info["e0_ev"]
     wl = interp_desc.fit_white_line(energy, mu_n, e0, max_components=1)
     wl_energy = wl.get("white_line_energy_ev") if wl.get("fit_ok") else None
-    window = (e0 + interp_desc.PRE_EDGE_WINDOW_REL[0],
-              e0 + interp_desc.PRE_EDGE_WINDOW_REL[1])
+    window = (e0 + xas_policy.PRE_EDGE_WINDOW_REL[0],
+              e0 + xas_policy.PRE_EDGE_WINDOW_REL[1])
     trends = interp_desc.per_scan_descriptor_trends(energy, reps, e0, wl_energy, window)
     return json.dumps({**meta, "edge": _edge_context(edge_info), **trends},
                       indent=2, default=str), []
@@ -1624,8 +1596,8 @@ def _load_spectrum_entries(entries, counter=None, normalization="edge_step",
     derivative maximum (None when it cannot be fit). Raises ValueError
     naming the failing entry so handlers share one error path.
     """
-    from beamtimehero_cli.analysis.xas import average_reps
-    from beamtimehero_cli.interpretation.descriptors import find_e0
+    from beamtimehero_cli.science.reduce.reps import average_reps
+    from beamtimehero_cli.science.xas.e0 import find_e0
 
     out = []
     for i, entry in enumerate(entries):
@@ -1680,7 +1652,7 @@ _LCF_CALIBRATION_CAVEAT = (
 
 def t_compare_xas_to_references(arguments: dict) -> tuple[str, list[str]]:
     """XANES LCF: nnls fit of a target spectrum to measured references."""
-    from beamtimehero_cli.generic_data.lcf import compare_to_references
+    from beamtimehero_cli.science.xas.compare import compare_to_references
 
     counter = arguments.get("counter")
     normalization = arguments.get("normalization", "edge_step")
@@ -1758,7 +1730,7 @@ def t_compare_xas_to_references(arguments: dict) -> tuple[str, list[str]]:
 
 def t_align_spectra(arguments: dict) -> tuple[str, list[str]]:
     """Cross-file E0 registration: report per-file shifts + aligned overlay."""
-    from beamtimehero_cli.analysis import xas as xas_math
+    from beamtimehero_cli.science.xas import compare as xas_math
 
     entries = arguments.get("spectra") or []
     if len(entries) < 2:
@@ -1810,7 +1782,7 @@ def t_align_spectra(arguments: dict) -> tuple[str, list[str]]:
 
 def t_difference_spectrum(arguments: dict) -> tuple[str, list[str]]:
     """A − B difference spectrum on a common grid, E0-aligned by default."""
-    from beamtimehero_cli.analysis import xas as xas_math
+    from beamtimehero_cli.science.xas import compare as xas_math
 
     counter = arguments.get("counter")
     normalization = arguments.get("normalization", "edge_step")
@@ -1934,7 +1906,8 @@ def _reduce_for_tool(arguments):
 
 
 def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.spec_data import xrs_plotting
     images_b64: list[str] = []
     try:
@@ -1971,7 +1944,8 @@ def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.spec_data import xrs_plotting
     images_b64: list[str] = []
     edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
@@ -2015,7 +1989,8 @@ def t_normalize_xrs(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
     images_b64: list[str] = []
     file_names = arguments.get("file_names", [])
@@ -2062,17 +2037,19 @@ def _load_crystal_channels(arguments):
     if not file_name or scan_number is None or not counters:
         raise ValueError("file_name, scan_number, and counters (list of channel names) are required.")
     center, _src = xrs_data._resolve_elastic_center(file_name, arguments.get("elastic_center_ev"))
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     loss_list, chan_list = [], []
     for c in counters:
         energy, signal = xrs_data.load_scan_signal(file_name, int(scan_number), c)
-        loss_list.append(xrs.to_energy_loss(energy, center) if center is not None else energy)
+        loss_list.append(_xrs_cal.to_energy_loss(energy, center) if center is not None else energy)
         chan_list.append(signal)
     return loss_list, chan_list, counters, center
 
 
 def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.spec_data import xrs_plotting
     images_b64: list[str] = []
     try:
@@ -2100,10 +2077,11 @@ def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
 
 def t_align_crystals(arguments: dict) -> tuple[str, list[str]]:
     """Report per-crystal alignment + outlier rejection WITHOUT summing."""
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     try:
         loss_list, chan_list, counters, center = _load_crystal_channels(arguments)
-        grid = xrs.common_loss_grid(loss_list)
+        grid = _xrs_cal.common_loss_grid(loss_list)
         on_grid = [np.interp(grid, lo, ch, left=np.nan, right=np.nan)
                    for lo, ch in zip(loss_list, chan_list)]
         rej = xrs.reject_outlier_channels(grid, on_grid)
@@ -2122,14 +2100,15 @@ def t_align_crystals(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_tag_crystal_q(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
     incident = arguments.get("incident_energy_ev")
     two_thetas = arguments.get("two_thetas")
     if incident is None or not two_thetas:
         return json.dumps({"error": "incident_energy_ev and two_thetas (list, deg) are required."}), []
     counters = arguments.get("counters") or [f"ch{i}" for i in range(len(two_thetas))]
     try:
-        qs = [xrs.q_from_two_theta(float(incident), float(tt)) for tt in two_thetas]
+        qs = [_xrs_cal.q_from_two_theta(float(incident), float(tt)) for tt in two_thetas]
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
     channels = [{"counter": counters[i] if i < len(counters) else f"ch{i}",
@@ -2154,9 +2133,10 @@ def _xrs_edge_descriptors(arguments):
 
     Returns (descriptors, arrays, meta, resolution_fwhm_ev). Raises ValueError.
     """
-    from beamtimehero_cli.analysis import xrs
-    from beamtimehero_cli.interpretation import xrs_descriptors as xd
-    from beamtimehero_cli.interpretation import xrs_edges
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
+    from beamtimehero_cli.science.xrs import descriptors as xd
+    from beamtimehero_cli.science.tables import xrs_edges
     from beamtimehero_cli.spec_data import xrs_data
 
     r = xrs_data.reduce_xrs(
@@ -2221,7 +2201,7 @@ def t_extract_xrs_descriptors(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_interpret_xrs_oxidation_state(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     try:
         descriptors, _arrays, meta, _res = _xrs_edge_descriptors(arguments)
     except ValueError as e:
@@ -2232,7 +2212,7 @@ def t_interpret_xrs_oxidation_state(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_assess_xrs_quality(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     try:
         descriptors, _arrays, meta, res = _xrs_edge_descriptors(arguments)
     except ValueError as e:
@@ -2243,7 +2223,7 @@ def t_assess_xrs_quality(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_summarize_xrs_chemistry(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     from beamtimehero_cli.spec_data import xrs_plotting
     try:
         descriptors, arrays, meta, res = _xrs_edge_descriptors(arguments)
@@ -2261,8 +2241,9 @@ def t_summarize_xrs_chemistry(arguments: dict) -> tuple[str, list[str]]:
 def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
     """Classify a feature's q-dependence. Accepts either explicit `points`
     ([{q, value}]) or `groups` ([{q, scan_numbers}]) reduced from one file."""
-    from beamtimehero_cli.analysis import xrs
-    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
+    from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     from beamtimehero_cli.spec_data import xrs_data
     points = arguments.get("points")
     if not points:
@@ -2282,7 +2263,7 @@ def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
                 bg = xrs.subtract_compton_background(r["loss"], r["mean"], float(edge_lo), float(edge_hi),
                                                      model=arguments.get("model", "linear"))
                 norm = xrs.area_normalize(r["loss"], bg["subtracted"], float(edge_lo), float(edge_hi))
-                from beamtimehero_cli.interpretation import xrs_descriptors as xd
+                from beamtimehero_cli.science.xrs import descriptors as xd
                 value = xd.integrated_area(norm["loss"], norm["normalized"], float(feat_lo), float(feat_hi))
                 points.append({"q": g.get("q"), "value": value})
             except ValueError as e:
@@ -2293,8 +2274,9 @@ def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_compare_xrs_to_references(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import xrs
-    from beamtimehero_cli.interpretation import xrs_interpret
+    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+    from beamtimehero_cli.science.xrs import reduce as xrs
+    from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     from beamtimehero_cli.spec_data import xrs_data
     edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
 
@@ -2348,9 +2330,10 @@ def _extract_chi_core(arguments: dict) -> dict:
     normalized flattened spectrum, and the chi(k) arrays. Raises ValueError
     on any data problem (one shared error path, like _interpretation_inputs).
     """
-    from beamtimehero_cli.analysis import exafs
-    from beamtimehero_cli.interpretation import descriptors as interp_desc
-    from beamtimehero_cli.interpretation import normalize as interp_norm
+    from beamtimehero_cli.science.exafs import background as _exafs_bkg
+    from beamtimehero_cli.science.exafs import fourier as exafs
+    from beamtimehero_cli.science.xas import descriptors as interp_desc
+    from beamtimehero_cli.science.xas import normalize as interp_norm
     from beamtimehero_cli.spec_data import exafs_data
 
     r = exafs_data.load_mu(
@@ -2380,10 +2363,10 @@ def _extract_chi_core(arguments: dict) -> dict:
             "Pass counter explicitly; see `ref counter-selection`."
         )
 
-    bk = exafs.autobk_lite(
+    bk = _exafs_bkg.autobk_lite(
         energy, mu, e0, edge_step=edge_step,
-        rbkg=float(arguments.get("rbkg", 1.0)),
-        kweight=int(arguments.get("kweight", 2)),
+        rbkg=float(arguments.get("rbkg", ex_policy.DEFAULT_RBKG)),
+        kweight=int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT)),
     )
     return {
         **r,
@@ -2447,7 +2430,7 @@ def t_extract_chi(arguments: dict) -> tuple[str, list[str]]:
         core = _extract_chi_core(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    kweight = int(arguments.get("kweight", 2))
+    kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
     fig = exafs_plotting.plot_chi_extraction(
         core["energy"], core["mu"], core["flat"], core["e0"],
         core["k"], core["chi"], kweight,
@@ -2482,19 +2465,20 @@ def _resolve_chi(arguments: dict) -> tuple[dict | None, dict]:
 
 
 def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.analysis import exafs
+    from beamtimehero_cli.science.exafs import background as _exafs_bkg
+    from beamtimehero_cli.science.exafs import fourier as exafs
     from beamtimehero_cli.spec_data import exafs_plotting
     try:
         core, chi = _resolve_chi(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    kweight = int(arguments.get("kweight", 2))
-    kmin = float(arguments.get("kmin", 2.0))
+    kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
+    kmin = float(arguments.get("kmin", ex_policy.DEFAULT_KMIN))
     kmax = arguments.get("kmax")
     ft = exafs.xftf(
         chi["k"], chi["chi"], kmin=kmin,
         kmax=float(kmax) if kmax is not None else None,
-        kweight=kweight, dk=float(arguments.get("dk", 1.0)),
+        kweight=kweight, dk=float(arguments.get("dk", ex_policy.DEFAULT_DK)),
     )
     peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
     label = core["file_name"] if core else "chi artifact"
@@ -2516,13 +2500,14 @@ def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
 
 def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
     """Capstone: extraction plot + FT plot + the full JSON bundle."""
-    from beamtimehero_cli.analysis import exafs
+    from beamtimehero_cli.science.exafs import background as _exafs_bkg
+    from beamtimehero_cli.science.exafs import fourier as exafs
     from beamtimehero_cli.spec_data import exafs_plotting
     try:
         core, chi = _resolve_chi(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    kweight = int(arguments.get("kweight", 2))
+    kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
     images: list[str] = []
     if core is not None:
         fig = exafs_plotting.plot_chi_extraction(
@@ -2533,9 +2518,9 @@ def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
         _close(fig)
     kmax = arguments.get("kmax")
     ft = exafs.xftf(
-        chi["k"], chi["chi"], kmin=float(arguments.get("kmin", 2.0)),
+        chi["k"], chi["chi"], kmin=float(arguments.get("kmin", ex_policy.DEFAULT_KMIN)),
         kmax=float(kmax) if kmax is not None else None,
-        kweight=kweight, dk=float(arguments.get("dk", 1.0)),
+        kweight=kweight, dk=float(arguments.get("dk", ex_policy.DEFAULT_DK)),
     )
     peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
     label = core["file_name"] if core else "chi artifact"
@@ -2561,7 +2546,7 @@ def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
     file_names = arguments.get("file_names", [])
     if not file_names:
         return json.dumps({"error": "file_names array must not be empty."}), []
-    kweight = int(arguments.get("kweight", 2))
+    kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
     spectra, reports = [], []
     for fn in file_names:
         try:
@@ -2569,7 +2554,7 @@ def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
                 "file_name": fn,
                 "counter": arguments.get("counter"),
                 "collector_dir": arguments.get("collector_dir"),
-                "rbkg": arguments.get("rbkg", 1.0),
+                "rbkg": arguments.get("rbkg", ex_policy.DEFAULT_RBKG),
                 "kweight": kweight,
             })
             spectra.append((f"{fn} ({core['n_reps']} reps)", core["k"], core["chi"]))
@@ -2838,7 +2823,7 @@ def t_s3df_plot_scan(args):
                 counter = active["active_counter"]
         meta = backend.get_scan_metadata(file_name, scan_number) or {}
 
-        from beamtimehero_cli.analysis.render import render_scan, fig_to_base64
+        from beamtimehero_cli.science.plots.scan import render_scan, fig_to_base64
         fig, summary = render_scan(
             df, file_name, scan_number,
             counter=counter, normalize_by=normalize_by,

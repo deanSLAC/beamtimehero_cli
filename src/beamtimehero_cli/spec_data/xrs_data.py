@@ -1,7 +1,7 @@
 """XRS data loading + reduction over the file/DB backends.
 
 Bridges the raw SPEC scans (via ``scans``) to the pure math in
-``analysis/xrs.py``: load reps on the chosen counter, divide by I0, convert to
+``science/xrs/``: load reps on the chosen counter, divide by I0, convert to
 the energy-loss axis using an elastic-line calibration, align, and average.
 
 Also owns the session **elastic-line calibration store** (a JSON record of the
@@ -19,7 +19,9 @@ from pathlib import Path
 import numpy as np
 
 from beamtimehero_cli import config as bl_config
-from beamtimehero_cli.analysis import xas, xrs
+from beamtimehero_cli.science.reduce import counters as _counters
+from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
+from beamtimehero_cli.science.xrs import reduce as _xrs_reduce
 from beamtimehero_cli.spec_data import scans
 
 ELASTIC_FILENAME = "beamtimehero_xrs_elastic.json"
@@ -123,8 +125,8 @@ def _resolve_counter(file_name, scan_number, counter):
     df = scans.read_processed_scan(file_name, scan_number)
     if df is None:
         raise ValueError(f"Scan not found: {file_name} #{scan_number}")
-    picked, _reason = xas.pick_active_counter(df)
-    return picked, xas.counter_selection_warning(df, picked)
+    picked, _reason = _counters.pick_active_counter(df, priority=bl_config.active_counter_priority())
+    return picked, _counters.counter_selection_warning(df, picked)
 
 
 def calibrate_energy_loss(file_name, scan_number, counter=None, normalize_by="I0"):
@@ -135,7 +137,7 @@ def calibrate_energy_loss(file_name, scan_number, counter=None, normalize_by="I0
     """
     counter, warning = _resolve_counter(file_name, scan_number, counter)
     energy, signal = load_scan_signal(file_name, scan_number, counter, normalize_by)
-    fit = xrs.fit_elastic_line(energy, signal)
+    fit = _xrs_cal.fit_elastic_line(energy, signal)
     record = record_elastic(
         file_name, scan_number, counter,
         fit["elastic_center_ev"], fit.get("resolution_fwhm_ev"), fit["method"],
@@ -155,7 +157,7 @@ def reduce_xrs(
 
     Loads each rep on ``counter`` (auto-picked + warned if None), divides by I0,
     converts to the loss axis via the resolved elastic center, and averages with
-    ``analysis.xrs.align_and_average``. Returns a dict with numpy arrays
+    ``analysis._xrs_reduce.align_and_average``. Returns a dict with numpy arrays
     ``loss/mean/sem/std`` plus context (counter, elastic center + source,
     counter_warning). Raises ValueError on no usable scans.
     """
@@ -178,7 +180,7 @@ def reduce_xrs(
             energy, signal = load_scan_signal(file_name, sn, counter, normalize_by)
         except ValueError:
             continue
-        loss = xrs.to_energy_loss(energy, center) if center is not None else energy
+        loss = _xrs_cal.to_energy_loss(energy, center) if center is not None else energy
         loss_list.append(loss)
         inten_list.append(signal)
         used.append(sn)
@@ -187,7 +189,7 @@ def reduce_xrs(
         raise ValueError(
             f"No scans with counter '{counter}' found in '{file_name}'."
         )
-    avg = xrs.align_and_average(loss_list, inten_list)
+    avg = _xrs_reduce.align_and_average(loss_list, inten_list)
     avg.update({
         "file_name": file_name,
         "counter": counter,

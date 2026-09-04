@@ -62,6 +62,24 @@ CLI_LOG_MAX_RESULT_BYTES = int(os.getenv("BEAMTIMEHERO_CLI_LOG_MAX_BYTES", "6553
 TOOLS_MODE = os.getenv("TOOLS_MODE", "cli")
 
 # ---------------------------------------------------------------------------
+# Analysis defaults (station-overridable)
+# ---------------------------------------------------------------------------
+def active_counter_priority() -> tuple[str, ...]:
+    """Station-level override of the analysis counter auto-pick order.
+
+    ``BTH_ACTIVE_COUNTER_PRIORITY`` is a comma-separated counter list; the
+    first name present in a scan's columns wins. Empty/unset (the default)
+    keeps the historical BL15-2 selection logic untouched.
+
+    Read at call time (not import time) so it can be changed per-process.
+    Passed into ``science.reduce.counters.pick_active_counter``, which stays
+    pure — see ``science/README.md``.
+    """
+    raw = os.environ.get("BTH_ACTIVE_COUNTER_PRIORITY", "")
+    return tuple(c.strip() for c in raw.split(",") if c.strip())
+
+
+# ---------------------------------------------------------------------------
 # EPICS PVs (reference only — not wired here)
 # ---------------------------------------------------------------------------
 # Station-specific PVs are env-overridable (BTH_-prefixed to avoid clashing
