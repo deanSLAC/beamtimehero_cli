@@ -14,6 +14,8 @@ The transport router lives in `spec_cmd.py` — see `spec_cmd.dispatch`.
 from __future__ import annotations
 
 import itertools
+import json
+import os
 import re
 import threading
 import time
@@ -110,6 +112,32 @@ def _sim_engine():
     return eng if eng.is_active() else None
 
 
+def _mock_default_positions() -> dict:
+    """Mock motor set — mirrors BL15-2 by default.
+
+    Another station's app may replace it wholesale via SPEC_MOCK_MOTORS
+    (a JSON object of motor -> position); the reported cwd is likewise
+    overridable via SPEC_MOCK_PWD. Both default to the historical BL15-2
+    values, so existing consumers see no change.
+    """
+    positions = {
+        "m1vert": 1.93, "m1pitch": 0.0, "m2vert": 0.0, "m2horz": 0.0,
+        "pitcha": 0.0, "pitchb": 0.0, "energy": 7100.0, "emiss": 6400.0,
+        "Sx": 0.0, "Sy": 0.0, "Sz": 10.0, "Sr": 0.0, "filter": 0,
+        "mono": 7100.0, "gap": 38.0, "crystal": 0,
+        "Az": 0.0, "Dz": 0.0, "Bx": 0.0, "Bz": 0.0, "Tz": 0.0, "Tp": 0.0,
+    }
+    raw = os.environ.get("SPEC_MOCK_MOTORS", "").strip()
+    if raw:
+        try:
+            override = json.loads(raw)
+            if isinstance(override, dict) and override:
+                positions = {str(k): float(v) for k, v in override.items()}
+        except (ValueError, TypeError):
+            pass  # malformed override -> keep defaults
+    return positions
+
+
 class _MockScreen:
     """In-memory stand-in that synthesizes believable SPEC output.
 
@@ -121,13 +149,8 @@ class _MockScreen:
     """
 
     _scan_counter = itertools.count(1)
-    _positions = {
-        "m1vert": 1.93, "m1pitch": 0.0, "m2vert": 0.0, "m2horz": 0.0,
-        "pitcha": 0.0, "pitchb": 0.0, "energy": 7100.0, "emiss": 6400.0,
-        "Sx": 0.0, "Sy": 0.0, "Sz": 10.0, "Sr": 0.0, "filter": 0,
-        "mono": 7100.0, "gap": 38.0, "crystal": 0,
-        "Az": 0.0, "Dz": 0.0, "Bx": 0.0, "Bz": 0.0, "Tz": 0.0, "Tp": 0.0,
-    }
+    _positions = _mock_default_positions()
+    _pwd = os.environ.get("SPEC_MOCK_PWD", "/data/fifteen/mock")
     _scan_n = 1000
     _filename = "mock.01"
     _logfile = "mock.log"
@@ -161,7 +184,7 @@ class _MockScreen:
         if low == "fon":
             return f"data = {cls._filename} / log = {cls._logfile}"
         if low == "pwd":
-            return "/data/fifteen/mock"
+            return cls._pwd
         if low.startswith("p scan_n"):
             return str(cls._scan_n)
         if low.startswith("show_elements"):
@@ -205,6 +228,68 @@ class _MockScreen:
                 except ValueError:
                     pass
             return "Move complete."
+        if low.startswith("gscan "):
+            tokens = cmd.split()
+            try:
+                motor = tokens[1]
+                nums = [float(t) for t in tokens[2:]]
+                start, regions, ct = nums[0], nums[1:-1], nums[-1]
+                end = regions[-2] if len(regions) >= 2 else start
+            except (IndexError, ValueError):
+                cls._scan_n += 1
+                return f"Scan #{cls._scan_n} complete. File={cls._filename}"
+            cls._positions[motor] = end
+            eng = _sim_engine()
+            if eng:
+                append_gscan = getattr(eng, "append_gscan", None)
+                if append_gscan is not None:
+                    meta = append_gscan(motor, start, regions, ct,
+                                        positions=dict(cls._positions))
+                else:
+                    # Engine without a dedicated gscan generator: fake it
+                    # as a uniform scan over the full span.
+                    npts = max(int(abs(end - start)), 10)
+                    meta = eng.append_ascan(motor, start, end, npts, ct,
+                                            positions=dict(cls._positions))
+                cls._scan_n = meta["scan_number"]
+                return (f"Scan #{meta['scan_number']} complete. "
+                        f"File={meta['file_name']}  motor={motor}")
+            cls._scan_n += 1
+            return f"Scan #{cls._scan_n} complete. File={cls._filename}  motor={motor}"
+        if low.startswith("kscan "):
+            tokens = cmd.split()
+            try:
+                nums = [float(t) for t in tokens[1:]]
+                start = nums[0]
+                e0, k1, kstep, k2 = nums[-7], nums[-6], nums[-5], nums[-4]
+                end_ev = e0 + k2 * k2 / 0.2625
+            except (IndexError, ValueError):
+                cls._scan_n += 1
+                return f"Scan #{cls._scan_n} complete. File={cls._filename}"
+            cls._positions["mono"] = end_ev
+            eng = _sim_engine()
+            if eng:
+                append_kscan = getattr(eng, "append_kscan", None)
+                if append_kscan is not None:
+                    meta = append_kscan(nums, positions=dict(cls._positions))
+                else:
+                    npts = max(int(abs(end_ev - start)), 10)
+                    meta = eng.append_ascan("mono", start, end_ev, npts,
+                                            nums[2], positions=dict(cls._positions))
+                cls._scan_n = meta["scan_number"]
+                return (f"Scan #{meta['scan_number']} complete. "
+                        f"File={meta['file_name']}  motor=mono")
+            cls._scan_n += 1
+            return f"Scan #{cls._scan_n} complete. File={cls._filename}  motor=mono"
+        if low.startswith("absenergy "):
+            tokens = cmd.split()
+            try:
+                target = float(tokens[1])
+            except (IndexError, ValueError):
+                return "absenergy: bad target"
+            cls._positions["mono"] = target
+            return (f"absenergy complete. absev={target:.2f} "
+                    f"error=0.01 (successful_absenergy=1)")
         if low.startswith(("ascan ", "dscan ")):
             tokens = cmd.split()
             try:

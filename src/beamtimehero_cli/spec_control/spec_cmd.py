@@ -702,6 +702,27 @@ _ACTION: dict[str, CommandSpec] = {
         lambda a: f"tracking {a[0]}",
         lambda o, a: {"enabled": int(a[0]) == 1, "raw": o}, timeout_s=15,
     ),
+
+    # Multi-region energy scans (gscan.mac / kscan.mac — ChemCatal/SSRL)
+    "gscan": CommandSpec(
+        "gscan", "action",
+        lambda a: _render_gscan(a),
+        lambda o, a: _parse_gscan(o, a),
+        timeout_s=36000,
+    ),
+    "kscan": CommandSpec(
+        "kscan", "action",
+        lambda a: _render_kscan(a),
+        lambda o, a: _parse_kscan(o, a),
+        timeout_s=86400,
+    ),
+    # Closed-loop absolute energy move via the mono encoder (abs_energy.mac)
+    "absenergy": CommandSpec(
+        "absenergy", "action",
+        lambda a: f"absenergy {float(a[0])}",
+        lambda o, a: _parse_absenergy(o, a),
+        timeout_s=600,
+    ),
 }
 
 
@@ -750,6 +771,115 @@ def _render_align_xes(a: list[str]) -> str:
     en_xes = a[1] if len(a) > 1 else "0"
     en_mono = a[2] if len(a) > 2 else "0"
     return f'run_spec_align("{crystals}", {en_xes}, {en_mono})'
+
+
+def _render_gscan(a: list[str]) -> str:
+    # gscan <motor> <start> <end_1> <step_1> [<end_2> <step_2>] ... <sec>
+    # (gscan.mac: usage error unless (argc-3) % 2 == 0, argc counted
+    # without the motor; here a[0] is the motor so (len-4) % 2 == 0.)
+    if len(a) < 5 or (len(a) - 5) % 2 != 0:
+        raise ValueError(
+            "gscan requires: motor start end_1 step_1 [end_2 step_2] ... sec"
+        )
+    motor = str(a[0])
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", motor):
+        raise ValueError(f"invalid motor name: {motor!r}")
+    nums = [float(x) for x in a[1:]]  # raises ValueError on garbage
+    start, regions, sec = nums[0], nums[1:-1], nums[-1]
+    if sec <= 0:
+        raise ValueError(f"count time must be positive, got {sec}")
+    pos = start
+    for i in range(0, len(regions), 2):
+        end, step = regions[i], regions[i + 1]
+        if step == 0 or (end - pos) / step <= 0:
+            raise ValueError(
+                f"gscan region {pos} -> {end} step {step} contains no points"
+            )
+        pos = end
+    body = " ".join(f"{x:g}" for x in nums)
+    return f"gscan {motor} {body}"
+
+
+def _render_kscan(a: list[str]) -> str:
+    # kscan start0 step1 sec1 end1 [step2 sec2 end2] ... E0 k1 kstep k2 ksec1 ksec2 kweight
+    # Motor is hardwired to `mono` inside kscan.mac. The macro rejects
+    # argc <= 8 or (argc-8) % 3 != 0; minimum valid form is one eV region
+    # plus the seven k-region parameters (11 args).
+    if len(a) < 11 or (len(a) - 8) % 3 != 0:
+        raise ValueError(
+            "kscan requires: start0 step1 sec1 end1 [step2 sec2 end2] ... "
+            "E0 k1 kstep k2 ksec1 ksec2 kweight"
+        )
+    nums = [float(x) for x in a]  # raises ValueError on garbage
+    e0, k1, kstep, k2, ksec1, ksec2, kweight = nums[-7:]
+    if kstep <= 0 or k2 <= k1:
+        raise ValueError(f"invalid k region: k1={k1} k2={k2} kstep={kstep}")
+    if ksec1 <= 0 or ksec2 <= 0:
+        raise ValueError("k-region count times must be positive")
+    pos = nums[0]
+    for i in range(1, len(nums) - 7, 3):
+        step, sec, end = nums[i], nums[i + 1], nums[i + 2]
+        if sec <= 0:
+            raise ValueError(f"count time must be positive, got {sec}")
+        if step == 0 or (end - pos) / step <= 0:
+            raise ValueError(
+                f"kscan region {pos} -> {end} step {step} contains no points"
+            )
+        pos = end
+    body = " ".join(f"{x:g}" for x in nums)
+    return f"kscan {body}"
+
+
+def _parse_scan_complete(out: str) -> dict:
+    """Common scan-completion fields: scan number + data file if echoed."""
+    sn = re.search(r"[Ss]can\s*#?\s*(\d+)", out)
+    fm = re.search(r"[Ff]ile\s*=\s*(\S+)", out)
+    return {
+        "scan_number": int(sn.group(1)) if sn else None,
+        "file_name": fm.group(1) if fm else None,
+    }
+
+
+def _parse_gscan(out: str, a: list[str]) -> dict:
+    # args: [motor, start, end_1, step_1, ..., end_n, step_n, sec]
+    parsed = _parse_scan_complete(out)
+    parsed.update({
+        "motor": a[0],
+        "start": float(a[1]),
+        "end": float(a[-3]),
+        "count_time": float(a[-1]),
+        "raw": out,
+    })
+    return parsed
+
+
+def _parse_kscan(out: str, a: list[str]) -> dict:
+    parsed = _parse_scan_complete(out)
+    parsed.update({
+        "motor": "mono",
+        "start_ev": float(a[0]),
+        "e0_ev": float(a[-7]),
+        "k_start": float(a[-6]),
+        "k_end": float(a[-4]),
+        "raw": out,
+    })
+    return parsed
+
+
+def _parse_absenergy(out: str, a: list[str]) -> dict:
+    # abs_energy.mac converges on the `absev` encoder counter and sets the
+    # global `successful_absenergy`. Surface the achieved energy / residual
+    # error when the macro echoes them; otherwise just the raw output.
+    achieved = re.search(r"(?:final|achieved|absev)[^\d-]*([-+]?\d+\.?\d*)", out)
+    err = re.search(r"error[^\d-]*([-+]?\d+\.?\d*)", out)
+    failed = "not successful" in out.lower() or "failed" in out.lower()
+    return {
+        "target_ev": float(a[0]),
+        "achieved_ev": float(achieved.group(1)) if achieved else None,
+        "error_ev": float(err.group(1)) if err else None,
+        "converged": not failed,
+        "raw": out,
+    }
 
 
 # ---------------------------------------------------------------------------
