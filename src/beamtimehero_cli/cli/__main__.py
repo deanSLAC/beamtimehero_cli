@@ -36,7 +36,7 @@ from beamtimehero_cli.tool_catalog.categorize import CATEGORY_OVERRIDES, categor
 
 _CANONICAL_TREES = frozenset({
     "ref", "tool", "db", "spec-read", "spec-write",
-    "spec-file", "s3df", "slack",
+    "spec-file", "s3df", "slack", "xrs", "exafs",
 })
 
 
@@ -131,6 +131,8 @@ _TREE_HELPS: dict[tuple[str, ...], str] = {
     ("s3df",): "S3DF-deployment tools (Postgres metadata + pickle scan data).",
     ("s3df", "psql"): "Direct Postgres queries (raw SQL, command/log queries).",
     ("slack",): "Slack messaging tools.",
+    ("xrs",): "X-ray Raman (XRS) analysis: energy-loss reduction + interpretation.",
+    ("exafs",): "EXAFS k-space analysis: chi(k) extraction, Fourier transforms.",
 }
 
 

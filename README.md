@@ -6,6 +6,8 @@ Provides:
 
 - **SPEC injection** — motor moves, scans, macro execution against a SPEC server (TCP, GNU screen, or sandbox/mock transports).
 - **Scan data reads** — direct silx-based SPEC file parsing, scan analysis, plotting.
+- **Spectroscopy analysis** — XAS/HERFD descriptors and interpretation, X-ray Raman (energy-loss) reduction, EXAFS chi(k)/Fourier-transform products.
+- **Deployment backends** — the same scan-read surface served from S3DF Postgres + pickled scan data; Slack messaging.
 - **Log reads** — beamline control log parsing, search.
 - **Action logging** — every command writes to a local SQLite audit trail.
 - **Reference docs** — `beamtimehero ref <name>` to fetch bundled procedure docs.
@@ -36,9 +38,17 @@ beamtimehero tool <command>             # non-SPEC tools (data, logs, plots)
 beamtimehero db <command>               # action-log queries
 beamtimehero spec-read <command>        # SPEC-bound reads (no mutation)
 beamtimehero spec-write <command>       # SPEC-bound mutations (--justification required)
+beamtimehero spec-file <command>        # scan reads + XAS/HERFD analysis over SPEC files on disk
+beamtimehero xrs <command>              # X-ray Raman analysis (energy-loss axis)
+beamtimehero exafs <command>            # EXAFS k-space analysis (chi(k), Fourier transforms)
+beamtimehero s3df <command>             # S3DF deployment backend (Postgres + pickled scans)
+beamtimehero s3df psql <command>        # read-only SQL against the S3DF Postgres
+beamtimehero slack <command>            # Slack messaging
 ```
 
-Discover leaves with `--help` at any depth.
+Discover leaves with `--help` at any depth. Agent profiles (curated alias
+views over the catalog, e.g. `bl-aligner`) are listed with
+`beamtimehero --list-profiles`.
 
 ## Env vars
 
@@ -66,10 +76,10 @@ of forking it. The helpers in `beamtimehero_cli.cli.__main__` are public:
 
 | Name | Purpose |
 |---|---|
-| `build_parser()` | Build the default top-level parser (`ref`, `tool`, `db`, `spec-read`, `spec-write`). |
+| `build_parser()` | Build the default top-level parser (all canonical trees plus registered profiles). |
 | `build_ref_subtree(subs)` | Mount only the `ref` subtree on an existing `_SubParsersAction`. |
-| `build_catalog_subtrees(subs, tool_defs)` | Mount the `tool` / `db` / `spec-read` / `spec-write` subtrees from a tool-definitions list (filtered or unfiltered). |
-| `categorize(tool_def)` | Data-driven category for a tool def (`db`, `spec-write`, `spec-read`, `tool`). |
+| `build_catalog_subtrees(subs, tool_defs)` | Mount the catalog subtrees (`tool`, `db`, `spec-read`, `spec-write`, `spec-file`, `xrs`, `exafs`, `s3df`, `slack`, …) from a tool-definitions list (filtered or unfiltered). |
+| `categorize(tool_def)` | Data-driven tree path for a tool def (e.g. `("spec-file",)`, `("s3df", "psql")`). |
 | `add_arg(parser, key, prop, required)` | JSON-schema property → argparse flag. |
 | `ToolParser` | `ArgumentParser` subclass that emits `{"ok": false, ...}` JSON on parse errors. |
 | `run_ref(args)` | Dispatch a `ref` invocation. |
