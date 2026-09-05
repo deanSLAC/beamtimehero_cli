@@ -35,6 +35,7 @@ has a right answer to check against. By area:
 | XRS | `tests/test_xrs.py` |
 | Tool-level science | `tests/test_twocol_and_analysis_leaves.py` |
 | Scientific defaults (pinned values) | `tests/test_science_policy.py` |
+| The `science/` boundary itself | `tests/test_science_boundary.py` |
 
 `tests/test_interpretation.py` is the clearest model for the synthetic-spectrum
 pattern. Note that these files import through the **old** module paths
@@ -47,11 +48,24 @@ current value of every constant in every `policy.py`, and checks that the
 science functions and the agent-facing tool schema both read from policy rather
 than from a literal that merely agrees with it. So:
 
-- Changing a default **will** fail that test. That is the point — update the
-  expected value in the same commit, and the diff becomes the record of which
-  physics default moved and why.
+- Changing a constant in `xas/`, `exafs/` or `xrs/` `policy.py` **will** fail
+  that test. That is the point — update the expected value in the same commit,
+  and the diff becomes the record of which physics default moved and why.
 - Adding a *new* policy constant without pinning it also fails, with a message
   naming the constant.
+
+Know the edge of that guarantee: only those three packages have a `policy.py`,
+and the test only reaches into those three. Defaults in `reduce/`,
+`statistics/` and `fitting/` still sit inline as keyword arguments — the
+glitch-detection `z_threshold`, the convergence `sem_threshold_frac`, the
+`efficiency_threshold` — and **nothing fails if you change one.** They are as
+scientifically material as the pinned ones. If you touch one, say so in the
+commit message yourself, and consider promoting it into a `policy.py`.
+
+Two further tests, `tests/test_science_boundary.py`, assert that `science/`
+imports nothing else from `beamtimehero_cli` and reads no environment,
+filesystem or network. If you need data loaded, take it as an argument and let
+`spec_data/` load it.
 
 To see the whole science surface at once — every function with its signature,
 what calls it, and what it cites:
@@ -67,8 +81,9 @@ tools depend on it without tracing imports by hand.
 
 If you add or change a published method, record the reference in that module's
 `CITATIONS` dict. The index collects those into a bibliography and lists the
-entries still marked `None` as attribution gaps — 22 of them today, and
-filling one in is a genuinely useful first contribution.
+entries still marked `None` as attribution gaps; `docgen_science` prints the
+running count when it regenerates. Filling one in is a genuinely useful first
+contribution.
 
 ## What to raise rather than edit
 
@@ -114,17 +129,11 @@ instead — that is the boundary this repo is organized around.
 - **The human-readable tool catalog** is generated, not hand-written:
   `python -m beamtimehero_cli.docgen` regenerates `docs/tool_catalog.html`.
   Regenerate it after catalog changes rather than editing the HTML.
-- **Two files are unrouted** — `generic_data/fitter.py` and
-  `experiment_planning/decisions.py` are not reachable from any tool (the
-  fitter only via `decisions.py`, which has no callers). They look like the
-  most scientific code in the repo; nothing calls them. Their fate is undecided.
-- **Some live science still sits outside `science/`.** Most of the
-  array-taking plotting is in `spec_data/exafs_plotting.py`,
-  `spec_data/xrs_plotting.py` and `spec_data/plotting.py` — by the rule those
-  belong in `science/plots/`, but they have not moved. If your change is about
-  what a plot looks like, look there too.
-  (Scan statistics *have* moved: `experiment_planning/scan_features.py` and
-  `scan_efficiency.py` are now `science/statistics/`, with shims left behind.)
+- **The plotting split is done.** Figures that take arrays or a descriptor
+  dict live in `science/plots/` (`exafs.py`, `xrs.py`, `xas.py`, `scan.py`).
+  The six that load a scan by file name stay in `spec_data/plotting.py`. If
+  your change is about what a plot looks like, `science/plots/` is almost
+  certainly the place; old import paths still work via shims.
 
 ## Background
 

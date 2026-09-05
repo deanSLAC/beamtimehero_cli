@@ -1,7 +1,5 @@
 """Plotting functions for scan data."""
 
-import io
-import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -103,117 +101,6 @@ def _ylabel_for(normalization):
         "divide_by_i0": "signal / I0",
         "raw": "raw counter signal",
     }.get(normalization, "signal")
-
-
-def plot_alignment_overlay(records, labels):
-    """Two-panel before/after overlay for ``analysis.xas.align_spectra`` output.
-
-    ``records`` are the per-spectrum dicts align_spectra returns (shifted
-    energies + shift bookkeeping); ``labels`` is a parallel name list.
-    Returns ``(fig, summary)``.
-    """
-    fig, (ax_before, ax_after) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-    for rec, label in zip(records, labels):
-        energy_before = rec["energy"] - rec["shift_applied"]
-        ax_before.plot(energy_before, rec["mu"], linewidth=1.2, label=label)
-        if rec.get("refused"):
-            suffix = " (shift refused)"
-        else:
-            suffix = f" ({rec['shift_applied']:+.2f} eV)"
-        ax_after.plot(rec["energy"], rec["mu"], linewidth=1.2, label=label + suffix)
-
-    target = records[0].get("target_e0") if records else None
-    ax_before.set_title("Before alignment (as recorded)", fontsize=10)
-    ax_after.set_title(
-        f"After E0 alignment (target E0 = {target:.2f} eV)" if target is not None
-        else "After E0 alignment", fontsize=10)
-    for ax in (ax_before, ax_after):
-        ax.set_ylabel("normalized signal")
-        ax.legend(fontsize=8)
-        ax.grid(alpha=0.3)
-    ax_after.set_xlabel("Energy (eV)")
-    fig.tight_layout()
-
-    shifts = ", ".join(
-        "{}: {}".format(
-            lbl,
-            "refused" if r.get("refused") else f"{r['shift_applied']:+.2f} eV",
-        )
-        for r, lbl in zip(records, labels)
-    )
-    return fig, f"E0 alignment overlay ({len(records)} spectra). Shifts: {shifts}."
-
-
-def plot_difference_spectrum(result, label_a="A", label_b="B"):
-    """Two-panel view of ``analysis.xas.difference_spectrum`` output:
-    overlaid A and B on the common grid, then A − B. Returns ``(fig, summary)``.
-    """
-    energy = result["energy"]
-    stats = result["stats"]
-
-    fig, (ax_top, ax_diff) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-    ax_top.plot(energy, result["a"], linewidth=1.2, label=label_a, color="C0")
-    ax_top.plot(energy, result["b"], linewidth=1.2, label=label_b, color="C3")
-    ax_top.set_ylabel("normalized signal")
-    ax_top.set_title(
-        f"{label_a} vs {label_b}"
-        + (" (E0-aligned)" if result.get("aligned") else " (raw energy axes)"),
-        fontsize=10)
-    ax_top.legend(fontsize=8)
-    ax_top.grid(alpha=0.3)
-
-    ax_diff.plot(energy, result["difference"], linewidth=1.2, color="C2",
-                 label=f"{label_a} − {label_b}")
-    ax_diff.axhline(0.0, color="gray", linewidth=0.8, alpha=0.7)
-    ax_diff.axvline(stats["energy_of_max_abs_delta_ev"], color="C1",
-                    linestyle="--", alpha=0.6,
-                    label=f"max |Δ| = {stats['max_abs_delta']:.4g} "
-                          f"@ {stats['energy_of_max_abs_delta_ev']:.1f} eV")
-    ax_diff.set_xlabel("Energy (eV)")
-    ax_diff.set_ylabel("Δ signal")
-    ax_diff.legend(fontsize=8)
-    ax_diff.grid(alpha=0.3)
-    fig.tight_layout()
-
-    return fig, (
-        f"Difference {label_a} − {label_b}: max |Δ| = {stats['max_abs_delta']:.4g} "
-        f"at {stats['energy_of_max_abs_delta_ev']:.1f} eV, "
-        f"rms Δ = {stats['rms_delta']:.4g} over {stats['n_points']} points."
-    )
-
-
-def plot_lcf_fit(energy, target, fit, residual, components, title=""):
-    """Two-panel XANES LCF view: target + best fit, then the residual.
-
-    ``components`` = the fraction dicts ``generic_data.lcf`` returns
-    (``{name, fraction, ...}``), rendered into the fit legend entry.
-    Returns ``(fig, summary)``.
-    """
-    frac_text = " + ".join(
-        f"{c['fraction']:.2f}·{c['name']}" for c in components
-    )
-
-    fig, (ax_fit, ax_res) = plt.subplots(
-        2, 1, figsize=(10, 8), sharex=True,
-        gridspec_kw={"height_ratios": [3, 1]})
-    ax_fit.plot(energy, target, linewidth=1.4, color="C0", label="target")
-    ax_fit.plot(energy, fit, linewidth=1.2, color="C3", linestyle="--",
-                label=f"LCF fit: {frac_text}")
-    ax_fit.set_ylabel("normalized signal")
-    if title:
-        ax_fit.set_title(title, fontsize=10)
-    ax_fit.legend(fontsize=8)
-    ax_fit.grid(alpha=0.3)
-
-    ax_res.plot(energy, residual, linewidth=1.0, color="C2", label="residual")
-    ax_res.axhline(0.0, color="gray", linewidth=0.8, alpha=0.7)
-    ax_res.set_xlabel("Energy (eV)")
-    ax_res.set_ylabel("residual")
-    ax_res.legend(fontsize=8)
-    ax_res.grid(alpha=0.3)
-    fig.tight_layout()
-
-    return fig, f"LCF fit: {frac_text}."
 
 
 def plot_scan_stack(file_name, e_min=None, e_max=None, counter=None,
@@ -436,88 +323,15 @@ def plot_feature_evolution(file_name, e_min, e_max, statistic="max"):
     )
 
 
-def plot_statistics_trend(stats, sample_name=""):
-    """Render a two-subplot statistics trend from pre-computed convergence stats.
-
-    Parameters
-    ----------
-    stats : dict
-        convergence_stats dict stored per-sample in the plan JSON. Expected
-        keys: feature_window_eV, cumulative_cv_pct, running_sem_frac,
-        efficiency_verdict, feature_verdict, statistic.
-    sample_name : str
-        Sample name for the plot title.
-
-    Returns
-    -------
-    (fig, summary_text) or (None, error_text)
-    """
-    import numpy as np
-
-    cv_pct = stats.get("cumulative_cv_pct")
-    sem_frac = stats.get("running_sem_frac")
-    if not cv_pct or not sem_frac:
-        return None, "convergence_stats missing cumulative_cv_pct or running_sem_frac"
-
-    n = len(cv_pct)
-    reps = np.arange(1, n + 1)
-    cv_arr = np.array(cv_pct, dtype=float)
-    sem_arr = np.array([(v if v is not None else np.nan) for v in sem_frac], dtype=float) * 100
-
-    window = stats.get("feature_window_eV") or [None, None]
-    sem_threshold = stats.get("sem_threshold_frac", 0.01) * 100
-    eff_verdict = stats.get("efficiency_verdict", "?")
-    feat_verdict = stats.get("feature_verdict", "?")
-
-    fig, (ax_cv, ax_sem) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
-
-    # --- Top: Cumulative CV ---
-    ax_cv.plot(reps, cv_arr, "o-", color="C0", markersize=4, label="Cumulative CV")
-    poisson_cv = cv_arr[0] / np.sqrt(reps)
-    ax_cv.plot(reps, poisson_cv, "--", color="gray", alpha=0.7, label="1/√n Poisson")
-    ax_cv.set_ylabel("Cumulative CV (%)")
-    ax_cv.legend(fontsize=7, loc="upper right")
-    ax_cv.grid(alpha=0.3)
-
-    # --- Bottom: Feature SEM ---
-    # Rep 1 has SEM=0 by definition (single sample); skip it so the
-    # axis isn't pinned to zero.
-    sem_reps = reps[1:]
-    sem_vals = sem_arr[1:]
-    ax_sem.plot(sem_reps, sem_vals, "o-", color="C0", markersize=4,
-                label="Feature SEM (% of mean)")
-    finite_mask = np.isfinite(sem_vals) & (sem_vals > 0)
-    if finite_mask.sum() >= 2:
-        first = int(np.where(finite_mask)[0][0])
-        anchor = sem_vals[first]
-        anchor_rep = sem_reps[first]
-        poisson_sem = anchor * np.sqrt(anchor_rep) / np.sqrt(sem_reps)
-        ax_sem.plot(sem_reps, poisson_sem, "--", color="gray", alpha=0.7,
-                    label="1/√n Poisson")
-    ax_sem.axhline(sem_threshold, color="C1", linestyle="-", alpha=0.6,
-                   label=f"{sem_threshold:.0f}% publication threshold")
-    ax_sem.set_ylabel("SEM (% of mean)")
-    ax_sem.set_xlabel("Rep #")
-    ax_sem.legend(fontsize=7, loc="upper right")
-    ax_sem.grid(alpha=0.3)
-
-    e_min, e_max = window
-    window_str = f"[{e_min}, {e_max}] eV" if e_min is not None else ""
-    title = (
-        f"{sample_name} — statistics trend {window_str} "
-        f"(CV: {eff_verdict}, SEM: {feat_verdict})"
-    )
-    fig.suptitle(title, fontsize=9)
-    fig.tight_layout()
-
-    summary = (
-        f"Statistics trend for {sample_name}: "
-        f"CV verdict={eff_verdict}, feature verdict={feat_verdict}, "
-        f"final CV={cv_arr[-1]:.2f}%, final SEM={sem_arr[-1]:.2f}%."
-    )
-    return fig, summary
-
-
-# fig_to_base64 lives in the science layer; re-exported here because callers
-# have imported it from this module since before the science/ split.
-from beamtimehero_cli.science.plots.scan import fig_to_base64  # noqa: E402,F401
+# These live in the science layer now — they take arrays and descriptor dicts,
+# not file names. Re-exported here because callers have imported them from this
+# module since before the science/ split. New code should use science.plots.*.
+from beamtimehero_cli.science.plots.scan import (  # noqa: E402,F401
+    fig_to_base64,
+    plot_statistics_trend,
+)
+from beamtimehero_cli.science.plots.xas import (  # noqa: E402,F401
+    plot_alignment_overlay,
+    plot_difference_spectrum,
+    plot_lcf_fit,
+)

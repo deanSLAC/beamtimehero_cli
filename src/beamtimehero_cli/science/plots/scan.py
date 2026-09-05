@@ -15,6 +15,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
@@ -89,4 +90,84 @@ def render_scan(
         parts.append(f"Command: {scan_command}")
 
     summary = ". ".join(parts) + "."
+    return fig, summary
+
+
+def plot_statistics_trend(stats, sample_name=""):
+    """Render a two-subplot statistics trend from pre-computed convergence stats.
+
+    Parameters
+    ----------
+    stats : dict
+        convergence_stats dict stored per-sample in the plan JSON. Expected
+        keys: feature_window_eV, cumulative_cv_pct, running_sem_frac,
+        efficiency_verdict, feature_verdict, statistic.
+    sample_name : str
+        Sample name for the plot title.
+
+    Returns
+    -------
+    (fig, summary_text) or (None, error_text)
+    """
+    cv_pct = stats.get("cumulative_cv_pct")
+    sem_frac = stats.get("running_sem_frac")
+    if not cv_pct or not sem_frac:
+        return None, "convergence_stats missing cumulative_cv_pct or running_sem_frac"
+
+    n = len(cv_pct)
+    reps = np.arange(1, n + 1)
+    cv_arr = np.array(cv_pct, dtype=float)
+    sem_arr = np.array([(v if v is not None else np.nan) for v in sem_frac], dtype=float) * 100
+
+    window = stats.get("feature_window_eV") or [None, None]
+    sem_threshold = stats.get("sem_threshold_frac", 0.01) * 100
+    eff_verdict = stats.get("efficiency_verdict", "?")
+    feat_verdict = stats.get("feature_verdict", "?")
+
+    fig, (ax_cv, ax_sem) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+
+    # --- Top: Cumulative CV ---
+    ax_cv.plot(reps, cv_arr, "o-", color="C0", markersize=4, label="Cumulative CV")
+    poisson_cv = cv_arr[0] / np.sqrt(reps)
+    ax_cv.plot(reps, poisson_cv, "--", color="gray", alpha=0.7, label="1/√n Poisson")
+    ax_cv.set_ylabel("Cumulative CV (%)")
+    ax_cv.legend(fontsize=7, loc="upper right")
+    ax_cv.grid(alpha=0.3)
+
+    # --- Bottom: Feature SEM ---
+    # Rep 1 has SEM=0 by definition (single sample); skip it so the
+    # axis isn't pinned to zero.
+    sem_reps = reps[1:]
+    sem_vals = sem_arr[1:]
+    ax_sem.plot(sem_reps, sem_vals, "o-", color="C0", markersize=4,
+                label="Feature SEM (% of mean)")
+    finite_mask = np.isfinite(sem_vals) & (sem_vals > 0)
+    if finite_mask.sum() >= 2:
+        first = int(np.where(finite_mask)[0][0])
+        anchor = sem_vals[first]
+        anchor_rep = sem_reps[first]
+        poisson_sem = anchor * np.sqrt(anchor_rep) / np.sqrt(sem_reps)
+        ax_sem.plot(sem_reps, poisson_sem, "--", color="gray", alpha=0.7,
+                    label="1/√n Poisson")
+    ax_sem.axhline(sem_threshold, color="C1", linestyle="-", alpha=0.6,
+                   label=f"{sem_threshold:.0f}% publication threshold")
+    ax_sem.set_ylabel("SEM (% of mean)")
+    ax_sem.set_xlabel("Rep #")
+    ax_sem.legend(fontsize=7, loc="upper right")
+    ax_sem.grid(alpha=0.3)
+
+    e_min, e_max = window
+    window_str = f"[{e_min}, {e_max}] eV" if e_min is not None else ""
+    title = (
+        f"{sample_name} — statistics trend {window_str} "
+        f"(CV: {eff_verdict}, SEM: {feat_verdict})"
+    )
+    fig.suptitle(title, fontsize=9)
+    fig.tight_layout()
+
+    summary = (
+        f"Statistics trend for {sample_name}: "
+        f"CV verdict={eff_verdict}, feature verdict={feat_verdict}, "
+        f"final CV={cv_arr[-1]:.2f}%, final SEM={sem_arr[-1]:.2f}%."
+    )
     return fig, summary

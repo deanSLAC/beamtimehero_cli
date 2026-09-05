@@ -98,9 +98,9 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <h1>Science index — <span class="thin">every function, and what uses it</span></h1>
 <p class="lede">The scientific core of the toolbelt: what each function does, what it is called by, and what it cites. Generated from the source tree, so a new function appears here by existing. Regenerate with <code>python -m beamtimehero_cli.docgen_science</code>.</p>
 <div class="statstrip">
-<div class="stat"><b>103</b><span>functions</span></div>
-<div class="stat"><b>79</b><span>public</span></div>
-<div class="stat"><b>30</b><span>modules</span></div>
+<div class="stat"><b>116</b><span>functions</span></div>
+<div class="stat"><b>92</b><span>public</span></div>
+<div class="stat"><b>32</b><span>modules</span></div>
 <div class="stat"><b>27</b><span>cited methods</span></div>
 <div class="stat"><b>27</b><span>attribution gaps</span></div>
 <button id="themetoggle">&#9689; theme</button></div></header>
@@ -772,8 +772,25 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 </details>
 <details class="dir" style="--c: var(--c-plots)" open>
-<summary><span class="dname">science/plots/</span><span class="chip" style="--c: var(--c-plots)">2 modules</span><span class="count">3 fns</span></summary>
+<summary><span class="dname">science/plots/</span><span class="chip" style="--c: var(--c-plots)">4 modules</span><span class="count">16 fns</span></summary>
 <p class="note">Figures over arrays and descriptor dicts. A figure that takes a file name belongs in spec_data/ instead.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">plots.exafs</span><span class="mdoc">Figures for the EXAFS pipeline (k- and R-space).</span></div>
+<div class="fn" data-hay="plot_chi_extraction plots.exafs two-panel extraction summary: normalized mu(e) and chi(k)·k^w. exafs exafs-products exafs extract-chi">
+<span class="sig"><span class="fname">plot_chi_extraction</span>(energy, mu, flat, e0, k, chi, kweight, title)</span>
+<p class="fdoc">Two-panel extraction summary: normalized mu(E) and chi(k)·k^w.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi</p>
+</div>
+<div class="fn" data-hay="plot_chir plots.exafs  exafs exafs-products exafs fourier-transform-chi">
+<span class="sig"><span class="fname">plot_chir</span>(r, chir_mag, kmin, kmax, kweight, title, peak=...)</span>
+<p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
+</div>
+<div class="fn" data-hay="plot_chi_overlay plots.exafs overlay chi(k)·k^w for several groups. ``spectra`` = [(label, k, chi)]. exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">plot_chi_overlay</span>(spectra, kweight, title)</span>
+<p class="fdoc">Overlay chi(k)·k^w for several groups. ``spectra`` = [(label, k, chi)].</p>
+<p class="users"><b>used by</b> exafs overlay-chi-spectra</p>
+</div>
+</div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">plots.scan</span><span class="mdoc">Backend-agnostic figure rendering.</span></div>
 <div class="fn" data-hay="fig_to_base64 plots.scan convert a matplotlib figure to a base64-encoded png string. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra s3df plot-scan spec-file align-spectra spec-file compare-xas-to-references spec-file difference-spectrum spec-file extract-xas-descriptors spec-file plot-averaged-scans spec-file plot-feature-evolution spec-file plot-first-half-vs-second-half spec-file plot-running-average spec-file plot-scan spec-file plot-scan-stack spec-file summarize-sample-chemistry tool plot-data xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs extract-xrs-descriptors xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs sum-crystals xrs summarize-xrs-chemistry">
@@ -786,6 +803,11 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <p class="fdoc">Render one scan&#x27;s DataFrame to a matplotlib Figure.</p>
 <p class="users"><b>used by</b> s3df plot-scan, spec-file plot-scan</p>
 </div>
+<div class="fn" data-hay="plot_statistics_trend plots.scan render a two-subplot statistics trend from pre-computed convergence stats.">
+<span class="sig"><span class="fname">plot_statistics_trend</span>(stats, sample_name=...)</span>
+<p class="fdoc">Render a two-subplot statistics trend from pre-computed convergence stats.</p>
+<p class="users"><span class="none">not reached from any catalog tool</span></p>
+</div>
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">plots.xas</span><span class="mdoc">Annotated descriptor plots for interpretation outputs.</span></div>
@@ -793,6 +815,49 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <span class="sig"><span class="fname">annotated_descriptor_figure</span>(descriptors, arrays, title=...)</span>
 <p class="fdoc">One figure: spectrum + fits, pre-edge zoom, optional trend panel.</p>
 <p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="plot_alignment_overlay plots.xas two-panel before/after overlay for ``science.xas.compare.align_spectra`` output. spec-file align-spectra">
+<span class="sig"><span class="fname">plot_alignment_overlay</span>(records, labels)</span>
+<p class="fdoc">Two-panel before/after overlay for ``science.xas.compare.align_spectra`` output.</p>
+<p class="users"><b>used by</b> spec-file align-spectra</p>
+</div>
+<div class="fn" data-hay="plot_difference_spectrum plots.xas two-panel view of ``science.xas.compare.difference_spectrum`` output: spec-file difference-spectrum">
+<span class="sig"><span class="fname">plot_difference_spectrum</span>(result, label_a=..., label_b=...)</span>
+<p class="fdoc">Two-panel view of ``science.xas.compare.difference_spectrum`` output:</p>
+<p class="users"><b>used by</b> spec-file difference-spectrum</p>
+</div>
+<div class="fn" data-hay="plot_lcf_fit plots.xas two-panel xanes lcf view: target + best fit, then the residual. spec-file compare-xas-to-references">
+<span class="sig"><span class="fname">plot_lcf_fit</span>(energy, target, fit, residual, components, title=...)</span>
+<p class="fdoc">Two-panel XANES LCF view: target + best fit, then the residual.</p>
+<p class="users"><b>used by</b> spec-file compare-xas-to-references</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">plots.xrs</span><span class="mdoc">Figures for the XRS pipeline (energy-loss axis).</span></div>
+<div class="fn" data-hay="plot_elastic_fit plots.xrs  xrs calibrate-energy-loss">
+<span class="sig"><span class="fname">plot_elastic_fit</span>(energy, signal, fit, file_name, scan_number, counter)</span>
+<p class="users"><b>used by</b> xrs calibrate-energy-loss</p>
+</div>
+<div class="fn" data-hay="plot_loss_spectrum plots.xrs  xrs average-xrs-scans xrs build-loss-axis">
+<span class="sig"><span class="fname">plot_loss_spectrum</span>(loss, mean, sem, title, ylabel=...)</span>
+<p class="users"><b>used by</b> xrs average-xrs-scans, xrs build-loss-axis</p>
+</div>
+<div class="fn" data-hay="plot_background_subtraction plots.xrs  xrs normalize-xrs xrs subtract-compton-background">
+<span class="sig"><span class="fname">plot_background_subtraction</span>(loss, raw, background, subtracted, edge_window)</span>
+<p class="users"><b>used by</b> xrs normalize-xrs, xrs subtract-compton-background</p>
+</div>
+<div class="fn" data-hay="plot_overlay plots.xrs spectra: list of (label, loss, intensity). xrs overlay-xrs-spectra">
+<span class="sig"><span class="fname">plot_overlay</span>(spectra, ylabel=...)</span>
+<p class="fdoc">spectra: list of (label, loss, intensity).</p>
+<p class="users"><b>used by</b> xrs overlay-xrs-spectra</p>
+</div>
+<div class="fn" data-hay="plot_xrs_descriptors plots.xrs  xrs extract-xrs-descriptors xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">plot_xrs_descriptors</span>(loss, intensity, descriptors, title=...)</span>
+<p class="users"><b>used by</b> xrs extract-xrs-descriptors, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="plot_crystal_sum plots.xrs  xrs sum-crystals">
+<span class="sig"><span class="fname">plot_crystal_sum</span>(loss, channels, summed, keep, labels=...)</span>
+<p class="users"><b>used by</b> xrs sum-crystals</p>
 </div>
 </div>
 </details>

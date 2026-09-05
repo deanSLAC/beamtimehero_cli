@@ -25,10 +25,12 @@ corollaries double as a routing rule:
 
 For plotting specifically: a figure function that takes **arrays or a descriptor
 dict** belongs in `science/plots/`; one that takes a **file name** belongs in
-`spec_data/`. That is the intent, not yet the state: `science/plots/` holds three
-functions and about fourteen array-taking figures are still in
-`spec_data/exafs_plotting.py`, `spec_data/xrs_plotting.py` and
-`spec_data/plotting.py`. If you are changing a plot, check there first.
+`spec_data/`. That split is now actually in place: the array-taking figures live
+here, and the six that load a scan by file name (`plot_scan`,
+`plot_averaged_scans_overlay`, `plot_scan_stack`,
+`plot_first_half_vs_second_half`, `plot_running_average`,
+`plot_feature_evolution`) stay in `spec_data/plotting.py`, which is the only
+plotting module left outside this package.
 
 ## The layout
 
@@ -72,8 +74,10 @@ science/
 ├── fitting/    generic curve fits (only scan-similarity so far)
 │   └── similarity.py     cosine similarity between scans
 └── plots/      figures over arrays / descriptor dicts
-    ├── xas.py              annotated descriptor figure
-    └── scan.py             generic scan render
+    ├── xas.py              descriptor figure, alignment / difference / LCF
+    ├── exafs.py            chi(k) extraction, |chi(R)|, k-space overlay
+    ├── xrs.py              elastic fit, loss spectra, Compton subtraction
+    └── scan.py             generic scan render, statistics trend, fig_to_base64
 ```
 
 ## You want to change… → go to
@@ -96,7 +100,10 @@ science/
 | the energy-loss axis, Compton background, or crystal summing | `xrs/` |
 | scan-to-scan similarity | `fitting/similarity.py` |
 | a knife-edge / aperture / emission-peak fit | `generic_data/fitter.py` — **not** moved, and unrouted |
-| what a plot looks like | `plots/` — but most plots are still in `spec_data/`, see below |
+| what an EXAFS k/R-space figure looks like | `plots/exafs.py` |
+| what an XRS energy-loss figure looks like | `plots/xrs.py` |
+| what a XANES descriptor / comparison figure looks like | `plots/xas.py` |
+| a figure that loads a scan by **file name** | `spec_data/plotting.py` — not science |
 
 ## `policy.py` — where the defaults live
 
@@ -114,7 +121,10 @@ choice can carry the citation that justifies it.
 
 Two honest caveats. `xas/`, `exafs/` and `xrs/` each have one; `reduce/`,
 `statistics/` and `fitting/` do not, so their defaults still sit next to the
-code that uses them.
+code that uses them — and because the pinning test only walks the three
+`policy.py` modules, **those defaults are unguarded**: changing
+`z_threshold`, `sem_threshold_frac` or `efficiency_threshold` leaves the suite
+green. They are no less material than the pinned ones.
 And edge auto-detection is *split*: `xas/policy.resolve_edge` decides
 the explicit-vs-auto policy, but the scoring weights that pick the winner
 (`_TOL_EV`, `_K_EDGE_BONUS`, `_COMMON_BONUS`, `_AMBIGUITY_MARGIN`) live in
@@ -151,7 +161,15 @@ signatures and the agent-facing JSON schema both read from policy rather than
 from a literal. If you change a default, that test fails — update the expected
 value in the same commit. The diff on that file is the record of which physics
 defaults moved and when. It also fails if you add a *new* policy constant
-without pinning it.
+without pinning it. Note the limit stated above: it covers the three
+`policy.py` modules only.
+
+**The boundary is enforced.** `tests/test_science_boundary.py` asserts the one
+rule mechanically, per file: nothing here may import from the rest of
+`beamtimehero_cli`, and nothing here may touch the environment, filesystem or
+network. It reads the source with `ast`, so a function-local import or a
+relative `from ...spec_data import x` is caught too. If it fails, move what
+you needed into `science/` or take it as an argument.
 
 **Provenance.** Anything that produces a number a scientist might quote also
 reports how it was produced: which normalization, which fit window, which
@@ -190,6 +208,9 @@ The old locations are re-export shims, so existing imports keep working:
 | `generic_data/cosine_similarity.py` | `science/fitting/similarity.py` |
 | `experiment_planning/scan_features.py` | `science/statistics/features.py` |
 | `experiment_planning/scan_efficiency.py` | `science/statistics/efficiency.py` |
+| `spec_data/exafs_plotting.py` | `science/plots/exafs.py` |
+| `spec_data/xrs_plotting.py` | `science/plots/xrs.py` |
+| `spec_data/plotting.py` (the 4 array/dict-taking figures) | `science/plots/{xas,scan}.py` |
 
 New code should use the new paths. The shims will be removed once the
 consuming applications have migrated.

@@ -26,7 +26,7 @@ from beamtimehero_cli.action_log.db import recent_actions
 from beamtimehero_cli.audited_call import audited_call
 from beamtimehero_cli.spec_data import scans as scan_data
 from beamtimehero_cli.spec_data import plotting
-from beamtimehero_cli.spec_data.plotting import fig_to_base64
+from beamtimehero_cli.science.plots.scan import fig_to_base64
 from beamtimehero_cli.spec_logs import log_reader
 from beamtimehero_cli.science.exafs import policy as ex_policy
 from beamtimehero_cli.science.xas import policy as xas_policy
@@ -1310,9 +1310,9 @@ def t_extract_xas_descriptors(arguments: dict) -> tuple[str, list[str]]:
         descriptors, arrays, meta = _extract_for_interpretation(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), images_b64
-    from beamtimehero_cli.science.plots import xas as interp_plotting
+    from beamtimehero_cli.science.plots import xas as xas_plots
     edge_info = descriptors.get("edge") or {}
-    fig = interp_plotting.annotated_descriptor_figure(
+    fig = xas_plots.annotated_descriptor_figure(
         descriptors, arrays,
         title=f"{meta['file_name']} — {edge_info.get('element')} {edge_info.get('edge')}",
     )
@@ -1347,7 +1347,7 @@ def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
     from beamtimehero_cli import calibration_store
     from beamtimehero_cli.science.xas import interpret as interp_engine
-    from beamtimehero_cli.science.plots import xas as interp_plotting
+    from beamtimehero_cli.science.plots import xas as xas_plots
     try:
         descriptors, arrays, meta = _resolve_descriptors(arguments)
     except ValueError as e:
@@ -1360,7 +1360,7 @@ def t_summarize_sample_chemistry(arguments: dict) -> tuple[str, list[str]]:
     # inputs but not the arrays, so the plot is simply omitted then.
     if arrays is not None:
         edge_info = descriptors.get("edge") or {}
-        fig = interp_plotting.annotated_descriptor_figure(
+        fig = xas_plots.annotated_descriptor_figure(
             descriptors, arrays,
             title=f"{meta.get('file_name')} — {edge_info.get('element')} {edge_info.get('edge')} chemistry",
         )
@@ -1716,7 +1716,8 @@ def t_compare_xas_to_references(arguments: dict) -> tuple[str, list[str]]:
         )
 
     images_b64: list[str] = []
-    fig, _plot_summary = plotting.plot_lcf_fit(
+    from beamtimehero_cli.science.plots import xas as xas_plots
+    fig, _plot_summary = xas_plots.plot_lcf_fit(
         energy[good], target["mu"][good], fit[good], residual[good],
         result["components"],
         title=f"{target['file_name']} — XANES LCF ({len(refs)} references)",
@@ -1772,7 +1773,8 @@ def t_align_spectra(arguments: dict) -> tuple[str, list[str]]:
             "across these files in reports."
         ),
     }
-    fig, _plot_summary = plotting.plot_alignment_overlay(records, labels)
+    from beamtimehero_cli.science.plots import xas as xas_plots
+    fig, _plot_summary = xas_plots.plot_alignment_overlay(records, labels)
     images_b64 = [fig_to_base64(fig)]
     _close(fig)
     return json.dumps(out, indent=2, default=str), images_b64
@@ -1810,7 +1812,8 @@ def t_difference_spectrum(arguments: dict) -> tuple[str, list[str]]:
         "alignment": result["alignment"],
         **result["stats"],
     }
-    fig, _plot_summary = plotting.plot_difference_spectrum(
+    from beamtimehero_cli.science.plots import xas as xas_plots
+    fig, _plot_summary = xas_plots.plot_difference_spectrum(
         result, label_a=label_a, label_b=label_b,
     )
     images_b64 = [fig_to_base64(fig)]
@@ -1846,7 +1849,8 @@ def _xrs_spectrum_summary(loss, values) -> dict:
 
 
 def t_calibrate_energy_loss(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    from beamtimehero_cli.spec_data import xrs_data
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     file_name = arguments.get("file_name", "")
     scan_number = arguments.get("scan_number")
@@ -1858,7 +1862,7 @@ def t_calibrate_energy_loss(arguments: dict) -> tuple[str, list[str]]:
         energy, signal = xrs_data.load_scan_signal(file_name, int(scan_number), result["counter"])
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    fig, _summary = xrs_plotting.plot_elastic_fit(
+    fig, _summary = xrs_plots.plot_elastic_fit(
         energy, signal, result, file_name, int(scan_number), result["counter"])
     images_b64.append(fig_to_base64(fig))
     _close(fig)
@@ -1866,7 +1870,8 @@ def t_calibrate_energy_loss(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_build_loss_axis(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    from beamtimehero_cli.spec_data import xrs_data
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     file_name = arguments.get("file_name", "")
     scan_number = arguments.get("scan_number")
@@ -1880,7 +1885,7 @@ def t_build_loss_axis(arguments: dict) -> tuple[str, list[str]]:
         )
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    fig = xrs_plotting.plot_loss_spectrum(
+    fig = xrs_plots.plot_loss_spectrum(
         result["loss"], result["mean"], None,
         f"{file_name} #{scan_number} — {result['counter']} on {result['axis']}")
     images_b64.append(fig_to_base64(fig))
@@ -1906,7 +1911,7 @@ def _reduce_for_tool(arguments):
 def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
-    from beamtimehero_cli.spec_data import xrs_plotting
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     try:
         r = _reduce_for_tool(arguments)
@@ -1920,7 +1925,7 @@ def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
         mean = norm["normalized"]
         sem = sem / norm["area"] if norm["area"] else sem
         ylabel = "area-normalized signal"
-    fig = xrs_plotting.plot_loss_spectrum(
+    fig = xrs_plots.plot_loss_spectrum(
         loss, mean, sem,
         f"{r['file_name']} — averaged XRS ({r['n_reps']} reps, {r['counter']})", ylabel)
     images_b64.append(fig_to_base64(fig))
@@ -1944,7 +1949,7 @@ def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
 def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
-    from beamtimehero_cli.spec_data import xrs_plotting
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
     if edge_lo is None or edge_hi is None:
@@ -1961,7 +1966,7 @@ def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
     if normalization == "area":
         norm = xrs.area_normalize(r["loss"], subtracted, float(edge_lo), float(edge_hi))
         subtracted = norm["normalized"]
-    fig = xrs_plotting.plot_background_subtraction(
+    fig = xrs_plots.plot_background_subtraction(
         r["loss"], r["mean"], bg["background"], subtracted, bg["edge_window"])
     images_b64.append(fig_to_base64(fig))
     _close(fig)
@@ -1989,7 +1994,8 @@ def t_normalize_xrs(arguments: dict) -> tuple[str, list[str]]:
 def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
-    from beamtimehero_cli.spec_data import xrs_data, xrs_plotting
+    from beamtimehero_cli.spec_data import xrs_data
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     file_names = arguments.get("file_names", [])
     if not file_names:
@@ -2017,7 +2023,7 @@ def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
     if not spectra:
         return json.dumps({"error": "No spectra could be reduced.", "reports": reports}, indent=2), []
     ylabel = "area-normalized" if normalization == "area" else "signal / I0"
-    fig = xrs_plotting.plot_overlay(spectra, ylabel=ylabel)
+    fig = xrs_plots.plot_overlay(spectra, ylabel=ylabel)
     images_b64.append(fig_to_base64(fig))
     _close(fig)
     return json.dumps({"n_overlaid": len(spectra), "normalization": normalization,
@@ -2048,7 +2054,7 @@ def _load_crystal_channels(arguments):
 def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
-    from beamtimehero_cli.spec_data import xrs_plotting
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
     try:
         loss_list, chan_list, counters, center = _load_crystal_channels(arguments)
@@ -2059,7 +2065,7 @@ def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
     on_grid = [np.interp(res["loss"], lo, ch, left=np.nan, right=np.nan)
                for lo, ch in zip(loss_list, chan_list)]
     keep = res["rejection"]["keep"]
-    fig = xrs_plotting.plot_crystal_sum(res["loss"], on_grid, res["summed"], keep, labels=counters)
+    fig = xrs_plots.plot_crystal_sum(res["loss"], on_grid, res["summed"], keep, labels=counters)
     images_b64.append(fig_to_base64(fig))
     _close(fig)
     out = {
@@ -2186,12 +2192,12 @@ def _xrs_edge_descriptors(arguments):
 
 
 def t_extract_xrs_descriptors(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.spec_data import xrs_plotting
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     try:
         descriptors, arrays, meta, _res = _xrs_edge_descriptors(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
-    fig = xrs_plotting.plot_xrs_descriptors(
+    fig = xrs_plots.plot_xrs_descriptors(
         arrays["loss"], arrays["intensity"], descriptors,
         title=f"{meta['file_name']} — XRS descriptors")
     img = fig_to_base64(fig); _close(fig)
@@ -2222,14 +2228,14 @@ def t_assess_xrs_quality(arguments: dict) -> tuple[str, list[str]]:
 
 def t_summarize_xrs_chemistry(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import interpret as xrs_interpret
-    from beamtimehero_cli.spec_data import xrs_plotting
+    from beamtimehero_cli.science.plots import xrs as xrs_plots
     try:
         descriptors, arrays, meta, res = _xrs_edge_descriptors(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
     summary = xrs_interpret.summarize_xrs_chemistry(descriptors, arguments.get("calibration"), res)
     summary.update(meta)
-    fig = xrs_plotting.plot_xrs_descriptors(
+    fig = xrs_plots.plot_xrs_descriptors(
         arrays["loss"], arrays["intensity"], descriptors,
         title=f"{meta['file_name']} — XRS chemistry")
     img = fig_to_base64(fig); _close(fig)
@@ -2423,13 +2429,13 @@ def t_list_collector_scans(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_extract_chi(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.spec_data import exafs_plotting
+    from beamtimehero_cli.science.plots import exafs as exafs_plots
     try:
         core = _extract_chi_core(arguments)
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
     kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
-    fig = exafs_plotting.plot_chi_extraction(
+    fig = exafs_plots.plot_chi_extraction(
         core["energy"], core["mu"], core["flat"], core["e0"],
         core["k"], core["chi"], kweight,
         f"{core['file_name']} — chi extraction ({core['n_reps']} reps, {core['counter']})")
@@ -2465,7 +2471,7 @@ def _resolve_chi(arguments: dict) -> tuple[dict | None, dict]:
 def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.exafs import background as _exafs_bkg
     from beamtimehero_cli.science.exafs import fourier as exafs
-    from beamtimehero_cli.spec_data import exafs_plotting
+    from beamtimehero_cli.science.plots import exafs as exafs_plots
     try:
         core, chi = _resolve_chi(arguments)
     except ValueError as e:
@@ -2480,7 +2486,7 @@ def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
     )
     peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
     label = core["file_name"] if core else "chi artifact"
-    fig = exafs_plotting.plot_chir(
+    fig = exafs_plots.plot_chir(
         ft["r"], ft["chir_mag"], ft["provenance"]["kmin_inv_ang"],
         ft["provenance"]["kmax_inv_ang"], kweight,
         f"{label} — |chi(R)| (phase-uncorrected)", peak=peak)
@@ -2500,7 +2506,7 @@ def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
     """Capstone: extraction plot + FT plot + the full JSON bundle."""
     from beamtimehero_cli.science.exafs import background as _exafs_bkg
     from beamtimehero_cli.science.exafs import fourier as exafs
-    from beamtimehero_cli.spec_data import exafs_plotting
+    from beamtimehero_cli.science.plots import exafs as exafs_plots
     try:
         core, chi = _resolve_chi(arguments)
     except ValueError as e:
@@ -2508,7 +2514,7 @@ def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
     kweight = int(arguments.get("kweight", ex_policy.DEFAULT_KWEIGHT))
     images: list[str] = []
     if core is not None:
-        fig = exafs_plotting.plot_chi_extraction(
+        fig = exafs_plots.plot_chi_extraction(
             core["energy"], core["mu"], core["flat"], core["e0"],
             core["k"], core["chi"], kweight,
             f"{core['file_name']} — chi extraction ({core['n_reps']} reps, {core['counter']})")
@@ -2522,7 +2528,7 @@ def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
     )
     peak = exafs.first_shell_peak(ft["r"], ft["chir_mag"])
     label = core["file_name"] if core else "chi artifact"
-    fig = exafs_plotting.plot_chir(
+    fig = exafs_plots.plot_chir(
         ft["r"], ft["chir_mag"], ft["provenance"]["kmin_inv_ang"],
         ft["provenance"]["kmax_inv_ang"], kweight,
         f"{label} — |chi(R)| (phase-uncorrected)", peak=peak)
@@ -2540,7 +2546,7 @@ def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.spec_data import exafs_plotting
+    from beamtimehero_cli.science.plots import exafs as exafs_plots
     file_names = arguments.get("file_names", [])
     if not file_names:
         return json.dumps({"error": "file_names array must not be empty."}), []
@@ -2567,7 +2573,7 @@ def t_overlay_chi_spectra(arguments: dict) -> tuple[str, list[str]]:
     if not spectra:
         return json.dumps({"error": "No chi spectra could be extracted.",
                            "reports": reports}, indent=2), []
-    fig = exafs_plotting.plot_chi_overlay(
+    fig = exafs_plots.plot_chi_overlay(
         spectra, kweight, f"chi(k)·k^{kweight} overlay ({len(spectra)} groups)")
     images = [fig_to_base64(fig)]
     _close(fig)
