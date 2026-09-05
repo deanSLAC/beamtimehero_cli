@@ -30,7 +30,9 @@ Schema per entry:
           * ``autonomy_db``    — reads/writes the autonomy SQLite DB
           * ``filesystem``     — non-SPEC files in the scan directory
           * ``tool_chain``     — consumes the output of another tool
-          * ``slack``          — sends a message to staff Slack
+          * ``postgres``       — reads the S3DF scan-metadata Postgres
+          * ``camera``         — reads a beamline camera frame
+          * ``slack``          — reads or posts to staff Slack
     source_detail : str
         Human-readable specifics about where the data comes from.
     depends_on : list[str]
@@ -351,7 +353,9 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Writes action_log row before SPEC dispatch; blocks until SPEC prompt returns.",
-        "depends_on": ["transition_phase"],
+        # transition_phase is an orchestrator concern in the consuming app,
+        # not a tool in this catalog, so it is not listed as a prerequisite.
+        "depends_on": [],
     },
     "align_xes_spectrometer": {
         "long_description": (
@@ -364,7 +368,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {crystals, raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Gated to phase xes_alignment by the phase allow-list.",
-        "depends_on": ["align_beamline", "transition_phase"],
+        "depends_on": ["align_beamline"],
     },
     "run_sample_alignment": {
         "long_description": (
@@ -401,7 +405,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {element, raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Pulls the target geometry from the experiment plan.",
-        "depends_on": ["get_plan"],
+        "depends_on": [],
     },
     "peak_mono_pitch": {
         "long_description": (
@@ -1238,6 +1242,913 @@ TOOL_LINEAGE: dict[str, dict] = {
             "(SPEC cache, collector ASCII, or merged two-column ASCII)."
         ),
         "depends_on": ["align_spectra"],
+    },
+
+    # ---------- XANES / HERFD: the atomized descriptor + interpretation leaves
+
+    "identify_edge": {
+        "long_description": (
+            "Answer 'what edge is this' before anything else runs: infer the "
+            "absorber element and edge from the scan's energy window against "
+            "the tabulated edge energies, then classify the interpretation "
+            "family (3d/4d/5d K, Ln/An L3, 5d L3, An M4/M5) that decides which "
+            "oxidation-state basis is even applicable. Labels only — no "
+            "absolute-energy claim is made, since that needs a session "
+            "calibration."
+        ),
+        "python_func": (
+            "science.xas.policy.resolve_edge(...) over "
+            "spec_data.scans.get_normalized_scan_arrays(...); family from "
+            "science.tables.edges.classify_edge_family"
+        ),
+        "spec_command": None,
+        "output": "JSON: {element, edge, edge_energy_ev, family, detected|explicit, energy_window_ev, ambiguity}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Scan energy range via spec_data.scans.get_normalized_scan_arrays; "
+            "edge table from science.tables.edges (xraydb-backed)."
+        ),
+        "depends_on": ["list_scans"],
+    },
+    "find_edge_e0": {
+        "long_description": (
+            "Locate the edge position of the averaged spectrum under two fixed "
+            "definitions: the Savitzky-Golay derivative maximum (primary, with "
+            "an uncertainty) and the half-step crossing (cross-check only). "
+            "Single responsibility — it finds the edge and nothing else. The "
+            "value is only as absolute as the session calibration; without one "
+            "it is a relative marker."
+        ),
+        "python_func": "science.xas.e0.find_e0(...) over spec_data.scans.get_normalized_scan_arrays(...)",
+        "spec_command": None,
+        "output": "JSON: {e0_ev, e0_unc_ev, e0_half_step_ev, definition, grid_step_ev, element, edge}",
+        "source": "spec_datafile",
+        "source_detail": "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["list_scans", "identify_edge"],
+    },
+    "normalize_xas_intensity": {
+        "long_description": (
+            "Normalize the averaged spectrum and report only how it was done — "
+            "method, window, scale factor, and the reason if a method degraded. "
+            "'area' (the HERFD default, Bugarin & Glatzel) is preferred for "
+            "intensity comparisons; 'mback' is the physics-based background; "
+            "'edge_step' is the upstream flat-anchored variant. Provenance-only "
+            "by design, so a downstream intensity number can always be traced "
+            "to the normalization that produced it."
+        ),
+        "python_func": (
+            "science.xas.normalize.{area_normalize,mback_normalize,edge_step_provenance}(...) "
+            "over spec_data.scans.get_normalized_scan_arrays(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {method, citation, window_ev, scale, degraded, reason, element, edge}",
+        "source": "spec_datafile",
+        "source_detail": "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["find_edge_e0"],
+    },
+    "fit_xas_pre_edge": {
+        "long_description": (
+            "Wilke-style pre-edge fit of the averaged spectrum: a rising-edge "
+            "atan baseline plus one to three pseudo-Voigts, returning centroid, "
+            "integrated intensity, component count and BIC/fit quality with "
+            "uncertainties. For 3d/4d/5d K-edges with a tabulated core-hole "
+            "width the re-broadened variant is returned too — that, not the "
+            "sharp HERFD fit, is the valid input to a conventional-XANES "
+            "calibration such as Wilke 2001."
+        ),
+        "python_func": (
+            "science.xas.fits.fit_pre_edge(...) + science.xas.e0.rebroaden(...) over "
+            "spec_data.scans.get_normalized_scan_arrays(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {centroid_ev, integrated_intensity, n_components, bic, fit_ok, rebroadened{...}, provenance}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays; "
+            "core-hole widths from science.tables.edge_shifts."
+        ),
+        "depends_on": ["find_edge_e0", "normalize_xas_intensity"],
+    },
+    "fit_xas_white_line": {
+        "long_description": (
+            "White-line fit of the averaged spectrum: energy, height and area "
+            "of the main line (selected by height) plus every fitted component. "
+            "Component count defaults from the edge family — three for Ln/An L3 "
+            "and An M edges, where the Ce(IV) doublet and U(VI) satellites are "
+            "real structure rather than noise, one otherwise."
+        ),
+        "python_func": (
+            "science.xas.fits.fit_white_line(...) with the count from "
+            "science.xas.policy.white_line_components_for(family)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {white_line{energy_ev, height, area}, components[...], fit_ok, provenance}",
+        "source": "spec_datafile",
+        "source_detail": "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["find_edge_e0", "normalize_xas_intensity"],
+    },
+    "extract_xas_descriptors": {
+        "long_description": (
+            "The full descriptor bundle in one call — E0 under both "
+            "definitions, the white-line fit, the Wilke-style pre-edge fit, "
+            "per-scan descriptor trends, and the data-quality flags — plus an "
+            "annotated figure that plots exactly the numbers the verdicts will "
+            "use, so the interpretation can be audited at a glance. This is the "
+            "artifact the interpret_* tools consume; pass it back to them to "
+            "avoid recomputing."
+        ),
+        "python_func": (
+            "science.xas.descriptors.extract_descriptors(...) + "
+            "science.plots.xas.annotated_descriptor_figure(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {e0, white_line, pre_edge, per_scan_trends, quality_flags, provenance} + annotated figure",
+        "source": "spec_datafile",
+        "source_detail": "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["identify_edge"],
+    },
+    "assess_xas_quality": {
+        "long_description": (
+            "Data-quality gate for the averaged spectrum: monochromator-glitch "
+            "spike count, detector-saturation (flat-top white line) check, and "
+            "an honest self-absorption risk statement. The XAS analogue of "
+            "assess_xrs_quality. Self-absorption cannot be ruled out from the "
+            "data alone for fluorescence-detected HERFD at unknown "
+            "concentration, so intensity verdicts stay degraded until "
+            "assume_dilute is asserted by the operator."
+        ),
+        "python_func": (
+            "science.reduce.artifacts.{detect_glitches,detect_saturation,"
+            "self_absorption_assessment}(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {n_glitches, saturated, n_pinned, self_absorption_risk, quality_flags, verdict}",
+        "source": "spec_datafile",
+        "source_detail": "Averaged, I0-divided reps from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["identify_edge"],
+    },
+    "detect_per_scan_drift": {
+        "long_description": (
+            "Beam-damage and photoreduction test: per-scan trends in E0, "
+            "white-line height and energy, and pre-edge intensity, each with a "
+            "monotonic-drift verdict (Kendall tau p<0.05 and |Theil-Sen total "
+            "change| above twice the residual MAD). Catches the steady "
+            "one-directional walk that a first-half/second-half split averages "
+            "away. Needs at least four scans to say anything."
+        ),
+        "python_func": (
+            "science.xas.descriptors.per_scan_descriptor_trends(...) over "
+            "per-scan science.xas.{e0,fits} fits"
+        ),
+        "spec_command": None,
+        "output": "JSON: per-descriptor {theil_sen_slope, kendall_tau, p_value, total_change, drifting}",
+        "source": "spec_datafile",
+        "source_detail": "One fit per scan from spec_data.scans.get_normalized_scan_arrays.",
+        "depends_on": ["identify_edge"],
+    },
+    "interpret_oxidation_state": {
+        "long_description": (
+            "Oxidation-state verdict on the basis the edge family actually "
+            "supports: 3d K-edges via the pre-edge centroid on the Wilke 2001 "
+            "CII axis (applied to the re-broadened spectrum) plus the "
+            "calibrated edge shift; Ce L3 via the Ce(IV) final-state doublet; "
+            "U M4 via the peak-position/satellite method. Refuses an absolute "
+            "state without a session calibration and reports a relative "
+            "comparison instead, and degrades confidence when a quality flag "
+            "or a calibration-domain mismatch stands."
+        ),
+        "python_func": "science.xas.interpret.interpret_oxidation_state(descriptors, calibration)",
+        "spec_command": None,
+        "output": "JSON: {verdict, basis, confidence, evidence, caveats, flags, calibration_context}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Descriptors from the file (or a precomputed descriptors artifact, "
+            "which skips the reload); calibration from calibration_store."
+        ),
+        "depends_on": ["extract_xas_descriptors", "get_energy_calibration"],
+    },
+    "interpret_coordination_geometry": {
+        "long_description": (
+            "Coordination and site-symmetry verdict for 3d K-edges from "
+            "pre-edge intensity and component count on the Wilke 2001 "
+            "centroid-versus-intensity envelope: a weak pre-edge reads as "
+            "centrosymmetric/octahedral, a strong one as "
+            "non-centrosymmetric/tetrahedral, and the intermediate band as "
+            "5-coordinate, distorted, or mixed. Uses the re-broadened pre-edge, "
+            "since the envelope is drawn from conventional-broadening data."
+        ),
+        "python_func": "science.xas.interpret.interpret_coordination_geometry(descriptors, calibration)",
+        "spec_command": None,
+        "output": "JSON: {verdict, basis, confidence, evidence, caveats, flags}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Descriptors from the file (or a precomputed descriptors artifact); "
+            "intensity brackets from science.tables.edge_shifts."
+        ),
+        "depends_on": ["extract_xas_descriptors"],
+    },
+    "summarize_sample_chemistry": {
+        "long_description": (
+            "Capstone chemical interpretation of a sample: composes "
+            "extract_xas_descriptors, interpret_oxidation_state, "
+            "interpret_coordination_geometry and detect_per_scan_drift, and "
+            "returns one narration paragraph plus the annotated descriptor "
+            "figure. Includes the drift check on purpose — a photoreduction "
+            "trend invalidates the oxidation verdict it would otherwise sit "
+            "next to."
+        ),
+        "python_func": "science.xas.interpret.summarize_chemistry(descriptors, calibration)",
+        "spec_command": None,
+        "output": "JSON: {narration, oxidation, geometry, drift, quality, descriptors} + annotated figure",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Descriptors from the file (or a precomputed descriptors artifact); "
+            "calibration from calibration_store."
+        ),
+        "depends_on": ["extract_xas_descriptors", "get_energy_calibration"],
+    },
+    "get_energy_calibration": {
+        "long_description": (
+            "Report the current session energy calibration: offset in eV, the "
+            "reference element and edge it came from, its age, and the drift "
+            "across all recorded calibrations. Returns calibrated=false when "
+            "none exists, which is the signal that the interpretation tools "
+            "will run relative-only and refuse absolute oxidation states."
+        ),
+        "python_func": "calibration_store.current_calibration()",
+        "spec_command": None,
+        "output": "JSON: {calibrated, offset_ev, reference_element, reference_edge, recorded_at, age_s, drift_ev}",
+        "source": "filesystem",
+        "source_detail": (
+            "Session calibration JSON written by calibration_store into its "
+            "configured directory — session state, not scan data."
+        ),
+        "depends_on": [],
+    },
+    "record_energy_calibration": {
+        "long_description": (
+            "Register a session energy calibration from a measured reference "
+            "foil or compound scan: computes the reference's E0 under the fixed "
+            "definition (Savitzky-Golay smoothed derivative maximum), stores "
+            "the offset to the assigned reference energy with a timestamp, and "
+            "unlocks the absolute-energy claims the interpretation tools "
+            "otherwise refuse. Run it at session start and after any mono "
+            "recalibration."
+        ),
+        "python_func": (
+            "science.xas.e0.find_e0(...) over spec_data.scans.get_normalized_scan_arrays(...), "
+            "then calibration_store.record_calibration(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {offset_ev, measured_e0_ev, assigned_reference_ev, reference_element, reference_edge, recorded_at}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Reference scan from spec_data.scans.get_normalized_scan_arrays; the "
+            "resulting offset is written to the calibration_store JSON."
+        ),
+        "depends_on": ["list_scans", "identify_edge"],
+    },
+
+    # ---------- Scan statistics: convergence, heterogeneity, and their plots
+
+    "analyze_feature_evolution": {
+        "long_description": (
+            "Per-rep scalar trace and convergence verdict for a feature the "
+            "agent defines itself: it passes the numeric eV bounds and the "
+            "statistic that captures the feature (white-line peak, pre-edge "
+            "shoulder, the dip between two oscillations), and gets back the "
+            "running mean, running SEM and a verdict. Energy-window agnostic "
+            "on purpose — the caller owns the choice of window, so the tool "
+            "does not have to know what technique it is looking at."
+        ),
+        "python_func": (
+            "science.statistics.features.{extract_window_scalar,"
+            "analyze_feature_evolution}(...) over "
+            "spec_data.scans.get_normalized_scan_arrays(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {per_rep_values, running_mean, running_sem, final_sem_frac, final_drift_frac, verdict}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Per-rep columns from spec_data.scans.get_normalized_scan_arrays, "
+            "with the counter and normalization mode the caller specified."
+        ),
+        "depends_on": ["list_scans"],
+    },
+    "analyze_per_spot": {
+        "long_description": (
+            "Run the convergence and efficiency analysis separately for each "
+            "sample spot in the file (grouped by the recorded Sx/Sy/Sz), then "
+            "report a between-spot versus within-spot heterogeneity "
+            "F-statistic. F near 1 means the spots agree and combining them is "
+            "safe; F much greater than 1 means they disagree beyond shot noise, "
+            "so the combined average is a population mean over a heterogeneous "
+            "sample rather than a better measurement of one spot."
+        ),
+        "python_func": (
+            "spec_data.scans.group_scans_by_spot(...) then per group "
+            "science.statistics.{features,efficiency} + "
+            "features.heterogeneity_f_statistic(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {spots[{position, n_scans, convergence, efficiency}], f_statistic, verdict}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Sx/Sy/Sz motor positions from the SPEC scan headers plus per-rep "
+            "arrays from spec_data.scans.get_normalized_scan_arrays."
+        ),
+        "depends_on": ["group_scans_by_spot"],
+    },
+    "group_scans_by_spot": {
+        "long_description": (
+            "Cluster a file's scans by sample spot using the recorded Sx/Sy/Sz "
+            "motor positions — two scans are the same spot when all three "
+            "agree within tol_mm. Worth running before any convergence "
+            "analysis: reps collected at different spots make the cross-spot "
+            "scatter look like poor convergence when it is really sample "
+            "heterogeneity."
+        ),
+        "python_func": "spec_data.scans.group_scans_by_spot(file_name, tol_mm)",
+        "spec_command": None,
+        "output": "JSON: {tol_mm, spots[{sx, sy, sz, scan_numbers}]}",
+        "source": "spec_datafile",
+        "source_detail": "Motor positions from the SPEC scan headers (#P lines) via the metadata cache.",
+        "depends_on": ["list_scans"],
+    },
+    "plot_scan_stack": {
+        "long_description": (
+            "Overlay every rep of one sample on a single axis, colour-"
+            "progressed by rep order. The fastest visual read on what the reps "
+            "are doing: symmetric scatter about a stable mean is converged, a "
+            "steady one-directional walk means more reps or an evolving "
+            "sample, and a monotonic collapse means the sample is being burned "
+            "away."
+        ),
+        "python_func": "spec_data.plotting.plot_scan_stack(file_name, ...)",
+        "spec_command": None,
+        "output": "base64 PNG + JSON summary {n_reps, counter, normalization, window_ev}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Loads by file name, so the figure lives in spec_data/ rather than "
+            "science/plots/ — see the plotting rule in science/README.md."
+        ),
+        "depends_on": ["list_scans"],
+    },
+    "plot_running_average": {
+        "long_description": (
+            "Plot the running average across reps as it evolves — one line per "
+            "cumulative subset, colour-progressed by rep number — with the "
+            "final ±SEM band. Shows whether the running mean is still moving "
+            "rep-over-rep at the feature of interest, which is the question "
+            "'have I collected enough' actually reduces to."
+        ),
+        "python_func": "spec_data.plotting.plot_running_average(file_name, ...)",
+        "spec_command": None,
+        "output": "base64 PNG + JSON summary {n_reps, final_sem, window_ev}",
+        "source": "spec_datafile",
+        "source_detail": "Loads by file name via spec_data.scans; figure built in spec_data/plotting.py.",
+        "depends_on": ["list_scans"],
+    },
+    "plot_first_half_vs_second_half": {
+        "long_description": (
+            "Compare the average of the first half of the reps to the second "
+            "half with SEM bands, reporting max |delta|/SEM. Under 2 sigma the "
+            "halves agree and the sample is stationary; over 3 sigma at any "
+            "feature they disagree and more reps will not help, because the "
+            "cause is drift, damage, or heterogeneity rather than noise. The "
+            "strongest single-glance stationarity test available."
+        ),
+        "python_func": "spec_data.plotting.plot_first_half_vs_second_half(file_name, ...)",
+        "spec_command": None,
+        "output": "base64 PNG + JSON summary {n_sigma_max, energy_of_max_ev, verdict}",
+        "source": "spec_datafile",
+        "source_detail": "Loads by file name via spec_data.scans; figure built in spec_data/plotting.py.",
+        "depends_on": ["list_scans"],
+    },
+    "plot_feature_evolution": {
+        "long_description": (
+            "Plot one per-rep scalar — the chosen statistic over "
+            "[e_min, e_max] — against rep number, with the running mean and a "
+            "±SEM band. The visual companion to analyze_feature_evolution: use "
+            "it to confirm a feature has actually flatlined, since a still-"
+            "trending trace means it has not converged whatever the summary "
+            "statistic says."
+        ),
+        "python_func": "spec_data.plotting.plot_feature_evolution(file_name, ...)",
+        "spec_command": None,
+        "output": "base64 PNG + JSON summary {per_rep_values, running_mean, running_sem}",
+        "source": "spec_datafile",
+        "source_detail": "Loads by file name via spec_data.scans; figure built in spec_data/plotting.py.",
+        "depends_on": ["analyze_feature_evolution"],
+    },
+
+    # ---------- EXAFS: k-space extraction and Fourier products ---------------
+
+    "list_collector_scans": {
+        "long_description": (
+            "List the scan groups in a directory of SSRL 'EXAFS Data Collector' "
+            "ASCII files — the DAQ format of SSRL XAS stations such as BL 4-3, "
+            "one of several formats across SSRL's stations, and the only one "
+            "this tool reads. One row per group (sample stem plus scan number) "
+            "with its sweep numbers. Run it first to discover valid group names "
+            "for the EXAFS tools."
+        ),
+        "python_func": "spec_data.ssrl_backend.SSRLAsciiBackend(collector_dir).list_groups()",
+        "spec_command": None,
+        "output": "JSON: {data_dir, groups[{name, scan_number, sweeps[...]}]}",
+        "source": "filesystem",
+        "source_detail": (
+            "Collector ASCII files under collector_dir, or SSRL_COLLECTOR_DIR "
+            "when the argument is omitted."
+        ),
+        "depends_on": [],
+    },
+    "extract_chi": {
+        "long_description": (
+            "Extract EXAFS chi(k) from repeated scans: merge the reps (short "
+            "or aborted sweeps dropped, glitches masked), find E0, apply "
+            "Athena-style pre/post-edge polynomial normalization, and remove "
+            "the post-edge background with a quick-look AUTOBK spline whose "
+            "knot budget comes from R_bkg. Returns the chi(k) arrays as an "
+            "artifact the Fourier tools accept directly, so the pipeline is not "
+            "re-run per call."
+        ),
+        "python_func": (
+            "spec_data.exafs_data.load_mu(...) -> science.xas.normalize.pre_post_normalize(...) "
+            "-> science.xas.e0.find_e0(...) -> science.exafs.background.autobk_lite(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {e0_ev, edge_step, k, chi, provenance} + chi(k) extraction plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "spec_data.exafs_data.load_mu routes to the SSRL collector backend "
+            "when collector_dir or SSRL_COLLECTOR_DIR is set, otherwise to the "
+            "SPEC file chain."
+        ),
+        "depends_on": ["list_scans", "list_collector_scans"],
+    },
+    "fourier_transform_chi": {
+        "long_description": (
+            "Fourier transform chi(k) into R space in the Ifeffit convention "
+            "with a Hanning window, returning |chi(R)| and the first-shell "
+            "apparent distance. The R axis is phase-uncorrected: peaks sit "
+            "roughly 0.3-0.5 A below true bond lengths, and every axis label "
+            "says so, because a figure must not invite that misreading. Accepts "
+            "the chi artifact from extract_chi, or the same load arguments to "
+            "run the extraction first."
+        ),
+        "python_func": (
+            "science.exafs.fourier.xftf(...) + first_shell_peak(...), over the chi "
+            "artifact or a fresh extract_chi pipeline"
+        ),
+        "spec_command": None,
+        "output": "JSON: {r, chir_mag, first_shell_r_ang, provenance{convention, window, kweight, r_axis}} + |chi(R)| plot",
+        "source": "tool_chain",
+        "source_detail": (
+            "Consumes the chi artifact from extract_chi; falls back to the full "
+            "load-and-extract path when given file arguments instead."
+        ),
+        "depends_on": ["extract_chi"],
+    },
+    "exafs_products": {
+        "long_description": (
+            "Capstone EXAFS reduction in one call: merge reps, normalize, "
+            "extract chi(k), Fourier transform, and report |chi(R)| with the "
+            "first-shell apparent distance, returning both the extraction and "
+            "R-space plots. Composes extract_chi and fourier_transform_chi and "
+            "takes their arguments through; a precomputed chi artifact skips "
+            "the extraction stage."
+        ),
+        "python_func": (
+            "extract_chi pipeline -> science.exafs.fourier.xftf(...) + "
+            "first_shell_peak(...) -> science.plots.exafs.{plot_chi_extraction,plot_chir}"
+        ),
+        "spec_command": None,
+        "output": "JSON: {e0_ev, edge_step, k, chi, r, chir_mag, first_shell_r_ang, provenance} + two plots",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Same load path as extract_chi (SPEC chain or SSRL collector "
+            "backend), or a supplied chi artifact."
+        ),
+        "depends_on": ["extract_chi"],
+    },
+    "overlay_chi_spectra": {
+        "long_description": (
+            "Extract and overlay chi(k)*k^w for several scan groups on one "
+            "plot — the k-space comparison view for an operando or potential "
+            "series, or a sample against its standards. Every group runs the "
+            "same extract_chi pipeline with shared counter, R_bkg and k-weight "
+            "settings, so a difference in the overlay is a difference in the "
+            "data rather than in the processing."
+        ),
+        "python_func": (
+            "extract_chi pipeline per group -> science.plots.exafs.plot_chi_overlay(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {n_overlaid, reports[{file_name, e0_ev, edge_step, ...}]} + k-space overlay plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "One load per group through spec_data.exafs_data.load_mu (SPEC chain "
+            "or SSRL collector backend)."
+        ),
+        "depends_on": ["list_collector_scans", "extract_chi"],
+    },
+
+    # ---------- X-ray Raman (XRS): the energy-loss axis ---------------------
+    # Kept apart from the XAS tools because the XAS defaults are not merely
+    # suboptimal here, they are wrong by construction: the feature is a bump on
+    # a sloping Compton profile, not a step, so there is no edge to normalize
+    # to and no E0 to align on. See docs/xrs-analysis-branch-plan.md.
+
+    "calibrate_energy_loss": {
+        "long_description": (
+            "Fit the elastic (Rayleigh) line of an elastic scan — an 'ascan "
+            "mono' with the analyzer fixed — to set the zero of energy loss and "
+            "measure the instrumental energy resolution from its FWHM, then "
+            "record it for the file. Run this first for any XRS work: it is the "
+            "loss-axis anchor that replaces find_e0, and nothing downstream has "
+            "an absolute axis without it."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.calibrate_energy_loss(...) -> "
+            "science.xrs.calibrate.fit_elastic_line(...) -> "
+            "science.plots.xrs.plot_elastic_fit(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {elastic_center_ev, fwhm_ev, fit_ok, method, recorded} + elastic-fit plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Elastic scan via spec_data.xrs_data.load_scan_signal; the fitted "
+            "centre is written to the per-file elastic calibration store."
+        ),
+        "depends_on": ["list_scans"],
+    },
+    "build_loss_axis": {
+        "long_description": (
+            "Convert one scan's incident-energy axis to energy loss (omega = "
+            "incident minus elastic centre) and plot signal/I0 against loss. "
+            "Uses the recorded elastic calibration unless an explicit centre is "
+            "given; with neither, the axis stays mono energy and says so in a "
+            "flag rather than pretending. The single-scan companion to "
+            "average_xrs_scans."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) -> "
+            "science.xrs.calibrate.to_energy_loss(...) -> "
+            "science.plots.xrs.plot_loss_spectrum(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {loss, intensity, elastic_center_ev, elastic_center_source, axis, flags} + loss-spectrum plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "One scan via spec_data.xrs_data; elastic centre from the recorded "
+            "calibration or the explicit argument."
+        ),
+        "depends_on": ["calibrate_energy_loss"],
+    },
+    "average_xrs_scans": {
+        "long_description": (
+            "Average repeated XRS scans on the energy-loss axis: load each rep "
+            "on the chosen counter, divide by I0, re-reference to the elastic "
+            "line, interpolate onto a common loss grid, and average with a "
+            "per-point SEM. The XRS analogue of average_scans, and "
+            "deliberately not the same: it does not edge-step-normalize and "
+            "does not align on an E0, neither of which exists here."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) -> "
+            "science.xrs.reduce.align_and_average(...) -> "
+            "science.plots.xrs.plot_loss_spectrum(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {loss, mean, sem, n_reps, counter, counter_warning, elastic_center_ev} + loss-spectrum plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Reps via spec_data.xrs_data.reduce_xrs; the counter is auto-picked "
+            "and warned about when omitted."
+        ),
+        "depends_on": ["calibrate_energy_loss"],
+    },
+    "subtract_compton_background": {
+        "long_description": (
+            "Average the reps, then fit and subtract the Compton/valence "
+            "background under the edge — the XRS replacement for XAS "
+            "pre/post-edge normalization. The background is fitted to flank "
+            "points strictly outside the [edge_lo, edge_hi] loss window, so the "
+            "feature itself never influences the baseline that is subtracted "
+            "from it."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) -> "
+            "science.xrs.reduce.subtract_compton_background(...) -> "
+            "science.plots.xrs.plot_background_subtraction(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {loss, subtracted, background, model, flank_windows_ev, fit_ok} + subtraction plot",
+        "source": "spec_datafile",
+        "source_detail": "Reps via spec_data.xrs_data.reduce_xrs; model default from science.xrs.policy.",
+        "depends_on": ["average_xrs_scans"],
+    },
+    "normalize_xrs": {
+        "long_description": (
+            "Full XRS reduction to a comparable edge: average the reps, "
+            "subtract the Compton background, and area-normalize over the edge "
+            "window. This is what produces the final per-atom-comparable XRS "
+            "spectrum. Area normalization only — an f-sum/absolute scale is a "
+            "documented future extension, not something this silently "
+            "approximates."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) -> "
+            "science.xrs.reduce.subtract_compton_background(...) -> "
+            "science.xrs.reduce.area_normalize(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {loss, normalized, area, model, normalization, fit_ok} + subtraction plot",
+        "source": "spec_datafile",
+        "source_detail": "Reps via spec_data.xrs_data.reduce_xrs.",
+        "depends_on": ["subtract_compton_background"],
+    },
+    "overlay_xrs_spectra": {
+        "long_description": (
+            "Overlay reduced XRS spectra from several files — samples, states "
+            "of charge, q-bins — on the energy-loss axis with identical "
+            "processing: each file averaged, Compton-subtracted when an edge "
+            "window is given, and area-normalized before plotting. The XRS "
+            "analogue of plot_averaged_scans_overlay."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) per file -> "
+            "science.xrs.reduce.{subtract_compton_background,area_normalize}(...) -> "
+            "science.plots.xrs.plot_overlay(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {n_overlaid, reports[{file_name, counter, elastic_center_ev, area}]} + overlay plot",
+        "source": "spec_datafile",
+        "source_detail": "One reduction per file through spec_data.xrs_data.reduce_xrs.",
+        "depends_on": ["calibrate_energy_loss"],
+    },
+    "extract_xrs_descriptors": {
+        "long_description": (
+            "Extract the measurable descriptors of a reduced XRS edge: edge "
+            "onset (the loss-axis inflection), pre-edge peak position and area, "
+            "white line, integrated edge area, and feature SNR. Averages the "
+            "reps and Compton-subtracts first when an edge window is given. "
+            "Returns the numbers plus an annotated plot showing where each one "
+            "was measured."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) -> "
+            "science.xrs.descriptors.extract_xrs_descriptors(...) -> "
+            "science.plots.xrs.plot_xrs_descriptors(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {onset, pre_edge, white_line, integrated_area, feature_snr, windows_ev} + annotated plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Reps via spec_data.xrs_data.reduce_xrs; edge assignment from "
+            "science.tables.xrs_edges."
+        ),
+        "depends_on": ["normalize_xrs"],
+    },
+    "assess_xrs_quality": {
+        "long_description": (
+            "Quality gate for a reduced XRS edge: SNR measured on the edge "
+            "feature rather than the Compton-dominated whole spectrum, the "
+            "elastic-line energy resolution, and a verdict of publication, "
+            "usable, marginal, or noise-limited. Measuring SNR on the feature "
+            "matters here — whole-spectrum SNR in XRS is dominated by the "
+            "Compton profile and flatters the data."
+        ),
+        "python_func": (
+            "science.xrs.descriptors.extract_xrs_descriptors(...) -> "
+            "science.xrs.interpret.assess_xrs_quality(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {feature_snr, resolution_fwhm_ev, verdict, caveats, flags}",
+        "source": "spec_datafile",
+        "source_detail": "Reps via spec_data.xrs_data.reduce_xrs; resolution from the elastic calibration.",
+        "depends_on": ["calibrate_energy_loss", "extract_xrs_descriptors"],
+    },
+    "interpret_xrs_oxidation_state": {
+        "long_description": (
+            "Oxidation-state and covalency read from a reduced XRS edge. "
+            "Reports the edge-onset shift — absolute only with an elastic plus "
+            "reference calibration, otherwise explicitly relative — and, for an "
+            "O K-edge, the pre-edge covalency / oxygen-redox indicator. For a "
+            "3d metal L-edge it returns guidance on the L3/L2 branching ratio "
+            "rather than a number it cannot justify."
+        ),
+        "python_func": "science.xrs.interpret.interpret_xrs_oxidation_state(descriptors, calibration)",
+        "spec_command": None,
+        "output": "JSON: {verdict, basis, confidence, onset_shift_ev, absolute|relative, evidence, caveats}",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Descriptors from the reduced edge; edge family from "
+            "science.tables.xrs_edges."
+        ),
+        "depends_on": ["extract_xrs_descriptors"],
+    },
+    "compare_xrs_to_references": {
+        "long_description": (
+            "Non-negative linear-combination fit of a reduced XRS spectrum "
+            "against reference spectra, returning phase or valence fractions. "
+            "References may be other files or explicit arrays. Valid against "
+            "XANES references only in the low-q dipole regime, where the XRS "
+            "transition matrix element matches the absorption one — outside it "
+            "the comparison is not physically justified."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.reduce_xrs(...) per spectrum -> "
+            "science.xrs.interpret.compare_xrs_to_references(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {components[{name, fraction}], fit_r2, residual_rms, regime, caveats} + fit plot",
+        "source": "spec_datafile",
+        "source_detail": (
+            "Target and every file-backed reference reduced identically through "
+            "spec_data.xrs_data.reduce_xrs."
+        ),
+        "depends_on": ["normalize_xrs"],
+    },
+    "interpret_q_dependence": {
+        "long_description": (
+            "Classify a feature's momentum-transfer behaviour: dipole (low q, "
+            "XANES-like) versus monopole/quadrupole (intensity rising with q). "
+            "Takes either points you already have, or scan groups from one file "
+            "plus an edge and feature window, in which case the tool does the "
+            "reduction itself. This is the discriminator XAS cannot provide at "
+            "all, and the reason XRS is worth the count rate."
+        ),
+        "python_func": (
+            "science.xrs.descriptors.integrated_area(...) per q group -> "
+            "science.xrs.interpret.interpret_q_dependence(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {points[{q, value, regime}], trend, verdict, caveats, provenance}",
+        "source": "tool_chain",
+        "source_detail": (
+            "Consumes area-normalized feature intensities from tag_crystal_q / "
+            "extract_xrs_descriptors, or reduces scan groups itself when given "
+            "file arguments."
+        ),
+        "depends_on": ["tag_crystal_q", "extract_xrs_descriptors"],
+    },
+    "summarize_xrs_chemistry": {
+        "long_description": (
+            "Capstone XRS interpretation: the oxidation and covalency verdict "
+            "plus the quality gate, one narration paragraph, and the annotated "
+            "descriptor plot. Averages the reps, Compton-subtracts over the "
+            "edge window, extracts descriptors and interprets. The XRS "
+            "analogue of summarize_sample_chemistry."
+        ),
+        "python_func": "science.xrs.interpret.summarize_xrs_chemistry(descriptors, calibration)",
+        "spec_command": None,
+        "output": "JSON: {narration, oxidation, quality, descriptors} + annotated plot",
+        "source": "spec_datafile",
+        "source_detail": "Reps via spec_data.xrs_data.reduce_xrs; edge family from science.tables.xrs_edges.",
+        "depends_on": ["extract_xrs_descriptors"],
+    },
+    "sum_crystals": {
+        "long_description": (
+            "Energy-align several analyzer-crystal / SDD-ROI channels of one "
+            "scan onto a common loss grid — each channel carries its own "
+            "calibration — reject the outliers (low SNR, or a shape deviating "
+            "from the channel median), and sum. The crystals Bragg-focus onto "
+            "the SDD and the ROI gates the signal, so they are one "
+            "spectrometer and summing them is the intended use, not an "
+            "averaging shortcut."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.load_scan_signal(...) per channel -> "
+            "science.xrs.calibrate.to_energy_loss(...) -> "
+            "science.xrs.reduce.sum_crystals(...) -> "
+            "science.plots.xrs.plot_crystal_sum(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {loss, summed, kept[...], rejected[...], n_channels} + crystal-sum plot",
+        "source": "spec_datafile",
+        "source_detail": "One counter column per channel via spec_data.xrs_data.load_scan_signal.",
+        "depends_on": ["align_crystals"],
+    },
+    "align_crystals": {
+        "long_description": (
+            "Report the per-crystal alignment and outlier-rejection decisions "
+            "without summing: for each channel, its SNR, how far its shape "
+            "deviates from the channel-median spectrum, and whether it would be "
+            "kept. Use it to inspect the analyzer array before sum_crystals "
+            "commits to a set — a dead or misaligned crystal is much easier to "
+            "see here than in the sum."
+        ),
+        "python_func": (
+            "spec_data.xrs_data.load_scan_signal(...) per channel -> "
+            "science.xrs.calibrate.{to_energy_loss,common_loss_grid}(...) -> "
+            "science.xrs.reduce.reject_outlier_channels(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {channels[{counter, snr, dev_mad, keep}], grid_ev, n_kept, n_rejected}",
+        "source": "spec_datafile",
+        "source_detail": "One counter column per channel via spec_data.xrs_data.load_scan_signal.",
+        "depends_on": ["calibrate_energy_loss"],
+    },
+    "tag_crystal_q": {
+        "long_description": (
+            "Compute the momentum transfer q for each analyzer crystal from "
+            "the incident energy and the crystal scattering angles, "
+            "q = (4*pi/lambda)*sin(theta), and label each with its regime. Low "
+            "q approximates the dipole limit and reads like XANES; high q turns "
+            "on monopole and quadrupole transitions. Use it to group crystals "
+            "into q-bins before q-resolved analysis."
+        ),
+        "python_func": (
+            "science.xrs.calibrate.q_from_two_theta(...) + "
+            "science.xrs.policy.q_regime(...)"
+        ),
+        "spec_command": None,
+        "output": "JSON: {crystals[{counter, two_theta_deg, q_inv_ang, regime}]}",
+        "source": "tool_chain",
+        "source_detail": (
+            "Pure geometry — takes the incident energy and angles as arguments "
+            "and reads no data source of its own."
+        ),
+        "depends_on": [],
+    },
+
+    # ---------- Deployment backends: S3DF Postgres and staff Slack ----------
+
+    "execute_readonly_sql": {
+        "long_description": (
+            "Run a read-only SELECT against the S3DF scan-metadata Postgres, "
+            "for the deployments where bldata_converter populates it instead of "
+            "reading SPEC files directly. Write keywords are rejected rather "
+            "than escaped, and the result set is truncated at max_rows so a "
+            "careless query cannot flood an agent's context."
+        ),
+        "python_func": "spec_data.postgres_backend.PostgresBackend.execute_readonly_sql(query, max_rows)",
+        "spec_command": None,
+        "output": "JSON: {columns[...], rows[[...]], row_count, truncated}",
+        "source": "postgres",
+        "source_detail": (
+            "BL15-2_scan_metadata on the S3DF Postgres, via the lazily imported "
+            "psycopg2 backend (the 'postgres' extra)."
+        ),
+        "depends_on": [],
+    },
+    "list_channels": {
+        "long_description": (
+            "List the public Slack channels the bot has been invited to. Run it "
+            "first to resolve a human channel name to the channel_id the other "
+            "Slack tools require."
+        ),
+        "python_func": "notify.slack.list_channels()",
+        "spec_command": None,
+        "output": "JSON: {channels[{id, name, is_member}]}",
+        "source": "slack",
+        "source_detail": (
+            "Slack Web API via the lazily imported slack-sdk (the 'slack' "
+            "extra); needs a bot token in the environment."
+        ),
+        "depends_on": [],
+    },
+    "read_channel_messages": {
+        "long_description": (
+            "Read recent messages from a Slack channel so an agent can pick up "
+            "staff instructions or context left outside the tool loop. "
+            "Read-only; the oldest cursor bounds how far back it reaches."
+        ),
+        "python_func": "notify.slack.read_channel_messages(channel_id, limit, oldest)",
+        "spec_command": None,
+        "output": "JSON: {messages[{ts, user, text, thread_ts, reply_count}]}",
+        "source": "slack",
+        "source_detail": "Slack Web API via the lazily imported slack-sdk (the 'slack' extra).",
+        "depends_on": ["list_channels"],
+    },
+    "read_thread_replies": {
+        "long_description": (
+            "Read every reply in a Slack thread, parent message included — the "
+            "follow-up to read_channel_messages when a channel message has a "
+            "reply_count and the actual decision is inside the thread."
+        ),
+        "python_func": "notify.slack.read_thread_replies(channel_id, thread_ts)",
+        "spec_command": None,
+        "output": "JSON: {messages[{ts, user, text}]}",
+        "source": "slack",
+        "source_detail": "Slack Web API via the lazily imported slack-sdk (the 'slack' extra).",
+        "depends_on": ["read_channel_messages"],
+    },
+    "post_slack_message": {
+        "long_description": (
+            "Post a message to a Slack channel, or reply in a thread by passing "
+            "thread_ts. The one outward-facing tool in the catalog: it is the "
+            "route by which an agent reaches a human, so the message is sent as "
+            "written."
+        ),
+        "python_func": "notify.slack.post_message(channel_id, text, thread_ts)",
+        "spec_command": None,
+        "output": "JSON: {ok, channel, ts}",
+        "source": "slack",
+        "source_detail": "Slack Web API via the lazily imported slack-sdk (the 'slack' extra).",
+        "depends_on": ["list_channels"],
     },
 }
 

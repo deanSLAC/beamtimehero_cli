@@ -150,9 +150,10 @@ above, and there are five steps rather than the obvious two:
    definition over an entry in `CATEGORY_OVERRIDES`.
 5. **`python -m beamtimehero_cli.docgen`** to regenerate `docs/tool_catalog.html`.
 
-`tests/test_tool_catalog_wiring.py` checks that every definition has both a
-handler and a lineage entry, so a half-wired tool fails the suite rather than
-returning "Unknown tool" at runtime.
+`tests/test_tool_catalog_wiring.py` checks all of this: every definition has a
+handler and a complete lineage entry, every `source` is a documented enum
+value, and every `depends_on` names a tool that actually exists. A half-wired
+tool fails the suite rather than returning "Unknown tool" at runtime.
 
 ## Commits
 
