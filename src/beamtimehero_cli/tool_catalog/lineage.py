@@ -353,9 +353,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Writes action_log row before SPEC dispatch; blocks until SPEC prompt returns.",
-        # transition_phase is an orchestrator concern in the consuming app,
-        # not a tool in this catalog, so it is not listed as a prerequisite.
-        "depends_on": [],
+        "depends_on": ["transition_phase"],
     },
     "align_xes_spectrometer": {
         "long_description": (
@@ -368,7 +366,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {crystals, raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Gated to phase xes_alignment by the phase allow-list.",
-        "depends_on": ["align_beamline"],
+        "depends_on": ["align_beamline", "transition_phase"],
     },
     "run_sample_alignment": {
         "long_description": (
@@ -405,7 +403,7 @@ TOOL_LINEAGE: dict[str, dict] = {
         "output": "JSON: {ok, kind, action_id, result: {element, raw, elapsed_s}, elapsed_s}",
         "source": "spec_session",
         "source_detail": "Pulls the target geometry from the experiment plan.",
-        "depends_on": [],
+        "depends_on": ["get_plan"],
     },
     "peak_mono_pitch": {
         "long_description": (

@@ -1,0 +1,182 @@
+# beamtimehero_cli configuration
+#
+# Every setting in this package resolves from an environment variable. This
+# file is the authoritative list of them: what each one does, its default, and
+# which of them you actually need for a given job.
+#
+# Two ways to use it:
+#
+#   1. Point the CLI at it, and it applies the `env:` mapping below —
+#      copy to config.yaml, edit, then:
+#
+#          export BEAMTIMEHERO_CONFIG=/path/to/config.yaml
+#          beamtimehero --help
+#
+#   2. Read it as documentation and set the variables however your deployment
+#      already does — a Kubernetes manifest, a systemd unit, a `.env` file in
+#      the working directory (loaded automatically), or plain `export`.
+#
+# Anything already exported wins over this file, so it is safe to keep a
+# checked-in baseline and override per host.
+#
+# Commented-out keys are inactive and fall back to the documented default.
+# Uncomment only what you need to change.
+
+env:
+
+  # =========================================================================
+  # Off-beamline / laptop use — start here
+  # =========================================================================
+  # Nothing below is required. With no configuration at all, the SPEC tools
+  # answer from the mock backend and the scan/log tools report that no data
+  # directory is configured. There is no bundled sample data.
+
+  # Route every SPEC command to the mock backend instead of a live session.
+  # Default "1". This is why the CLI is safe to hand an agent on a laptop:
+  # you must opt in to touching a beamline.
+  SPEC_MOCK: "1"
+
+  # Motor names the mock backend should pretend to have, comma-separated.
+  # Default "" (a built-in set). Only affects SPEC_MOCK=1.
+  # SPEC_MOCK_MOTORS: "mono,sy,sz,tth"
+
+  # Working directory the mock SPEC session reports.
+  # Default "/data/fifteen/mock".
+  # SPEC_MOCK_PWD: "/data/fifteen/mock"
+
+  # =========================================================================
+  # Beamline data on disk
+  # =========================================================================
+
+  # Scan file root. Either a dated run directory (YYYY-mm_*) or a parent of
+  # them, in which case the most recently modified one is used.
+  # Default "/data/fifteen". Unset or missing => scan tools report
+  # "no scan directory configured" rather than an empty result.
+  # BL_SCAN_DIR: "/data/fifteen"
+
+  # SPEC control-log directory, for the log-reading tools.
+  # Default "/usr/local/lib/spec.log/logfiles".
+  # BL_LOGS_DIR: "/usr/local/lib/spec.log/logfiles"
+
+  # Directory of SSRL "EXAFS Data Collector" ASCII files. When set, the scan
+  # and EXAFS tools read that format instead of SPEC files, without needing
+  # --collector-dir on every call. Default unset.
+  # SSRL_COLLECTOR_DIR: "/data/collector/2026-03_run"
+
+  # =========================================================================
+  # Where this package writes
+  # =========================================================================
+
+  # Writable state (the action-log SQLite, camera captures). Defaults to
+  # <repo>/data for a source checkout, and to
+  # $XDG_DATA_HOME/beamtimehero (else ~/.local/share/beamtimehero) for an
+  # installed package. Created on first write, not at import.
+  # BEAMTIMEHERO_DATA_DIR: "/var/lib/beamtimehero"
+
+  # Action-log SQLite path. Default <data dir>/beamline_tools.db.
+  # BEAMLINE_TOOLS_DB_PATH: "/var/lib/beamtimehero/beamline_tools.db"
+
+  # Where a tool's PNG output is written. Default ./data/tool_plots relative
+  # to the working directory — set this if you do not want plots landing
+  # wherever the agent happened to run.
+  # BEAMTIMEHERO_PLOTS_DIR: "/var/lib/beamtimehero/plots"
+
+  # Record every CLI invocation to the action log. Default "1".
+  # BEAMTIMEHERO_CLI_LOG: "1"
+
+  # Bytes of stdout captured per invocation in that log. Default "65536".
+  # BEAMTIMEHERO_CLI_LOG_MAX_BYTES: "65536"
+
+  # =========================================================================
+  # Live SPEC session — only when SPEC_MOCK=0
+  # =========================================================================
+
+  # Transport: "tcp", "screen", or "sandbox". Default "tcp".
+  # SPEC_TRANSPORT: "tcp"
+
+  # TCP transport target and port. Defaults "localhost" and "2033".
+  # SPEC_HOST: "localhost"
+  # SPEC_PORT: "2033"
+
+  # SPEC session name, for the screen transport. Default "spec".
+  # SPEC_NAME: "spec"
+
+  # Sandbox transport endpoint. Default "http://127.0.0.1:5006".
+  # SPEC_EVAL_URL: "http://127.0.0.1:5006"
+
+  # =========================================================================
+  # Station overrides — the analysis defaults that are site-specific
+  # =========================================================================
+
+  # Counter auto-pick priority order, comma-separated, highest first. Default
+  # "" (built-in order). Set this when your station's signal channel is not
+  # the one the built-in order prefers — see
+  # `beamtimehero ref counter-selection`, which explains why getting this
+  # wrong is quiet rather than loud.
+  # BTH_ACTIVE_COUNTER_PRIORITY: "vortDT,I1"
+
+  # Columns treated as plottable signal when a scan header is ambiguous.
+  # Default "vortDT,I0,I1".
+  # BTH_DEFAULT_Y_COLUMNS: "vortDT,I0,I1"
+
+  # EPICS process variables for beam status. Defaults are BL15-2's.
+  # BTH_EPICS_PV_SPEAR_CURRENT: "SPEAR:BeamCurrAvg"
+  # BTH_EPICS_PV_BL_STATE: "BL15:State"
+  # BTH_EPICS_PV_GAP_OWNER: "BL15:GapOwnerNode"
+
+  # Sample camera. Defaults 192.168.150.93, port 8080, JPEG quality 50.
+  # SAMPLE_CAM_HOST: "192.168.150.93"
+  # SAMPLE_CAM_PORT: "8080"
+  # SAMPLE_CAM_QUALITY: "50"
+
+  # =========================================================================
+  # S3DF deployment — the `s3df` and `s3df psql` trees
+  # =========================================================================
+  # Requires the "postgres" extra: pip install 'beamtimehero_cli[postgres]'.
+  # DB_HOST, DB_NAME and DB_USER have no defaults; the psql tools error
+  # without them.
+
+  # DB_HOST: "dbhost.slac.stanford.edu"
+  # DB_NAME: "bl152"
+  # DB_USER: "reader"
+  # DB_PASSWORD: ""            # default ""
+  # DB_PORT: "5432"            # default "5432"
+
+  # Directory of pickled scan data that pairs with the Postgres metadata.
+  # Default "/sdf/group/ssrl/isaac/data/pickles".
+  # BL_PICKLE_DIR: "/sdf/group/ssrl/isaac/data/pickles"
+
+  # =========================================================================
+  # Slack — the `slack` tree
+  # =========================================================================
+  # Requires the "slack" extra: pip install 'beamtimehero_cli[slack]'.
+  # No default; the Slack tools error without it.
+  # SLACK_BOT_TOKEN: "xoxb-..."
+
+  # =========================================================================
+  # LLM log error-checking — `spec-read check-logs-for-errors`
+  # =========================================================================
+  # Optional. Without a key the log tools still parse and search; only the
+  # LLM-assisted error detection is unavailable.
+
+  # SLAC gateway keys. The primary is tried first; SLAC_API_KEY is the
+  # fallback, used when the primary is unset, rate-limited, or locked out.
+  # SLAC_API_KEY_PRIMARY: ""
+  # SLAC_API_KEY: ""
+
+  # Model id sent to the SLAC gateway.
+  # Default "us.anthropic.claude-opus-4-8-v1".
+  # SLAC_MODEL: "us.anthropic.claude-opus-4-8-v1"
+
+  # Seconds a rate-limited key is skipped before retry (a Retry-After header
+  # wins when present). Default "900".
+  # LLM_KEY_COOLDOWN_S: "900"
+
+  # =========================================================================
+  # Agent harness
+  # =========================================================================
+
+  # "cli" (default) exposes the single run_command tool for progressive
+  # discovery; consuming apps set this to switch to the full per-tool schema
+  # surface. See `beamtimehero ref agent-integration`.
+  # TOOLS_MODE: "cli"

@@ -35,7 +35,7 @@ from beamtimehero_cli.tool_catalog.categorize import categorize
 
 
 _CANONICAL_TREES = frozenset({
-    "ref", "tool", "db", "spec-read", "spec-write",
+    "ref", "catalog", "tool", "db", "spec-read", "spec-write",
     "spec-file", "s3df", "slack", "xrs", "exafs",
 })
 
@@ -120,6 +120,89 @@ def build_ref_subtree(subs: argparse._SubParsersAction) -> None:
         "--list", action="store_true", dest="list_docs",
         help="List all available reference documents.",
     )
+
+
+def build_catalog_export_subtree(subs: argparse._SubParsersAction) -> None:
+    """Mount the ``catalog`` subtree: the machine-readable tool schemas.
+
+    The nested ``--help`` surface is for an agent discovering the CLI one
+    command at a time. A harness that wants to register the tools up front
+    needed ``TOOL_DEFINITIONS`` instead, which meant importing Python — so
+    anything not written in Python could not integrate at all. This exports
+    the same list as JSON.
+    """
+    cat = subs.add_parser(
+        "catalog",
+        help="Export the tool schemas as JSON (for an agent harness or MCP shim).",
+        description=(
+            "Print the JSON-schema definition of every tool. Pipe it into "
+            "whatever your harness registers tools from; see "
+            "`beamtimehero ref agent-integration`."
+        ),
+    )
+    cat.add_argument(
+        "--tree", dest="catalog_tree", metavar="NAME",
+        help="Only tools on this branch (e.g. spec-file, xrs, exafs).",
+    )
+    cat.add_argument(
+        "--profile", dest="catalog_profile", metavar="NAME",
+        help="Only tools exposed by this agent profile "
+             "(see --list-profiles).",
+    )
+    cat.add_argument(
+        "--names-only", dest="catalog_names_only", action="store_true",
+        help="Print just the tool names, one per line.",
+    )
+    cat.add_argument(
+        "--indent", dest="catalog_indent", type=int, default=2,
+        help="JSON indent; 0 for one compact line. Default 2.",
+    )
+
+
+def run_catalog(args: argparse.Namespace) -> int:
+    """Dispatch a ``catalog`` invocation."""
+    defs = list(TOOL_DEFINITIONS)
+
+    profile = getattr(args, "catalog_profile", None)
+    if profile:
+        if profile not in PROFILES:
+            print(json.dumps({
+                "ok": False,
+                "error": (f"unknown profile '{profile}'. Run "
+                          "`beamtimehero --list-profiles` to see registered ones."),
+            }))
+            return 2
+        # Match on the full (tree..., leaf) path, not the leaf name: the same
+        # leaf name exists on more than one branch (spec-file/list_scans and
+        # s3df/list_scans are different tools), so filtering by name alone
+        # returns both and the profile looks like it has duplicates.
+        wanted = {
+            tuple(path) for path in PROFILES[profile]["aliases"].values()
+        }
+        defs = [
+            d for d in defs
+            if tuple(categorize(d)) + (d["function"]["name"],) in wanted
+        ]
+
+    tree = getattr(args, "catalog_tree", None)
+    if tree:
+        defs = [d for d in defs if categorize(d)[0] == tree]
+        if not defs:
+            print(json.dumps({
+                "ok": False,
+                "error": (f"no tools on branch '{tree}'. Run "
+                          "`beamtimehero --help` to see the branches."),
+            }))
+            return 2
+
+    if getattr(args, "catalog_names_only", False):
+        for d in sorted(defs, key=lambda d: d["function"]["name"]):
+            print(d["function"]["name"])
+        return 0
+
+    indent = getattr(args, "catalog_indent", 2)
+    print(json.dumps(defs, indent=indent or None, default=str))
+    return 0
 
 
 _TREE_HELPS: dict[tuple[str, ...], str] = {
@@ -290,6 +373,7 @@ def build_parser() -> argparse.ArgumentParser:
     trees = parser.add_subparsers(dest="tree", metavar="<tree>")
 
     build_ref_subtree(trees)
+    build_catalog_export_subtree(trees)
     build_catalog_subtrees(trees, TOOL_DEFINITIONS)
     build_profile_subtrees(trees, TOOL_DEFINITIONS)
     return parser
@@ -458,6 +542,8 @@ def dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         return 0
     if args.tree == "ref":
         return run_ref(args)
+    if args.tree == "catalog":
+        return run_catalog(args)
     # A leaf is reached iff set_defaults populated _tool_name. Nested branches
     # (e.g. `s3df psql ...`) terminate with their own leaf parser, all of which
     # set this default.

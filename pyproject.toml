@@ -46,7 +46,15 @@ beamtimehero = "beamtimehero_cli.cli.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-beamtimehero_cli = ["refdocs/defaults/*.md", "science/README.md"]
+beamtimehero_cli = [
+    "refdocs/defaults/*.md",
+    "science/README.md",
+    # definitions.py reads manifest.json at import; without these two the
+    # reference-image tools silently degrade to an empty manifest on any
+    # install that is not `pip install -e`.
+    "reference_images/manifest.json",
+    "reference_images/*.jpg",
+]
 
 [tool.ruff]
 # Deliberately narrow: pyflakes plus syntax errors. This is a correctness gate,

@@ -12,15 +12,17 @@ CLI_TOOL_DEFINITION = [
             "name": "run_command",
             "description": (
                 "Run a beamtimehero CLI command to query beamline data, logs, and plots. "
-                "Start with 'beamtimehero --help' to discover available commands. "
-                "Use 'beamtimehero <command> --help' to see options for a specific command."
+                "Commands are nested one level: 'beamtimehero <tree> <command> [options]'. "
+                "Start with 'beamtimehero --help' to discover the trees, then "
+                "'beamtimehero <tree> --help' for its commands and "
+                "'beamtimehero <tree> <command> --help' for their options."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The full CLI command string to execute (e.g. 'beamtimehero list-scans --limit 5')",
+                        "description": "The full CLI command string to execute (e.g. 'beamtimehero spec-file list-scans --limit 5')",
                     }
                 },
                 "required": ["command"],

@@ -8,7 +8,6 @@ subprocesses) can hit the same file without contention.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
@@ -19,10 +18,18 @@ _engine = None
 
 
 def _db_path() -> str:
-    return os.environ.get(
-        "BEAMLINE_TOOLS_DB_PATH",
-        str(Path(__file__).resolve().parent.parent.parent / "data" / "beamtimehero_cli.db"),
-    )
+    """Resolve the action-log SQLite path.
+
+    Defers to :mod:`beamtimehero_cli.config`, which owns the data directory
+    and also seeds BEAMLINE_TOOLS_DB_PATH. This module used to derive its own
+    default from ``__file__``, which disagreed with config's on both the
+    directory and the file name (``src/data/beamtimehero_cli.db`` versus
+    ``<data>/beamline_tools.db``) — reachable whenever this module was
+    imported without config having run first.
+    """
+    from beamtimehero_cli import config
+
+    return os.environ.get("BEAMLINE_TOOLS_DB_PATH", config.DB_PATH)
 
 
 def get_engine():

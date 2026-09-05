@@ -23,6 +23,10 @@ _DOCS: dict[str, dict] = {
         "file": _DEFAULTS_DIR / "action-log.md",
         "description": "Action-log schema and how each CLI invocation is recorded.",
     },
+    "agent-integration": {
+        "file": _DEFAULTS_DIR / "agent-integration.md",
+        "description": "How to drive this CLI from an LLM agent: the two integration modes, the schema export, and why it is safe to hand a model.",
+    },
     "profiles": {
         "file": _DEFAULTS_DIR / "profiles.md",
         "description": "Agent profiles: curated per-agent CLI surfaces over the master catalog.",

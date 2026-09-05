@@ -34,6 +34,59 @@ jobs:
         # contributor remembered to run pytest locally.
         run: python -m pytest -q
 
+  install:
+    # The install contract, which nothing checked: a non-editable install used
+    # to write its action-log directory into the interpreter's lib/ because
+    # PROJECT_ROOT was derived from the package location, and the reference
+    # images were tracked but absent from package-data.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Build and install the wheel
+        run: |
+          pip install build
+          python -m build --wheel
+          pip install dist/*.whl
+
+      - name: The CLI works with no configuration
+        working-directory: /tmp
+        run: |
+          beamtimehero --help
+          beamtimehero ref --list
+          beamtimehero ref agent-integration > /dev/null
+          beamtimehero catalog --names-only | head -1
+          SPEC_MOCK=1 beamtimehero spec-read get-beam-status
+
+      - name: Nothing was written inside the installation
+        working-directory: /tmp
+        run: |
+          python - <<'EOF'
+          import sys
+          from pathlib import Path
+          from beamtimehero_cli import config
+          site = Path(config.PACKAGE_ROOT)
+          assert config.PROJECT_ROOT is None, config.PROJECT_ROOT
+          assert not config.DATA_DIR.is_relative_to(site.parent.parent), (
+              f"state directory {config.DATA_DIR} is inside the installation"
+          )
+          assert (site / "reference_images" / "manifest.json").is_file(), (
+              "reference_images missing from package-data"
+          )
+          print("install contract ok:", config.DATA_DIR)
+          EOF
+
+      - name: No demo-data banner
+        working-directory: /tmp
+        run: |
+          if beamtimehero --help 2>&1 | grep -q "DEMO DATA"; then
+            echo "the demo-data banner is back"; exit 1
+          fi
+
   floor:
     # pyproject.toml declares requires-python = ">=3.9". That floor has never
     # been exercised, and the scientific stack (silx, lmfit, xraydb) may not

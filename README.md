@@ -23,17 +23,62 @@ pip install -e .
 
 ## Quick start
 
+Every command here works with no configuration:
+
 ```bash
-beamtimehero --help
-beamtimehero ref --list
-beamtimehero tool list-scans --limit 5
-SPEC_MOCK=1 beamtimehero spec-read get-beam-status
+beamtimehero --help                                   # the command tree
+beamtimehero ref --list                               # bundled reference docs
+beamtimehero catalog --names-only | head              # the tool names
+SPEC_MOCK=1 beamtimehero spec-read get-beam-status    # a real answer, mock backend
 ```
+
+`SPEC_MOCK` defaults to `1`, so nothing reaches a beamline until you set it to
+`0`. Tools that read scan files need `BL_SCAN_DIR` pointed at a scan root —
+there is no bundled sample data, and without it they report that no directory
+is configured rather than returning an empty result:
+
+```bash
+BL_SCAN_DIR=/path/to/scans beamtimehero spec-file list-scans --limit 5
+```
+
+## Driving this from an agent
+
+This CLI exists to be called by an LLM agent, so that path is documented
+first-class: **[`beamtimehero ref agent-integration`](src/beamtimehero_cli/refdocs/defaults/agent-integration.md)**.
+The short version — two modes:
+
+**Progressive discovery** (the default, `TOOLS_MODE=cli`). Give the agent one
+tool that runs `beamtimehero <args>` and let it explore with `--help`. Right
+for a general coding agent or anything with shell access.
+
+**Full schema registration.** Export every tool schema and register them up
+front:
+
+```bash
+beamtimehero catalog                        # all tools, JSON-schema form
+beamtimehero catalog --tree exafs           # one branch
+beamtimehero catalog --profile bl-aligner   # one profile's surface
+```
+
+Or in-process:
+
+```python
+from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS, execute_tool
+text, images_b64 = execute_tool(("spec-file",), "list_scans", {"limit": 5})
+```
+
+Four properties make this safe to hand a model, and they are why the surface
+looks the way it does: SPEC is mocked by default; every `spec-write` leaf
+requires `--justification`; every invocation lands in a SQLite audit log; and
+argument errors come back as `{"ok": false, "error": ...}` on stdout rather
+than a traceback on stderr. The refdoc covers all of it, plus a
+`.claude/settings.json` allowlist for Claude Code.
 
 ## CLI surface
 
 ```
 beamtimehero ref [--list | <name>]      # bundled reference docs
+beamtimehero catalog [--tree|--profile] # export the tool schemas as JSON
 beamtimehero tool <command>             # non-SPEC tools (data, logs, plots)
 beamtimehero db <command>               # action-log queries
 beamtimehero spec-read <command>        # SPEC-bound reads (no mutation)
@@ -77,24 +122,38 @@ python -m beamtimehero_cli.docgen_science       # regenerate
 See [CONTRIBUTING.md](CONTRIBUTING.md) before your first change, and
 `docs/architecture-review.html` for why the layout is the way it is.
 
-## Env vars
+## Configuration
+
+Everything resolves from environment variables.
+**[`config.example.yaml`](config.example.yaml)** is the authoritative list of
+them — all ~36, grouped by what you are trying to do (off-beamline use,
+beamline data on disk, where this package writes, a live SPEC session, station
+overrides, the S3DF Postgres deployment, Slack, LLM log-checking), each with
+its default and what it is for.
+
+Point the CLI at a copy and it applies them:
+
+```bash
+cp config.example.yaml config.yaml    # edit, then
+export BEAMTIMEHERO_CONFIG=$PWD/config.yaml
+```
+
+Anything already exported wins over the file, so a checked-in baseline plus
+per-host overrides works. A `.env` in the working directory is also loaded
+automatically. `tests/test_config_surface.py` asserts every variable the code
+reads appears in that file, so it cannot drift.
+
+The handful you are most likely to need:
 
 | Var | Default | Meaning |
 |---|---|---|
-| `SPEC_MOCK` | `1` | If `1`, route SPEC commands to the mock backend. Set to `0` on the beamline host. |
-| `SPEC_TRANSPORT` | `tcp` | One of `tcp`, `screen`, `sandbox`. |
-| `SPEC_HOST` | `localhost` | TCP transport target. |
-| `SPEC_PORT` | `2033` | TCP transport port. |
-| `SPEC_EVAL_URL` | `http://127.0.0.1:5006` | Sandbox transport endpoint. |
+| `SPEC_MOCK` | `1` | Route SPEC commands to the mock backend. Set to `0` only on the beamline host. |
 | `BL_SCAN_DIR` | `/data/fifteen` | Scan file root. Auto-detects the most recent `YYYY-mm_*` subdir if the root itself isn't dated. |
-| `BL_LOGS_DIR` | `/usr/local/lib/spec.log/logfiles` | Control log file directory. |
-| `BEAMLINE_TOOLS_DB_PATH` | `data/beamline_tools.db` | SQLite path for the action log. |
-| `BEAMTIMEHERO_CLI_LOG` | `1` | If `1`, log each CLI invocation. |
-| `BEAMTIMEHERO_CLI_LOG_MAX_BYTES` | `65536` | Stdout tail bytes captured per invocation. |
-| `SLAC_API_KEY_PRIMARY` | _(unset)_ | Primary SLAC-gateway key for `spec_logs` LLM error detection. Tried first. |
-| `SLAC_API_KEY` | _(unset)_ | Fallback SLAC-gateway key. Used when `SLAC_API_KEY_PRIMARY` is unset, or when the primary is rate-limited / locked out. |
-| `SLAC_MODEL` | `us.anthropic.claude-opus-4-8-v1` | Override the model id sent to the SLAC gateway for LLM error detection. |
-| `LLM_KEY_COOLDOWN_S` | `900` | Seconds a rate-limited gateway key is skipped before it is retried (honors a `Retry-After` header when present). |
+| `SSRL_COLLECTOR_DIR` | _(unset)_ | Directory of SSRL "EXAFS Data Collector" ASCII files. When set, the scan and EXAFS tools read that format. |
+| `BL_LOGS_DIR` | `/usr/local/lib/spec.log/logfiles` | Control log directory. |
+| `BEAMTIMEHERO_DATA_DIR` | `<repo>/data`, else `~/.local/share/beamtimehero` | Writable state: the action log, camera captures. A source checkout keeps it in the repo; an installed package uses the XDG user-data dir. |
+| `BEAMTIMEHERO_PLOTS_DIR` | `./data/tool_plots` | Where tool PNGs are written. Relative to the working directory by default. |
+| `BEAMTIMEHERO_CONFIG` | _(unset)_ | Path to a YAML config whose `env:` mapping is applied. |
 
 ## Extending the CLI
 

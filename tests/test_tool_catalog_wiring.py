@@ -86,13 +86,25 @@ def test_every_lineage_entry_is_complete():
     assert not incomplete, f"lineage entries with empty fields: {incomplete}"
 
 
-def test_depends_on_names_real_tools():
-    """A prerequisite that does not exist is worse than none — it sends an
-    agent looking for a tool it cannot call."""
-    names = set(_tool_names())
+# Prerequisites that live in the consuming applications rather than this
+# catalog. The orchestrator tools are deliberately absent here — test_smoke.py
+# asserts they never leak in — but a tool whose real precondition is "the app
+# has transitioned into this phase" should still say so, so these are allowed
+# by name rather than silently dropped.
+CONSUMER_APP_TOOLS = {"transition_phase", "get_plan"}
+
+
+def test_depends_on_names_a_real_tool_or_a_known_consumer_tool():
+    """A prerequisite that exists nowhere is worse than none — it sends an
+    agent looking for a tool it cannot call. Cross-app prerequisites are
+    legitimate; typos and renames are not."""
+    known = set(_tool_names()) | CONSUMER_APP_TOOLS
     bad = {
-        n: [d for d in (e.get("depends_on") or []) if d not in names]
+        n: [d for d in (e.get("depends_on") or []) if d not in known]
         for n, e in TOOL_LINEAGE.items()
     }
     bad = {k: v for k, v in bad.items() if v}
-    assert not bad, f"depends_on referencing unknown tools: {bad}"
+    assert not bad, (
+        f"depends_on referencing tools that exist neither in this catalog nor "
+        f"in CONSUMER_APP_TOOLS: {bad}"
+    )

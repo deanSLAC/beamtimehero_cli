@@ -22,13 +22,97 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Optional YAML configuration
+# ---------------------------------------------------------------------------
+def _load_yaml_config() -> None:
+    """Apply ``BEAMTIMEHERO_CONFIG``'s ``env:`` mapping to the environment.
+
+    Every setting in this package resolves from an environment variable, which
+    suits a container manifest but is awkward to hand a person: there are three
+    dozen of them and no single place that lists them. Pointing
+    ``BEAMTIMEHERO_CONFIG`` at a YAML file makes that list a real, checkable
+    artifact — see ``config.example.yaml``.
+
+    Uses ``setdefault``, so a variable already exported always wins over the
+    file. A missing or malformed file warns and is skipped rather than
+    preventing the CLI from starting, since a broken config file should not
+    make the beamline unreachable.
+    """
+    path = os.environ.get("BEAMTIMEHERO_CONFIG")
+    if not path:
+        return
+    try:
+        import yaml
+
+        data = yaml.safe_load(Path(path).read_text()) or {}
+        env = data.get("env") or {}
+        if not isinstance(env, dict):
+            raise TypeError("top-level 'env:' must be a mapping")
+    except Exception as e:
+        logger.warning(
+            "BEAMTIMEHERO_CONFIG=%s could not be loaded (%s); falling back to "
+            "the environment alone.", path, e,
+        )
+        return
+    for key, value in env.items():
+        if value is not None:
+            os.environ.setdefault(str(key), str(value))
+
+
+_load_yaml_config()
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 PACKAGE_ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = PACKAGE_ROOT.parent.parent  # repo root (where pyproject.toml lives)
-DATA_DIR = Path(os.environ.get("BEAMTIMEHERO_DATA_DIR", str(PROJECT_ROOT / "data")))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _repo_root() -> Path | None:
+    """The repo root, when running from a source checkout.
+
+    ``PACKAGE_ROOT.parent.parent`` is the repo root for a ``pip install -e``
+    or a plain ``src/`` checkout, but for a wheel install it is the
+    interpreter's ``lib/pythonX.Y`` directory — so deriving the data
+    directory from it wrote the action log inside site-packages. Confirm
+    with pyproject.toml rather than assuming.
+    """
+    candidate = PACKAGE_ROOT.parent.parent
+    return candidate if (candidate / "pyproject.toml").is_file() else None
+
+
+def _default_data_dir() -> Path:
+    """Where writable state goes when BEAMTIMEHERO_DATA_DIR is unset.
+
+    A source checkout keeps ``<repo>/data`` — that is where the existing
+    action log lives and .gitignore already covers it. An installed package
+    has no repo to write into, so it uses the XDG user-data directory.
+    """
+    repo = _repo_root()
+    if repo is not None:
+        return repo / "data"
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "beamtimehero"
+
+
+# Kept for the sibling applications that import it. None when the package is
+# installed rather than run from a checkout — check before joining onto it.
+PROJECT_ROOT = _repo_root()
+
+DATA_DIR = Path(os.environ.get("BEAMTIMEHERO_DATA_DIR") or _default_data_dir())
+
+
+def ensure_data_dir() -> Path:
+    """Create DATA_DIR on first write and return it.
+
+    Not done at import: importing a library should not create directories,
+    and on a wheel install the old import-time mkdir landed one inside the
+    interpreter's lib directory.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return DATA_DIR
 
 # ---------------------------------------------------------------------------
 # SPEC dispatcher — defaults to mock so the CLI is usable off-beamline.
@@ -100,46 +184,28 @@ def now_pacific() -> datetime:
     return datetime.now(BL_TIMEZONE).replace(tzinfo=None)
 
 
-_SAMPLE_DATA = PACKAGE_ROOT / "sample_data"
-
-# When the real beamline directory is missing, the CLI normally falls back
-# to the packaged demo sample_data so it stays usable off-beamline. Set
-# BEAMTIMEHERO_NO_SAMPLE_FALLBACK=1 to disable that fallback: the configured
-# (possibly missing) path is kept instead and the *_CONFIGURED flags below
-# report False, so callers can surface "not configured" rather than serve
-# demo data that looks live. (BeamtimeHero's web app sets this.)
-_NO_SAMPLE_FALLBACK = os.getenv("BEAMTIMEHERO_NO_SAMPLE_FALLBACK", "0") == "1"
-
-# Provenance flags: True when the corresponding directory fell back to
-# the packaged demo sample_data because the real beamline directory was
-# missing. Tools include this in their output so agents never mistake
-# demo data for live beamline data.
-USING_SAMPLE_DATA = False  # scan data (BL_SCAN_DIR)
-USING_SAMPLE_LOGS = False  # log files (BL_LOGS_DIR)
+# ---------------------------------------------------------------------------
+# Beamline data directories
+# ---------------------------------------------------------------------------
+# There is no bundled demo data. When a directory is not configured, the
+# resolved path is kept as-is and the *_CONFIGURED flag below is False; the
+# tools that read it say so in their output rather than serving something
+# that looks live. Nothing is logged at import, so `--help` stays clean.
 
 # True when the corresponding directory resolved to a real, existing
-# beamline directory (neither the sample fallback nor a missing path).
+# beamline directory. This is the flag to check — a tool holding False
+# should report "not configured" rather than an empty result that reads
+# like "no scans exist".
 SCAN_DIR_CONFIGURED = False
 LOGS_DIR_CONFIGURED = False
 
+# Retained so the sibling applications that read them keep importing. This
+# package has no sample data, so they are permanently False.
+USING_SAMPLE_DATA = False
+USING_SAMPLE_LOGS = False
+
 BL_LOGS_DIR = Path(os.getenv("BL_LOGS_DIR", "/usr/local/lib/spec.log/logfiles"))
-if BL_LOGS_DIR.exists():
-    LOGS_DIR_CONFIGURED = True
-elif _NO_SAMPLE_FALLBACK:
-    logger.warning(
-        "BL_LOGS_DIR %s does not exist and the sample-data fallback is "
-        "disabled; log tools will report no data until a directory is "
-        "configured.",
-        BL_LOGS_DIR,
-    )
-else:
-    logger.warning(
-        "*** DEMO DATA *** BL_LOGS_DIR %s does not exist; falling back to "
-        "packaged sample data at %s. Log output is NOT live beamline data.",
-        BL_LOGS_DIR, _SAMPLE_DATA,
-    )
-    BL_LOGS_DIR = _SAMPLE_DATA
-    USING_SAMPLE_LOGS = True
+LOGS_DIR_CONFIGURED = BL_LOGS_DIR.exists()
 
 _DATA_ROOT = Path(os.getenv("BL_SCAN_DIR", "/data/fifteen"))
 
@@ -147,11 +213,12 @@ _DATA_ROOT = Path(os.getenv("BL_SCAN_DIR", "/data/fifteen"))
 def _resolve_scan_dir(root: Path) -> tuple[Path, bool]:
     """Resolve the active scan directory.
 
-    Returns ``(scan_dir, configured)``; ``configured`` is True only when a
-    real beamline scan directory resolved. When nothing resolves, fall back
-    to the packaged sample data — unless ``BEAMTIMEHERO_NO_SAMPLE_FALLBACK``
-    is set, in which case the intended (missing) root is kept so tools report
-    no data instead of demo data.
+    Returns ``(scan_dir, configured)``. A root that is itself dated
+    (``YYYY-mm_*``) is used directly; otherwise the most recently modified
+    dated subdirectory wins, which is how the beamline rolls over between
+    runs. When neither resolves, the configured root is returned unchanged
+    with ``configured=False`` — the caller reports that, rather than
+    substituting a directory the user did not ask for.
     """
     if root.is_dir():
         if re.match(r"\d{4}-\d{2}_", root.name):
@@ -160,31 +227,30 @@ def _resolve_scan_dir(root: Path) -> tuple[Path, bool]:
                    if d.is_dir() and re.match(r"\d{4}-\d{2}_", d.name)]
         if subdirs:
             return max(subdirs, key=lambda d: d.stat().st_mtime), True
-    if _NO_SAMPLE_FALLBACK:
-        return root, False
-    return _SAMPLE_DATA, False
+    return root, False
 
 
 def _set_scan_dir_globals(scan_dir: Path, configured: bool) -> None:
-    """Update BL_SCAN_DIR and the provenance/configuration flags."""
-    global BL_SCAN_DIR, USING_SAMPLE_DATA, SCAN_DIR_CONFIGURED
+    """Update BL_SCAN_DIR and the configuration flag."""
+    global BL_SCAN_DIR, SCAN_DIR_CONFIGURED
     BL_SCAN_DIR = scan_dir
     SCAN_DIR_CONFIGURED = configured
-    USING_SAMPLE_DATA = scan_dir == _SAMPLE_DATA
-    if USING_SAMPLE_DATA:
-        logger.warning(
-            "*** DEMO DATA *** BL_SCAN_DIR %s has no usable scan directory; "
-            "falling back to packaged sample data at %s. Scan tool output is "
-            "NOT live beamline data.",
-            _DATA_ROOT, _SAMPLE_DATA,
-        )
-    elif not configured:
-        logger.warning(
-            "BL_SCAN_DIR %s has no usable scan directory and the sample-data "
-            "fallback is disabled; scan tools will report no data until a "
-            "directory is configured.",
-            _DATA_ROOT,
-        )
+
+
+def data_dir_status() -> dict:
+    """Which beamline directories are configured, for tools to report.
+
+    Kept here so every tool that reads scan or log files describes the
+    condition the same way, in-band in its JSON, instead of each one
+    inventing a phrasing or logging to stderr where an agent reads it as a
+    crash.
+    """
+    return {
+        "scan_dir": str(BL_SCAN_DIR),
+        "scan_dir_configured": SCAN_DIR_CONFIGURED,
+        "logs_dir": str(BL_LOGS_DIR),
+        "logs_dir_configured": LOGS_DIR_CONFIGURED,
+    }
 
 
 _set_scan_dir_globals(*_resolve_scan_dir(_DATA_ROOT))

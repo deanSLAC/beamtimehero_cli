@@ -15,6 +15,9 @@ from beamtimehero_cli.cli.__main__ import build_parser as _build_parser, main
 EXPECTED_TREES = {
     "ref", "tool", "db", "spec-read", "spec-write",
     "spec-file", "s3df", "slack",
+    # machine-readable tool schemas, for an agent harness that registers
+    # tools up front instead of discovering them with --help
+    "catalog",
     # dedicated X-ray Raman (XRS) analysis branch
     "xrs",
     # dedicated EXAFS k-space analysis branch

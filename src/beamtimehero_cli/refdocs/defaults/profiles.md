@@ -30,10 +30,15 @@ beamtimehero <profile-name> <command> [args ...]
 e.g.
 
 ```
-beamtimehero k8s-agent list-scans --limit 5
-beamtimehero k8s-agent execute-readonly-sql --query "SELECT 1"
+beamtimehero bl-aligner list-scans --limit 5
 beamtimehero bl-aligner read-scan --file-name xas.001 --scan-number 5
 ```
+
+`bl-aligner` is the only profile this package registers. Profiles are
+normally registered by the consuming application at startup, so most
+deployments have their own — run `beamtimehero --list-profiles` to see what is
+registered in yours rather than assuming a name from this doc. To see a
+profile's tool schemas: `beamtimehero catalog --profile <name>`.
 
 Every profile leaf accepts the same JSON-schema-derived arguments as its
 canonical leaf, since both are built from the same tool definition.

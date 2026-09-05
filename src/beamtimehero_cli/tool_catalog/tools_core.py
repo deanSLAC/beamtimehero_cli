@@ -558,19 +558,23 @@ def t_get_latest_scan(arguments: dict) -> tuple[str, list[str]]:
         for k in ("file_name", "scan_number", "scan_command", "date_time", "num_points")
         if k in entry
     }
-    if bl_config.USING_SAMPLE_DATA:
-        trimmed["data_source"] = "packaged_sample_data"
     return json.dumps(trimmed, indent=2), images_b64
 
 def t_list_scans(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
     result = scan_data.list_processed_scans(limit=arguments.get("limit", 20))
-    if bl_config.USING_SAMPLE_DATA:
-        # Make demo provenance explicit so agents don't mistake packaged
-        # sample scans for live beamline data. Normal-mode output unchanged.
+    if not result and not bl_config.SCAN_DIR_CONFIGURED:
+        # An empty list would read as "this beamtime has no scans". Say what
+        # is actually true: nothing is configured to read from. There is no
+        # bundled sample data to fall back to.
         return json.dumps({
-            "data_source": "packaged_sample_data",
-            "scans": result,
+            "scans": [],
+            "error": (
+                f"No scan directory configured: BL_SCAN_DIR={bl_config.BL_SCAN_DIR} "
+                "is not an existing directory containing a dated (YYYY-mm_*) "
+                "run directory. Set BL_SCAN_DIR to your scan file root."
+            ),
+            **bl_config.data_dir_status(),
         }, indent=2), images_b64
     return json.dumps(result, indent=2), images_b64
 
