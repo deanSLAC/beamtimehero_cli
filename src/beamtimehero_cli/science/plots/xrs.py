@@ -100,7 +100,6 @@ def plot_xrs_descriptors(loss, intensity, descriptors, title=""):
     if wl.get("found"):
         ax.plot([wl["peak_loss_ev"]], [wl["peak_height"]], "v", color="C1", ms=9,
                 label=f"white line {wl['peak_loss_ev']:.1f} eV")
-    pe = descriptors.get("pre_edge") or {}
     ew = (descriptors.get("windows") or {}).get("pre_edge")
     if ew:
         ax.axvspan(ew[0], ew[1], color="C2", alpha=0.10, label="pre-edge window")

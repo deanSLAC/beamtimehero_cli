@@ -8,7 +8,6 @@ canonical leaf would set.
 from __future__ import annotations
 
 import importlib
-import sys
 
 import pytest
 
@@ -120,7 +119,7 @@ def test_unknown_canonical_path_logs_and_skips(parser_module, caplog):
     }
     try:
         with caplog.at_level("WARNING"):
-            parser = parser_module.build_parser()
+            parser_module.build_parser()
         # parser still builds; just no phantom-leaf under the bad branch
         assert any(
             "phantom-leaf" in rec.message or "does_not_exist_anywhere" in rec.message

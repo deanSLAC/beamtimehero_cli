@@ -261,7 +261,7 @@ class _MockScreen:
             try:
                 nums = [float(t) for t in tokens[1:]]
                 start = nums[0]
-                e0, k1, kstep, k2 = nums[-7], nums[-6], nums[-5], nums[-4]
+                e0, _k1, _kstep, k2 = nums[-7], nums[-6], nums[-5], nums[-4]
                 end_ev = e0 + k2 * k2 / 0.2625
             except (IndexError, ValueError):
                 cls._scan_n += 1
@@ -315,9 +315,9 @@ class _MockScreen:
             tokens = cmd.split()
             try:
                 m1 = tokens[1]
-                d_lo1 = float(tokens[2]); d_hi1 = float(tokens[3])
+                _d_lo1 = float(tokens[2]); d_hi1 = float(tokens[3])
                 m2 = tokens[4]
-                d_lo2 = float(tokens[5]); d_hi2 = float(tokens[6])
+                _d_lo2 = float(tokens[5]); d_hi2 = float(tokens[6])
                 npts = int(tokens[7]); ct = float(tokens[8])
                 # d2scan leaves both motors at their end-of-scan position
                 cls._positions[m1] = cls._positions.get(m1, 0.0) + d_hi1

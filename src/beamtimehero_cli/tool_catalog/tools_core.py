@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import matplotlib
 matplotlib.use("Agg")
@@ -1909,7 +1909,6 @@ def _reduce_for_tool(arguments):
 
 
 def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
@@ -1947,7 +1946,6 @@ def t_average_xrs_scans(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
@@ -1992,7 +1990,6 @@ def t_normalize_xrs(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.spec_data import xrs_data
     from beamtimehero_cli.science.plots import xrs as xrs_plots
@@ -2042,7 +2039,6 @@ def _load_crystal_channels(arguments):
         raise ValueError("file_name, scan_number, and counters (list of channel names) are required.")
     center, _src = xrs_data._resolve_elastic_center(file_name, arguments.get("elastic_center_ev"))
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
-    from beamtimehero_cli.science.xrs import reduce as xrs
     loss_list, chan_list = [], []
     for c in counters:
         energy, signal = xrs_data.load_scan_signal(file_name, int(scan_number), c)
@@ -2052,7 +2048,6 @@ def _load_crystal_channels(arguments):
 
 
 def t_sum_crystals(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.plots import xrs as xrs_plots
     images_b64: list[str] = []
@@ -2105,7 +2100,6 @@ def t_align_crystals(arguments: dict) -> tuple[str, list[str]]:
 
 def t_tag_crystal_q(arguments: dict) -> tuple[str, list[str]]:
     from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
-    from beamtimehero_cli.science.xrs import reduce as xrs
     incident = arguments.get("incident_energy_ev")
     two_thetas = arguments.get("two_thetas")
     if incident is None or not two_thetas:
@@ -2137,7 +2131,6 @@ def _xrs_edge_descriptors(arguments):
 
     Returns (descriptors, arrays, meta, resolution_fwhm_ev). Raises ValueError.
     """
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.xrs import descriptors as xd
     from beamtimehero_cli.science.tables import xrs_edges
@@ -2245,7 +2238,6 @@ def t_summarize_xrs_chemistry(arguments: dict) -> tuple[str, list[str]]:
 def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
     """Classify a feature's q-dependence. Accepts either explicit `points`
     ([{q, value}]) or `groups` ([{q, scan_numbers}]) reduced from one file."""
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     from beamtimehero_cli.spec_data import xrs_data
@@ -2278,7 +2270,6 @@ def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
 
 
 def t_compare_xrs_to_references(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.xrs import calibrate as _xrs_cal
     from beamtimehero_cli.science.xrs import reduce as xrs
     from beamtimehero_cli.science.xrs import interpret as xrs_interpret
     from beamtimehero_cli.spec_data import xrs_data
@@ -2335,7 +2326,6 @@ def _extract_chi_core(arguments: dict) -> dict:
     on any data problem (one shared error path, like _interpretation_inputs).
     """
     from beamtimehero_cli.science.exafs import background as _exafs_bkg
-    from beamtimehero_cli.science.exafs import fourier as exafs
     from beamtimehero_cli.science.xas import descriptors as interp_desc
     from beamtimehero_cli.science.xas import normalize as interp_norm
     from beamtimehero_cli.spec_data import exafs_data
@@ -2469,7 +2459,6 @@ def _resolve_chi(arguments: dict) -> tuple[dict | None, dict]:
 
 
 def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
-    from beamtimehero_cli.science.exafs import background as _exafs_bkg
     from beamtimehero_cli.science.exafs import fourier as exafs
     from beamtimehero_cli.science.plots import exafs as exafs_plots
     try:
@@ -2504,7 +2493,6 @@ def t_fourier_transform_chi(arguments: dict) -> tuple[str, list[str]]:
 
 def t_exafs_products(arguments: dict) -> tuple[str, list[str]]:
     """Capstone: extraction plot + FT plot + the full JSON bundle."""
-    from beamtimehero_cli.science.exafs import background as _exafs_bkg
     from beamtimehero_cli.science.exafs import fourier as exafs
     from beamtimehero_cli.science.plots import exafs as exafs_plots
     try:

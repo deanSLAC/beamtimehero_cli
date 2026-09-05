@@ -106,7 +106,6 @@ def test_edge_step_normalize_raises_on_missing_normalizer():
 def test_estimate_per_rep_noise_recovers_known_sigma():
     rng = np.random.default_rng(0)
     n_points = 200
-    n_reps = 5
     sigmas = np.array([0.01, 0.02, 0.05, 0.1, 0.2])
     # Build reps with the post-edge plateau as the last 30% of points so the
     # 10% baseline window is well inside it.

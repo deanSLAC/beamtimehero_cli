@@ -269,7 +269,6 @@ def test_average_latest_energy_scans_on_collector(collector_env):
 def test_plot_scan_on_collector(collector_env):
     from beamtimehero_cli.spec_data import plotting
 
-    fig_b64 = None
     result = plotting.plot_scan("05_test_sample_019", 1)
     # plot_scan returns (payload, images) shapes that differ by version; accept
     # any non-error result that mentions the group

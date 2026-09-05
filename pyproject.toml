@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "ruff",
 ]
 # Slack messaging tools. Pulled lazily inside notify/slack.py so the bare
 # install can run without slack-sdk if no deployment needs Slack.
@@ -46,3 +47,25 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 beamtimehero_cli = ["refdocs/defaults/*.md", "science/README.md"]
+
+[tool.ruff]
+# Deliberately narrow: pyflakes plus syntax errors. This is a correctness gate,
+# not a style gate — undefined names, dead imports, dead locals, f-strings that
+# forgot their placeholders. Formatting rules are left out on purpose so the
+# gate never argues with a scientist about import order in the middle of a
+# physics change.
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The re-export shims exist to keep pre-science/ import paths working; every
+# name in them is unused by construction. They already carry `# noqa: F401`,
+# but list them here so a new shim does not need to remember.
+"src/beamtimehero_cli/analysis/*.py" = ["F401"]
+"src/beamtimehero_cli/interpretation/*.py" = ["F401"]
+"src/beamtimehero_cli/generic_data/__init__.py" = ["F401"]
+"src/beamtimehero_cli/spec_data/exafs_plotting.py" = ["F401"]
+"src/beamtimehero_cli/spec_data/xrs_plotting.py" = ["F401"]

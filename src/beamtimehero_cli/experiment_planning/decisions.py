@@ -8,7 +8,6 @@ consults the LLM advisor when deterministic analysis is ambiguous.
 This module is called by the FastAPI server endpoints (/decide/*).
 """
 
-import json
 import logging
 from dataclasses import dataclass, asdict
 from typing import Optional
@@ -526,7 +525,7 @@ def decide_sample_boundary(scan_data: dict, sample_num: int) -> str:
                 break
 
     if signal_col not in data:
-        return f"dscan Sx -5 5 Sy -5 5 50 0.2"
+        return "dscan Sx -5 5 Sy -5 5 50 0.2"
 
     intensities = data[signal_col]
 
@@ -536,7 +535,7 @@ def decide_sample_boundary(scan_data: dict, sample_num: int) -> str:
 
     if sx is None or sy is None:
         # Try scanned_motor from the command
-        return f"dscan Sx -5 5 Sy -5 5 50 0.2"
+        return "dscan Sx -5 5 Sy -5 5 50 0.2"
 
     # Find boundaries: where signal rises above threshold
     sig_min = np.min(intensities)
@@ -544,13 +543,13 @@ def decide_sample_boundary(scan_data: dict, sample_num: int) -> str:
     sig_range = sig_max - sig_min
 
     if sig_range < 1.0:
-        return f"dscan Sx -5 5 Sy -5 5 50 0.2"
+        return "dscan Sx -5 5 Sy -5 5 50 0.2"
 
     threshold = sig_min + 0.2 * sig_range
     above = intensities > threshold
 
     if not np.any(above):
-        return f"dscan Sx -5 5 Sy -5 5 50 0.2"
+        return "dscan Sx -5 5 Sy -5 5 50 0.2"
 
     sx_above = sx[above]
     sy_above = sy[above]
@@ -662,7 +661,6 @@ def _check_escalation(fit: FitResult, strategy: dict) -> list[str]:
                 low = fit.params.get("low_edge")
                 high = fit.params.get("high_edge")
                 if low is not None and high is not None:
-                    midpoint = (low + high) / 2.0
                     # "large_move" is context-dependent; skip here
                     pass
 
@@ -805,7 +803,6 @@ def _build_rescan_toward_high(motor: str, low_edge: float) -> str:
     start = low_edge - 0.5
     end = low_edge + 3.0  # 50% wider than typical aperture
     # Use relative scan centered roughly around current position
-    center = (start + end) / 2.0
     half_range = (end - start) / 2.0
     return f"dscan {motor} {-half_range:.4f} {half_range * 1.5:.4f} 50 0.2"
 
@@ -819,6 +816,5 @@ def _build_rescan_toward_low(motor: str, high_edge: float) -> str:
     # Start wider toward low, end near the high edge
     end = high_edge + 0.5
     start = high_edge - 3.0
-    center = (start + end) / 2.0
     half_range = (end - start) / 2.0
     return f"dscan {motor} {-half_range * 1.5:.4f} {half_range:.4f} 50 0.2"

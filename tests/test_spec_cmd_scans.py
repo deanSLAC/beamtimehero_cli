@@ -7,7 +7,6 @@ tests also pin backward compatibility of the surfaces they touch
 """
 from __future__ import annotations
 
-import importlib
 import json
 
 import pytest

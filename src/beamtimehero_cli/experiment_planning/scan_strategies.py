@@ -31,7 +31,6 @@ escalate_to_llm_when : list[str]
     LLM consultation.
 """
 
-from typing import Optional
 
 
 # ---------------------------------------------------------------------------

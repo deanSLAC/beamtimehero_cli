@@ -17,7 +17,6 @@ from beamtimehero_cli.science.xas.fits import (
 )
 from beamtimehero_cli.science.xas.policy import (
     PRE_EDGE_WINDOW_REL,
-    WHITE_LINE_WINDOW_REL,
 )
 
 

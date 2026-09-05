@@ -114,7 +114,6 @@ def plot_scan_stack(file_name, e_min=None, e_max=None, counter=None,
     e_min, e_max are optional numeric eV bounds; when provided, the plot is
     cropped to that window so the agent can inspect a feature directly.
     """
-    import numpy as np
 
     try:
         combined, file_name, counter, used = scans.get_normalized_scan_arrays(

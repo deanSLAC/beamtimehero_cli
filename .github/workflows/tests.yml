@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e '.[dev]'
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Test
+        # Includes the guards CONTRIBUTING.md relies on: the science/ boundary,
+        # the pinned scientific defaults, the generated-docs freshness check,
+        # and tool-catalog wiring. Until now those only meant something when a
+        # contributor remembered to run pytest locally.
+        run: python -m pytest -q
+
+  floor:
+    # pyproject.toml declares requires-python = ">=3.9". That floor has never
+    # been exercised, and the scientific stack (silx, lmfit, xraydb) may not
+    # resolve there at all. Report it, don't gate on it: a scientist's PR
+    # should not be blocked by an old interpreter nobody runs. If this stays
+    # red, the honest fix is to raise requires-python, not to fix 3.9.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: python -m pytest -q

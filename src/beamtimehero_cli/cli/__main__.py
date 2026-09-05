@@ -31,7 +31,7 @@ from pathlib import Path
 from beamtimehero_cli import refdocs
 from beamtimehero_cli.cli.profiles import PROFILES
 from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS, execute_tool
-from beamtimehero_cli.tool_catalog.categorize import CATEGORY_OVERRIDES, categorize
+from beamtimehero_cli.tool_catalog.categorize import categorize
 
 
 _CANONICAL_TREES = frozenset({

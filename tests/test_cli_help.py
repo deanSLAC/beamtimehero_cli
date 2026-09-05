@@ -6,8 +6,6 @@ the bundled agent profiles, and that no per-role agent branches
 """
 from __future__ import annotations
 
-import io
-import sys
 
 import pytest
 
@@ -30,7 +28,6 @@ FORBIDDEN_TREES = {"blaligner", "samplealigner", "collector", "surveyor", "steer
 def test_top_level_trees_exact():
     parser = _build_parser()
     # subparsers is the first positional subparsers action
-    subactions = [a for a in parser._actions if isinstance(a, type(parser._subparsers._group_actions[0]))]  # type: ignore[attr-defined]
     sp = next(a for a in parser._actions if hasattr(a, "choices") and a.choices)
     trees = set(sp.choices.keys())
     assert trees == EXPECTED_TREES, f"unexpected trees: {trees ^ EXPECTED_TREES}"

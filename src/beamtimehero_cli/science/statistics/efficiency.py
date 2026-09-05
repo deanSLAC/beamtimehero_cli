@@ -7,6 +7,7 @@ recommendation, and a synthesized verdict.
 
 Pure math module — no DB, no data loading, no pandas dependency.
 """
+from __future__ import annotations
 
 import numpy as np
 import warnings

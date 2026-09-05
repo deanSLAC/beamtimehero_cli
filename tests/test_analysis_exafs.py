@@ -90,7 +90,7 @@ def test_first_shell_peak_parabola_refined():
 
 def test_ft_window_shape():
     k = np.arange(0, 12, 0.05)
-    win = ft = exafs.ft_window(k, 3.0, 9.0, dk=1.0)
+    win = exafs.ft_window(k, 3.0, 9.0, dk=1.0)
     assert win.max() == pytest.approx(1.0)
     assert win[k < 2.0].max() == 0.0
     # sill midpoints at half height

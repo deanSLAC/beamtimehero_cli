@@ -1,7 +1,6 @@
 """End-to-end smoke: dispatch a core tool through execute_tool."""
 from __future__ import annotations
 
-import os
 
 import pytest
 

@@ -20,7 +20,6 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX; advisory locking is a no-op
     fcntl = None
 
-import numpy as np
 import pandas as pd
 from silx.io.specfile import SpecFile, is_specfile
 

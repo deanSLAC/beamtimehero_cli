@@ -2,8 +2,6 @@
 
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from beamtimehero_cli.config import BL_LOGS_DIR, LOG_FILE_PATTERN, MAX_FILE_SIZE_BYTES, MAX_LOG_LINES
 
