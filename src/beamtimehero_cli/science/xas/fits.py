@@ -213,7 +213,10 @@ def fit_white_line(energy: np.ndarray, mu: np.ndarray, e0: float,
     """White-line fit: erf edge step + pseudo-Voigt(s) above E0.
 
     ``max_components > 1`` enables the multi-peak path required for Ce L3
-    (Ce(IV) final-state doublet) and U(VI) satellite structure.
+    (Ce(IV) final-state doublet) and U(VI) satellite structure. This function
+    does not know the edge family, so the default is the single-peak case;
+    which families need the multi-peak path is decided by
+    :func:`.policy.white_line_components_for` and passed in by the caller.
     """
     window = (e0 + WHITE_LINE_WINDOW_REL[0], e0 + WHITE_LINE_WINDOW_REL[1])
     window = (max(window[0], float(energy[0])), min(window[1], float(energy[-1])))

@@ -9,6 +9,7 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 
 from beamtimehero_cli.science.exafs.kspace import etok
+from beamtimehero_cli.science.exafs.policy import DEFAULT_KWEIGHT, DEFAULT_RBKG
 
 
 # ---------------------------------------------------------------------------
@@ -20,8 +21,8 @@ def autobk_lite(
     mu: np.ndarray,
     e0: float,
     edge_step: float = 1.0,
-    rbkg: float = 1.0,
-    kweight: int = 2,
+    rbkg: float = DEFAULT_RBKG,
+    kweight: int = DEFAULT_KWEIGHT,
 ) -> dict:
     """Quick-look AUTOBK: spline background above E0 → chi(k).
 

@@ -31,7 +31,14 @@ def rebin_k(
     k: np.ndarray, chi: np.ndarray,
     kstep: float = 0.05, kmin: float = 0.0, kmax: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Interpolate chi onto a uniform k grid (required before the FFT)."""
+    """Interpolate chi onto a uniform k grid (required before the FFT).
+
+    ``kmin`` here is a *regrid floor*, not the FT window bound — it is
+    deliberately 0.0 and NOT ``policy.DEFAULT_KMIN``. Rebinning keeps the full
+    measured range; the k range that actually enters the transform is applied
+    later by the window in :func:`.fourier.ft_window`. Raising it here would
+    silently discard low-k data before windowing.
+    """
     k = np.asarray(k, dtype=float)
     chi = np.asarray(chi, dtype=float)
     if kmax is None:

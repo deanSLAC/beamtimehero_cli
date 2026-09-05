@@ -4,6 +4,12 @@ from __future__ import annotations
 import numpy as np
 
 from beamtimehero_cli.science.exafs.kspace import rebin_k
+from beamtimehero_cli.science.exafs.policy import (
+    DEFAULT_DK,
+    DEFAULT_KMAX,
+    DEFAULT_KMIN,
+    DEFAULT_KWEIGHT,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -11,7 +17,7 @@ from beamtimehero_cli.science.exafs.kspace import rebin_k
 # ---------------------------------------------------------------------------
 
 def ft_window(
-    k: np.ndarray, kmin: float, kmax: float, dk: float = 1.0,
+    k: np.ndarray, kmin: float, kmax: float, dk: float = DEFAULT_DK,
     kind: str = "hanning",
 ) -> np.ndarray:
     """Hanning-sill FT window on grid ``k`` (sills of width ``dk`` centred
@@ -32,10 +38,10 @@ def ft_window(
 def xftf(
     k: np.ndarray,
     chi: np.ndarray,
-    kmin: float = 2.0,
-    kmax: float | None = None,
-    kweight: int = 2,
-    dk: float = 1.0,
+    kmin: float = DEFAULT_KMIN,
+    kmax: float | None = DEFAULT_KMAX,
+    kweight: int = DEFAULT_KWEIGHT,
+    dk: float = DEFAULT_DK,
     nfft: int = 2048,
     kstep: float = 0.05,
     rmax_out: float = 10.0,

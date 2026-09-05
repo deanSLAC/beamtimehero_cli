@@ -174,7 +174,7 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     <div class="stat"><b>7</b><span>directories, by technique</span></div>
     <div class="stat"><b>19</b><span>policy call sites de-duplicated</span></div>
     <div class="stat"><b>0</b><span>upward imports from science/</span></div>
-    <div class="stat"><b>213</b><span>tests green</span></div>
+    <div class="stat"><b>218</b><span>tests green</span></div>
     <button id="themetoggle">◐ theme</button>
   </div>
 </header>
@@ -187,13 +187,13 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
 </p>
 
 <div class="card">
-  <h4>Done <span class="tag t-sci">213 tests green</span></h4>
+  <h4>Done <span class="tag t-sci">218 tests green</span></h4>
   <p>
     <code>science/</code> exists with 35 modules across the seven directories.
     Every old module path is a re-export shim, so the five consuming apps are
     untouched — and because the test suite still imports through the old paths,
-    those 213 passing tests are themselves the shim-compatibility check
-    (baseline was 212; the extra one is new).
+    those 218 passing tests are themselves the shim-compatibility check
+    (the baseline was 212).
   </p>
   <p>
     The duplicated science is gone from the handler layer:
