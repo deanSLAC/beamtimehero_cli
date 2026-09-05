@@ -1,12 +1,10 @@
-"""
-MCP tool for cosine similarity analysis of scan data.
+"""Scan-to-scan spectral similarity.
 
-Exposes the cosine similarity metrics from the SNR monitor as an MCP tool
-for use by an LLM chatbot. Accepts a 2D array of scan intensity data
-(rows = scans, columns = energy/measurement points) and returns:
-- Individual vs mean similarity (per-scan)
-- Cumulative convergence similarity
-- Standard error of the mean
+Cosine similarity between a scan and a reference (or between successive
+scans), used as a cheap convergence and quality signal: a rep that has drifted
+or been damaged stops resembling the ones before it.
+
+Arrays in, dict out — see ``science/README.md``.
 """
 
 import numpy as np

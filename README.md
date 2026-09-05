@@ -74,7 +74,8 @@ open docs/science_index.html                    # view
 python -m beamtimehero_cli.docgen_science       # regenerate
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before your first change.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before your first change, and
+`docs/architecture-review.html` for why the layout is the way it is.
 
 ## Env vars
 

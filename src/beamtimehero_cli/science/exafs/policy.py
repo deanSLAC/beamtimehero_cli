@@ -36,3 +36,18 @@ CITATIONS = {
     "Default k range and window taper": None,
     "Default AUTOBK R_bkg": None,
 }
+
+# Minimum overlapping energy points across the selected reps before chi(k)
+# extraction is attempted. Distinct from the XANES descriptor minimum
+# (science.xas.policy.MIN_OVERLAPPING_POINTS): EXAFS needs a long post-edge
+# range, so a short overlap is a different failure.
+MIN_EXAFS_POINTS = 20
+
+
+def check_exafs_points(n_points: int) -> None:
+    """Raise ValueError when too few shared points remain for chi(k)."""
+    if n_points < MIN_EXAFS_POINTS:
+        raise ValueError(
+            "Too few overlapping energy points across the selected reps "
+            f"({n_points}) for EXAFS extraction."
+        )

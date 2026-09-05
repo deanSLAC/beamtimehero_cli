@@ -8,6 +8,10 @@ from __future__ import annotations
 import numpy as np
 
 from beamtimehero_cli.science.xrs.calibrate import common_loss_grid
+from beamtimehero_cli.science.xrs.policy import (
+    BACKGROUND_MODELS,
+    DEFAULT_BACKGROUND_MODEL,
+)
 
 # numpy 2.x renamed trapz -> trapezoid; support both.
 _trapz = getattr(np, "trapezoid", None) or np.trapz
@@ -164,12 +168,9 @@ def sum_crystals(
 # Compton background subtraction (replaces the XAS pre/post polynomial)
 # ---------------------------------------------------------------------------
 
-BACKGROUND_MODELS = ("constant", "linear", "pearson7")
-
-
 def subtract_compton_background(
     loss: np.ndarray, intensity: np.ndarray, edge_lo: float, edge_hi: float,
-    model: str = "linear",
+    model: str = DEFAULT_BACKGROUND_MODEL,
 ) -> dict:
     """Fit and subtract the Compton/valence background under the XRS edge.
 
@@ -283,7 +284,6 @@ def area_normalize(
 # ---------------------------------------------------------------------------
 
 CITATIONS = {
-    "Compton background models (constant / linear / Pearson VII)": None,
     "Outlier-channel rejection by DER_SNR": (
         "DER_SNR estimator: Stoehr et al., 'DER_SNR: A Simple & General "
         "Spectroscopic Signal-to-Noise Measurement', ASP Conf. Ser. 394 (2008)."

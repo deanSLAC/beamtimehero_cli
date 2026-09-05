@@ -193,7 +193,8 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     Every old module path is a re-export shim, so the five consuming apps are
     untouched — and because the test suite still imports through the old paths,
     those 218 passing tests are themselves the shim-compatibility check
-    (the baseline was 212).
+    (180 at <code>c23f8ac</code>, 210 immediately before the move — the
+    intervening commits added SPEC-command tests unrelated to it).
   </p>
   <p>
     The duplicated science is gone from the handler layer:
@@ -228,20 +229,28 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     keep <code>xas/normalize.py</code> to themselves.
   </p>
   <p>
-    <strong>2. A second violation of the rule turned up during the move.</strong>
-    <code>pick_active_counter</code> read
-    <code>BTH_ACTIVE_COUNTER_PRIORITY</code> from the environment. The env read
-    moved to <code>config.active_counter_priority()</code> and the counter
-    priority is now passed in as an argument. That variable is set by
-    <code>autonomous_fourone</code>, and no app calls
-    <code>pick_active_counter</code> directly, so the four
-    <code>spec_data</code> call sites now supply it and the override behaves
-    exactly as before.
+    <strong>2. A second violation was absorbed during the move — and this
+    section originally mis-described it.</strong> An env read of
+    <code>BTH_ACTIVE_COUNTER_PRIORITY</code> inside
+    <code>pick_active_counter</code> was present in the working tree but in
+    <em>no commit</em> — in-flight, unshipped work. So the move did not fix a
+    released purity violation; it took an unfinished feature and landed it on
+    the right side of the boundary: the env read in
+    <code>config.active_counter_priority()</code>, the priority passed in as an
+    argument, supplied at the four <code>spec_data</code> call sites.
+    <code>autonomous_fourone</code> does set the variable
+    (<code>.env.example:70</code>) and no app calls
+    <code>pick_active_counter</code> directly. The original claim that "the
+    override behaves exactly as before" was wrong, in a benign direction: no
+    shipped version read the variable at all, so it was inert. It works now.
   </p>
   <p>
     <strong>3. <code>fitting/</code> holds only <code>similarity.py</code></strong>
-    — <code>generic_data/fitter.py</code> stays unrouted, as you asked. The
-    directory exists so the eventual home is obvious.
+    — <code>generic_data/fitter.py</code> stays unrouted, as asked. The
+    directory exists so the eventual home is obvious. Review follow-up:
+    <code>xrs/policy.py</code> was missing at first, so the Compton background
+    default stayed as nine literals and the science-side default was dead code;
+    it now exists and all nine sites read from it.
   </p>
   <p>
     <strong>4. <code>plots/</code> holds <code>xas.py</code> and
@@ -268,11 +277,11 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     everything else is visibly fair game.
   </p>
   <p>
-    Still outstanding from §05: the generated
+    Both remaining §05 deliverables have since landed: the generated
     <code>docs/science_index.html</code> (every science function with its
-    signature, citations, and which tools call it) and the uniform
-    <code>CITATIONS</code> convention. Those are additive and independent of
-    the move.
+    signature, citations, and which tools reach it — from a call graph) and the
+    uniform <code>CITATIONS</code> convention, with unattributed methods
+    recorded as explicit gaps rather than filled in with invented references.
   </p>
 </div>
 
@@ -343,7 +352,7 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     <b>The element/edge auto-detection policy</b> — explicit-vs-auto branching,
     E₀ anchoring, ambiguity flagging — in <code>_interpretation_inputs</code>
     (1195–1225), with only the scoring in <code>interpretation/edges.py</code>.<br>
-    <b>The "≥20 overlapping points" data-adequacy rule</b> at <b>1181</b>.<br>
+    <b>The "≥20 overlapping points" data-adequacy rule</b> at <b>1185</b>.<br>
     <b>Convergence targets</b> <code>sem_threshold_frac=0.01</code>,
     <code>drift_threshold_frac=0.01</code> at <b>715–716</b>.<br>
     And <b>seven handlers do raw numpy math inline</b> —
@@ -780,8 +789,12 @@ wl_comps = arguments.get(<span class="k">"white_line_components"</span>) <span c
   Five applications import from this package as sibling checkouts, several of them
   reaching directly at <code>analysis/</code> and <code>interpretation/</code>
   module paths. So the moves had to be non-breaking: every old module stayed in
-  place as a re-export shim. These are generated from the new modules' public
-  names, so they cannot silently omit a symbol.
+  place as a re-export shim, generated from the new modules' public names.
+  That is weaker than first claimed here: because the generator keys on
+  <em>public</em> names it did silently drop one private one
+  (<code>interpretation.normalize._EDGE_EMISSION_LINES</code>), and the package
+  <code>__init__</code> files stopped binding their submodules as attributes.
+  Both were caught in review and restored; no consumer referenced either.
 </p>
 <pre class="snip"><span class="c"># analysis/xas.py — after the move</span>
 <span class="c">"""Moved to science/. Kept as a shim so existing imports keep working."""</span>

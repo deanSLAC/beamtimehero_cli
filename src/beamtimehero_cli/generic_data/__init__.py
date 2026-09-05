@@ -8,3 +8,10 @@
 unrouted pending a decision on whether to wire them up under
 ``science/fitting/`` or delete them.
 """
+
+# Keep `import beamtimehero_cli.generic_data as g; g.cosine_similarity` working
+# the way it did before the move.
+from beamtimehero_cli.generic_data import (  # noqa: F401,E402
+    cosine_similarity,
+    lcf,
+)

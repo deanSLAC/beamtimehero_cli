@@ -385,6 +385,7 @@ h2 .no{color:var(--accent);font-family:ui-monospace,Menlo,monospace;font-size:.8
 .fn .fname{font-weight:600}
 .fn .fdoc{color:var(--dim);font-size:.88rem;margin:.15em 0 0;max-width:78ch}
 .fn.priv .fname{font-weight:400;color:var(--dim)}
+.fn.const .users b{color:var(--accent)}
 .users{margin:.3em 0 0;font-size:.76rem;color:var(--dim);
   font-family:ui-monospace,Menlo,monospace}
 .users b{color:var(--ink);font-weight:600}
@@ -447,7 +448,7 @@ def render() -> str:
     for dotted, m in sorted(sci.items()):
         rest = _short(dotted)
         d = rest.split(".")[0] if "." in rest else ""
-        if not d or not m["functions"]:
+        if not d or not (m["functions"] or m["constants"]):
             continue
         by_dir.setdefault(d, []).append(m)
 
@@ -473,7 +474,8 @@ def render() -> str:
     A('<div class="statstrip">')
     A(f'<div class="stat"><b>{n_fns}</b><span>functions</span></div>')
     A(f'<div class="stat"><b>{n_pub}</b><span>public</span></div>')
-    A(f'<div class="stat"><b>{len(sci)}</b><span>modules</span></div>')
+    n_shown = sum(len(v) for v in by_dir.values())
+    A(f'<div class="stat"><b>{n_shown}</b><span>modules</span></div>')
     A(f'<div class="stat"><b>{len(cites) - n_gaps}</b><span>cited methods</span></div>')
     A(f'<div class="stat"><b>{n_gaps}</b><span>attribution gaps</span></div>')
     A('<button id="themetoggle">&#9689; theme</button></div></header>')
@@ -509,6 +511,17 @@ def render() -> str:
             A('<div class="modhead">'
               f'<span class="mpath">{_esc(_short(m["dotted"]))}</span>'
               f'<span class="mdoc">{_esc(m["doc"])}</span></div>')
+            consts = [c for c in m["constants"] if c != "CITATIONS"]
+            if consts:
+                hay = " ".join([_short(m["dotted"])] + consts).lower()
+                A(f'<div class="fn const" data-hay="{_esc(hay)}">')
+                A('<p class="users"><b>constants</b> '
+                  + ", ".join(f'<code>{_esc(c)}</code>' for c in consts) + "</p>")
+                A('<p class="fdoc">Module-level data and defaults. Editing these '
+                  'is the most common kind of contribution; nothing here needs a '
+                  'call graph to be safe to change, but see "used by" on the '
+                  'functions that read them.</p>')
+                A("</div>")
             for name, f in sorted(m["functions"].items(),
                                   key=lambda kv: (kv[1]["private"], kv[1]["lineno"])):
                 users = sorted(rev.get((m["dotted"], name), ()))

@@ -30,6 +30,7 @@ from beamtimehero_cli.spec_data.plotting import fig_to_base64
 from beamtimehero_cli.spec_logs import log_reader
 from beamtimehero_cli.science.exafs import policy as ex_policy
 from beamtimehero_cli.science.xas import policy as xas_policy
+from beamtimehero_cli.science.xrs import policy as xrs_policy
 
 logger = logging.getLogger(__name__)
 
@@ -1613,10 +1614,7 @@ def _load_spectrum_entries(entries, counter=None, normalization="edge_step",
         except ValueError as e:
             raise ValueError(f"'{file_name}': {e}") from None
         combined = combined.dropna()
-        if len(combined) < 10:
-            raise ValueError(
-                f"'{file_name}': too few overlapping energy points ({len(combined)})."
-            )
+        xas_policy.check_reference_points(len(combined), file_name)
         energy = combined.index.values.astype(float)
         if combined.shape[1] == 1:
             mu = combined.iloc[:, 0].values.astype(float)
@@ -1955,7 +1953,7 @@ def t_subtract_compton_background(arguments: dict) -> tuple[str, list[str]]:
         r = _reduce_for_tool(arguments)
         bg = xrs.subtract_compton_background(
             r["loss"], r["mean"], float(edge_lo), float(edge_hi),
-            model=arguments.get("model", "linear"))
+            model=arguments.get("model", xrs_policy.DEFAULT_BACKGROUND_MODEL))
     except ValueError as e:
         return json.dumps({"error": str(e)}, indent=2), []
     subtracted = bg["subtracted"]
@@ -1997,7 +1995,7 @@ def t_overlay_xrs_spectra(arguments: dict) -> tuple[str, list[str]]:
     if not file_names:
         return json.dumps({"error": "file_names array must not be empty."}), []
     edge_lo, edge_hi = arguments.get("edge_lo"), arguments.get("edge_hi")
-    model = arguments.get("model", "linear")
+    model = arguments.get("model", xrs_policy.DEFAULT_BACKGROUND_MODEL)
     normalization = arguments.get("normalization", "area")
     spectra, reports = [], []
     for fn in file_names:
@@ -2113,7 +2111,7 @@ def t_tag_crystal_q(arguments: dict) -> tuple[str, list[str]]:
         return json.dumps({"error": str(e)}, indent=2), []
     channels = [{"counter": counters[i] if i < len(counters) else f"ch{i}",
                  "two_theta_deg": float(two_thetas[i]), "q_inv_angstrom": round(qs[i], 4),
-                 "regime": "low-q (dipole/XANES-like)" if qs[i] < 3.0 else "high-q (multipole)"}
+                 "regime": xrs_policy.q_regime(qs[i])}
                 for i in range(len(two_thetas))]
     return json.dumps({
         "incident_energy_ev": float(incident),
@@ -2149,7 +2147,7 @@ def _xrs_edge_descriptors(arguments):
     subtracted = False
     if edge_lo is not None and edge_hi is not None:
         bg = xrs.subtract_compton_background(loss, inten, float(edge_lo), float(edge_hi),
-                                             model=arguments.get("model", "linear"))
+                                             model=arguments.get("model", xrs_policy.DEFAULT_BACKGROUND_MODEL))
         inten = bg["subtracted"]
         subtracted = True
 
@@ -2261,7 +2259,7 @@ def t_interpret_q_dependence(arguments: dict) -> tuple[str, list[str]]:
                                         scan_numbers=g.get("scan_numbers"),
                                         elastic_center_ev=arguments.get("elastic_center_ev"))
                 bg = xrs.subtract_compton_background(r["loss"], r["mean"], float(edge_lo), float(edge_hi),
-                                                     model=arguments.get("model", "linear"))
+                                                     model=arguments.get("model", xrs_policy.DEFAULT_BACKGROUND_MODEL))
                 norm = xrs.area_normalize(r["loss"], bg["subtracted"], float(edge_lo), float(edge_hi))
                 from beamtimehero_cli.science.xrs import descriptors as xd
                 value = xd.integrated_area(norm["loss"], norm["normalized"], float(feat_lo), float(feat_hi))
@@ -2286,7 +2284,7 @@ def t_compare_xrs_to_references(arguments: dict) -> tuple[str, list[str]]:
         inten = r["mean"]
         if edge_lo is not None and edge_hi is not None:
             inten = xrs.subtract_compton_background(r["loss"], inten, float(edge_lo), float(edge_hi),
-                                                    model=arguments.get("model", "linear"))["subtracted"]
+                                                    model=arguments.get("model", xrs_policy.DEFAULT_BACKGROUND_MODEL))["subtracted"]
             inten = xrs.area_normalize(r["loss"], inten, float(edge_lo), float(edge_hi))["normalized"]
         return r["loss"], inten
 
@@ -2823,7 +2821,7 @@ def t_s3df_plot_scan(args):
                 counter = active["active_counter"]
         meta = backend.get_scan_metadata(file_name, scan_number) or {}
 
-        from beamtimehero_cli.science.plots.scan import render_scan, fig_to_base64
+        from beamtimehero_cli.science.plots.scan import render_scan
         fig, summary = render_scan(
             df, file_name, scan_number,
             counter=counter, normalize_by=normalize_by,

@@ -68,6 +68,7 @@ h2 .no{color:var(--accent);font-family:ui-monospace,Menlo,monospace;font-size:.8
 .fn .fname{font-weight:600}
 .fn .fdoc{color:var(--dim);font-size:.88rem;margin:.15em 0 0;max-width:78ch}
 .fn.priv .fname{font-weight:400;color:var(--dim)}
+.fn.const .users b{color:var(--accent)}
 .users{margin:.3em 0 0;font-size:.76rem;color:var(--dim);
   font-family:ui-monospace,Menlo,monospace}
 .users b{color:var(--ink);font-weight:600}
@@ -97,21 +98,32 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <h1>Science index — <span class="thin">every function, and what uses it</span></h1>
 <p class="lede">The scientific core of the toolbelt: what each function does, what it is called by, and what it cites. Generated from the source tree, so a new function appears here by existing. Regenerate with <code>python -m beamtimehero_cli.docgen_science</code>.</p>
 <div class="statstrip">
-<div class="stat"><b>95</b><span>functions</span></div>
-<div class="stat"><b>71</b><span>public</span></div>
-<div class="stat"><b>35</b><span>modules</span></div>
-<div class="stat"><b>23</b><span>cited methods</span></div>
-<div class="stat"><b>22</b><span>attribution gaps</span></div>
+<div class="stat"><b>98</b><span>functions</span></div>
+<div class="stat"><b>74</b><span>public</span></div>
+<div class="stat"><b>28</b><span>modules</span></div>
+<div class="stat"><b>24</b><span>cited methods</span></div>
+<div class="stat"><b>23</b><span>attribution gaps</span></div>
 <button id="themetoggle">&#9689; theme</button></div></header>
 <div class="therule"><blockquote>Everything under <code>science/</code> takes <b>numbers in</b> and returns <b>numbers out</b>. No file paths, no environment variables, no SPEC, no database, no argparse.</blockquote></div>
 <h2><span class="no">01</span> Functions</h2>
 <p class="sectionnote">Grouped by directory, then module, in pipeline order. &ldquo;Used by&rdquo; is computed from a call graph that follows indirect routes (tool &rarr; handler &rarr; spec_data &rarr; science), so a function with no listed tool is very likely genuinely unreached. Resolution is static, so a call assembled at runtime (getattr, a name built from a string) is the one thing it cannot follow.</p>
 <div class="toolbar"><input id="q" type="search" placeholder="Filter functions, modules, docstrings, tool names&hellip;"><span id="qcount"></span></div>
 <details class="dir" style="--c: var(--c-tables)" open>
-<summary><span class="dname">science/tables/</span><span class="chip" style="--c: var(--c-tables)">3 modules</span><span class="count">9 fns</span></summary>
+<summary><span class="dname">science/tables/</span><span class="chip" style="--c: var(--c-tables)">4 modules</span><span class="count">9 fns</span></summary>
 <p class="note">Tabulated physics. Data, not algorithms — the values most often corrected or extended, readable without touching any code.</p>
 <div class="modblock">
+<div class="modhead"><span class="mpath">tables.edge_shifts</span><span class="mdoc">Literature calibration DATA for interpretation — cited, with validity domains.</span></div>
+<div class="fn const" data-hay="tables.edge_shifts generic_edge_shift per_element_edge_shift max_valence_span default_valence_span wilke_2001_fe_pre_edge ce_l3 u_m4_herfd l3_white_line_trend core_hole_width_source">
+<p class="users"><b>constants</b> <code>GENERIC_EDGE_SHIFT</code>, <code>PER_ELEMENT_EDGE_SHIFT</code>, <code>MAX_VALENCE_SPAN</code>, <code>DEFAULT_VALENCE_SPAN</code>, <code>WILKE_2001_FE_PRE_EDGE</code>, <code>CE_L3</code>, <code>U_M4_HERFD</code>, <code>L3_WHITE_LINE_TREND</code>, <code>CORE_HOLE_WIDTH_SOURCE</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
+</div>
+<div class="modblock">
 <div class="modhead"><span class="mpath">tables.edges</span><span class="mdoc">Element/edge metadata backed by xraydb&#x27;s offline database.</span></div>
+<div class="fn const" data-hay="tables.edges edge_energy_source _3d_z _4d_z _5d_k_z _main_group_k_z _ln_z _5d_z _an_z _common_absorbers _tol_ev _k_edge_bonus _common_bonus _ambiguity_margin">
+<p class="users"><b>constants</b> <code>EDGE_ENERGY_SOURCE</code>, <code>_3D_Z</code>, <code>_4D_Z</code>, <code>_5D_K_Z</code>, <code>_MAIN_GROUP_K_Z</code>, <code>_LN_Z</code>, <code>_5D_Z</code>, <code>_AN_Z</code>, <code>_COMMON_ABSORBERS</code>, <code>_TOL_EV</code>, <code>_K_EDGE_BONUS</code>, <code>_COMMON_BONUS</code>, <code>_AMBIGUITY_MARGIN</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="classify_edge_family tables.edges classify (element, edge) into an interpretation family. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">classify_edge_family</span>(element, edge)</span>
 <p class="fdoc">Classify (element, edge) into an interpretation family.</p>
@@ -139,6 +151,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">tables.emission_lines</span><span class="mdoc">Preferred emission line (Siegbahn) per absorption edge.</span></div>
+<div class="fn const" data-hay="tables.emission_lines _edge_emission_lines">
+<p class="users"><b>constants</b> <code>_EDGE_EMISSION_LINES</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="emission_energy_ev tables.emission_lines strongest fluorescence-line energy (ev) for an edge, via xraydb. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">emission_energy_ev</span>(element, edge)</span>
 <p class="fdoc">Strongest fluorescence-line energy (eV) for an edge, via xraydb.</p>
@@ -147,6 +163,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">tables.xrs_edges</span><span class="mdoc">Edge metadata for XRS — the low-Z / shallow edges XRS is used to reach.</span></div>
+<div class="fn const" data-hay="tables.xrs_edges _xrs_edges _3d_l _ambiguity_margin_ev">
+<p class="users"><b>constants</b> <code>_XRS_EDGES</code>, <code>_3D_L</code>, <code>_AMBIGUITY_MARGIN_EV</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="classify_xrs_family tables.xrs_edges interpretation family for an xrs edge. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
 <span class="sig"><span class="fname">classify_xrs_family</span>(element, edge)</span>
 <p class="fdoc">Interpretation family for an XRS edge.</p>
@@ -192,6 +212,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">reduce.counters</span><span class="mdoc">Active-counter selection for a scan DataFrame.</span></div>
+<div class="fn const" data-hay="reduce.counters _vort_candidates _flat_modulation_frac">
+<p class="users"><b>constants</b> <code>_VORT_CANDIDATES</code>, <code>_FLAT_MODULATION_FRAC</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="pick_active_counter reduce.counters pick the active fluorescence/absorption counter for a scan dataframe. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file get-active-counter spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-scan spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
 <span class="sig"><span class="fname">pick_active_counter</span>(df, priority=...)</span>
 <p class="fdoc">Pick the active fluorescence/absorption counter for a scan DataFrame.</p>
@@ -218,6 +242,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">reduce.normalize</span><span class="mdoc">Per-scan monitor normalization — the stage before technique-specific work.</span></div>
+<div class="fn const" data-hay="reduce.normalize normalization_modes">
+<p class="users"><b>constants</b> <code>NORMALIZATION_MODES</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="edge_step_normalize reduce.normalize apply edge-step normalization to a single counter on one scan. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">edge_step_normalize</span>(df, counter, normalize_by=...)</span>
 <p class="fdoc">Apply edge-step normalization to a single counter on one scan.</p>
@@ -249,10 +277,14 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 </details>
 <details class="dir" style="--c: var(--c-xas)" open>
-<summary><span class="dname">science/xas/</span><span class="chip" style="--c: var(--c-xas)">7 modules</span><span class="count">38 fns</span></summary>
+<summary><span class="dname">science/xas/</span><span class="chip" style="--c: var(--c-xas)">7 modules</span><span class="count">39 fns</span></summary>
 <p class="note">XANES / HERFD. Pipeline order: normalize, e0, fits, descriptors, interpret — with compare for cross-spectrum work.</p>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.compare</span><span class="mdoc">Cross-spectrum comparison: energy registration, differences, and LCF.</span></div>
+<div class="fn const" data-hay="xas.compare max_align_shift_ev">
+<p class="users"><b>constants</b> <code>MAX_ALIGN_SHIFT_EV</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="align_spectra xas.compare shift spectra in energy so their e0s coincide — registration by report. spec-file align-spectra spec-file difference-spectrum">
 <span class="sig"><span class="fname">align_spectra</span>(spectra, target_e0=..., max_shift_ev=...)</span>
 <p class="fdoc">Shift spectra in energy so their E0s coincide — registration by report.</p>
@@ -289,6 +321,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.e0</span><span class="mdoc">Edge position E0 and core-hole re-broadening.</span></div>
+<div class="fn const" data-hay="xas.e0 e0_definition">
+<p class="users"><b>constants</b> <code>E0_DEFINITION</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="find_e0 xas.e0 edge position under both fixed definitions, with uncertainty. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">find_e0</span>(energy, mu, smooth_span_ev=...)</span>
 <p class="fdoc">Edge position under both fixed definitions, with uncertainty.</p>
@@ -311,6 +347,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.fits</span><span class="mdoc">Pseudo-Voigt peak fits over a XANES spectrum.</span></div>
+<div class="fn const" data-hay="xas.fits _bic_margin">
+<p class="users"><b>constants</b> <code>_BIC_MARGIN</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="fit_peak_region xas.fits fit baseline (step + line) plus 1..max_components pseudo-voigts. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">fit_peak_region</span>(energy, mu, window, max_components=..., baseline_form=..., edge_center_hint=..., edge_center_bounds=...)</span>
 <p class="fdoc">Fit baseline (step + line) plus 1..max_components pseudo-Voigts.</p>
@@ -334,6 +374,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.interpret</span><span class="mdoc">Hybrid interpretation engine: descriptors -&gt; structured chemical verdicts.</span></div>
+<div class="fn const" data-hay="xas.interpret _k_edge_shell _max_plausible_shift_ev _max_estimate_unc">
+<p class="users"><b>constants</b> <code>_K_EDGE_SHELL</code>, <code>_MAX_PLAUSIBLE_SHIFT_EV</code>, <code>_MAX_ESTIMATE_UNC</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="interpret_oxidation_state xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">interpret_oxidation_state</span>(descriptors, calibration)</span>
 <p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
@@ -405,6 +449,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.normalize</span><span class="mdoc">Rigorous XAS intensity normalization for HERFD metrics.</span></div>
+<div class="fn const" data-hay="xas.normalize area_norm_citation mback_citation default_area_window">
+<p class="users"><b>constants</b> <code>AREA_NORM_CITATION</code>, <code>MBACK_CITATION</code>, <code>DEFAULT_AREA_WINDOW</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="area_normalize xas.normalize rescale mu so its mean over [e0+window[0], e0+window[1]] equals 1. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">area_normalize</span>(energy, mu, e0, window=..., min_span_ev=...)</span>
 <p class="fdoc">Rescale mu so its mean over [e0+window[0], e0+window[1]] equals 1.</p>
@@ -428,10 +476,19 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xas.policy</span><span class="mdoc">XAS analysis policy — the defaults and heuristics, in one place.</span></div>
+<div class="fn const" data-hay="xas.policy pre_edge_window_rel white_line_window_rel multi_component_families multi_component_count single_component_count min_reference_points min_overlapping_points">
+<p class="users"><b>constants</b> <code>PRE_EDGE_WINDOW_REL</code>, <code>WHITE_LINE_WINDOW_REL</code>, <code>MULTI_COMPONENT_FAMILIES</code>, <code>MULTI_COMPONENT_COUNT</code>, <code>SINGLE_COMPONENT_COUNT</code>, <code>MIN_REFERENCE_POINTS</code>, <code>MIN_OVERLAPPING_POINTS</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="white_line_components_for xas.policy max pseudo-voigt components to fit the white line of this edge family. spec-file extract-xas-descriptors spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">white_line_components_for</span>(family)</span>
 <p class="fdoc">Max pseudo-Voigt components to fit the white line of this edge family.</p>
 <p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="check_reference_points xas.policy raise valueerror when a reference spectrum is too short to interpolate. spec-file align-spectra spec-file compare-xas-to-references spec-file difference-spectrum">
+<span class="sig"><span class="fname">check_reference_points</span>(n_points, label)</span>
+<p class="fdoc">Raise ValueError when a reference spectrum is too short to interpolate.</p>
+<p class="users"><b>used by</b> spec-file align-spectra, spec-file compare-xas-to-references, spec-file difference-spectrum</p>
 </div>
 <div class="fn" data-hay="check_overlap xas.policy raise valueerror when too few shared energy points remain to fit. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
 <span class="sig"><span class="fname">check_overlap</span>(n_points)</span>
@@ -451,7 +508,7 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 </details>
 <details class="dir" style="--c: var(--c-exafs)" open>
-<summary><span class="dname">science/exafs/</span><span class="chip" style="--c: var(--c-exafs)">3 modules</span><span class="count">7 fns</span></summary>
+<summary><span class="dname">science/exafs/</span><span class="chip" style="--c: var(--c-exafs)">4 modules</span><span class="count">8 fns</span></summary>
 <p class="note">EXAFS k-space: energy/wavenumber conversion, background removal, Fourier transform into R space.</p>
 <div class="modblock">
 <div class="modhead"><span class="mpath">exafs.background</span><span class="mdoc">AUTOBK-lite background removal: mu(E) -&gt; chi(k).</span></div>
@@ -481,6 +538,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 <div class="modblock">
 <div class="modhead"><span class="mpath">exafs.kspace</span><span class="mdoc">Energy &lt;-&gt; photoelectron wavenumber conversion, and k-grid rebinning.</span></div>
+<div class="fn const" data-hay="exafs.kspace etok">
+<p class="users"><b>constants</b> <code>ETOK</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="etok exafs.kspace photoelectron wavenumber k (å⁻¹) for energies at/above e0. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
 <span class="sig"><span class="fname">etok</span>(energy, e0)</span>
 <p class="fdoc">Photoelectron wavenumber k (Å⁻¹) for energies at/above e0.</p>
@@ -497,12 +558,28 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
 </div>
 </div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">exafs.policy</span><span class="mdoc">EXAFS analysis policy — the k-space defaults, in one place.</span></div>
+<div class="fn const" data-hay="exafs.policy default_kweight default_kmin default_kmax default_dk default_rbkg min_exafs_points">
+<p class="users"><b>constants</b> <code>DEFAULT_KWEIGHT</code>, <code>DEFAULT_KMIN</code>, <code>DEFAULT_KMAX</code>, <code>DEFAULT_DK</code>, <code>DEFAULT_RBKG</code>, <code>MIN_EXAFS_POINTS</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
+<div class="fn" data-hay="check_exafs_points exafs.policy raise valueerror when too few shared points remain for chi(k). exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">check_exafs_points</span>(n_points)</span>
+<p class="fdoc">Raise ValueError when too few shared points remain for chi(k).</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+</div>
 </details>
 <details class="dir" style="--c: var(--c-xrs)" open>
-<summary><span class="dname">science/xrs/</span><span class="chip" style="--c: var(--c-xrs)">4 modules</span><span class="count">23 fns</span></summary>
+<summary><span class="dname">science/xrs/</span><span class="chip" style="--c: var(--c-xrs)">5 modules</span><span class="count">24 fns</span></summary>
 <p class="note">X-ray Raman on the energy-loss axis. Kept apart from xas/ because the XAS defaults are actively wrong here.</p>
 <div class="modblock">
 <div class="modhead"><span class="mpath">xrs.calibrate</span><span class="mdoc">XRS energy-loss axis: elastic-line calibration and momentum transfer.</span></div>
+<div class="fn const" data-hay="xrs.calibrate _hc_ev_ang">
+<p class="users"><b>constants</b> <code>_HC_EV_ANG</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
 <div class="fn" data-hay="q_from_two_theta xrs.calibrate momentum transfer |q| in å⁻¹ for elastic-limit xrs. xrs tag-crystal-q">
 <span class="sig"><span class="fname">q_from_two_theta</span>(incident_energy_ev, two_theta_deg)</span>
 <p class="fdoc">Momentum transfer |q| in Å⁻¹ for elastic-limit XRS.</p>
@@ -593,6 +670,18 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </div>
 </div>
 <div class="modblock">
+<div class="modhead"><span class="mpath">xrs.policy</span><span class="mdoc">XRS analysis policy — the energy-loss defaults, in one place.</span></div>
+<div class="fn const" data-hay="xrs.policy background_models default_background_model dipole_regime_q_max_inv_ang low_q_label high_q_label">
+<p class="users"><b>constants</b> <code>BACKGROUND_MODELS</code>, <code>DEFAULT_BACKGROUND_MODEL</code>, <code>DIPOLE_REGIME_Q_MAX_INV_ANG</code>, <code>LOW_Q_LABEL</code>, <code>HIGH_Q_LABEL</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
+<div class="fn" data-hay="q_regime xrs.policy label the scattering regime for a momentum transfer, in a^-1. xrs tag-crystal-q">
+<span class="sig"><span class="fname">q_regime</span>(q_inv_ang)</span>
+<p class="fdoc">Label the scattering regime for a momentum transfer, in A^-1.</p>
+<p class="users"><b>used by</b> xrs tag-crystal-q</p>
+</div>
+</div>
+<div class="modblock">
 <div class="modhead"><span class="mpath">xrs.reduce</span><span class="mdoc">XRS reduction on the energy-loss axis.</span></div>
 <div class="fn" data-hay="align_and_average xrs.reduce interpolate reps onto a common loss grid and average them. xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
 <span class="sig"><span class="fname">align_and_average</span>(loss_arrays, intensity_arrays, grid=...)</span>
@@ -630,7 +719,7 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <summary><span class="dname">science/fitting/</span><span class="chip" style="--c: var(--c-fitting)">1 modules</span><span class="count">2 fns</span></summary>
 <p class="note">Generic curve fits for beam diagnostics and alignment — not spectroscopy.</p>
 <div class="modblock">
-<div class="modhead"><span class="mpath">fitting.similarity</span><span class="mdoc">MCP tool for cosine similarity analysis of scan data.</span></div>
+<div class="modhead"><span class="mpath">fitting.similarity</span><span class="mdoc">Scan-to-scan spectral similarity.</span></div>
 <div class="fn" data-hay="compute_cosine_similarity fitting.similarity cosine similarity between two vectors: (a . b) / (||a|| * ||b||). spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-per-spot">
 <span class="sig"><span class="fname">compute_cosine_similarity</span>(vec1, vec2)</span>
 <p class="fdoc">Cosine similarity between two vectors: (A . B) / (||A|| * ||B||).</p>
@@ -648,10 +737,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <p class="note">Figures over arrays and descriptor dicts. A figure that takes a file name belongs in spec_data/ instead.</p>
 <div class="modblock">
 <div class="modhead"><span class="mpath">plots.scan</span><span class="mdoc">Backend-agnostic figure rendering.</span></div>
-<div class="fn" data-hay="fig_to_base64 plots.scan convert a matplotlib figure to a base64-encoded png string. s3df plot-scan">
+<div class="fn" data-hay="fig_to_base64 plots.scan convert a matplotlib figure to a base64-encoded png string. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra s3df plot-scan spec-file align-spectra spec-file compare-xas-to-references spec-file difference-spectrum spec-file extract-xas-descriptors spec-file plot-averaged-scans spec-file plot-feature-evolution spec-file plot-first-half-vs-second-half spec-file plot-running-average spec-file plot-scan spec-file plot-scan-stack spec-file summarize-sample-chemistry tool plot-data xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs extract-xrs-descriptors xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs sum-crystals xrs summarize-xrs-chemistry">
 <span class="sig"><span class="fname">fig_to_base64</span>(fig)</span>
 <p class="fdoc">Convert a matplotlib figure to a base64-encoded PNG string.</p>
-<p class="users"><b>used by</b> s3df plot-scan</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, s3df plot-scan, spec-file align-spectra +20 more</p>
 </div>
 <div class="fn" data-hay="render_scan plots.scan render one scan&#x27;s dataframe to a matplotlib figure. s3df plot-scan spec-file plot-scan">
 <span class="sig"><span class="fname">render_scan</span>(df, file_name, scan_number, counter=..., normalize_by=..., scan_command=...)</span>
@@ -690,8 +779,9 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <tr><td>Wilke-style pre-edge fit (rising-edge atan baseline + pseudo-Voigts)</td><td>Wilke, Farges, Petit, Brown &amp; Martin, Am. Mineral. 86, 714-730 (2001), DOI 10.2138/am-2001-5-612. Conventional Fe K-XANES (full 1s core-hole broadening, ~1.25 eV).</td><td class="mono">xas.fits</td></tr>
 <tr><td>Area normalization (the HERFD default)</td><td>Bugarin, Suarez Orduz &amp; Glatzel, &#x27;Area normalization of HERFD-XANES spectra&#x27;, J. Synchrotron Rad. 31 (2024)</td><td class="mono">xas.normalize</td></tr>
 <tr><td>MBACK normalization</td><td>Weng, Waldo &amp; Penner-Hahn, &#x27;A method for normalization of X-ray absorption spectra&#x27;, J. Synchrotron Rad. 12, 506 (2005)</td><td class="mono">xas.normalize</td></tr>
-<tr><td>Multi-component white-line families (Ce(IV) doublet, U(VI) satellites)</td><td>Bugarin, Suarez Orduz &amp; Glatzel, J. Synchrotron Rad. 31 (2024); Bes et al., Inorg. Chem. 55, 4260 (2016).</td><td class="mono">xas.policy</td></tr>
+<tr><td>Ce(IV) L3 final-state doublet (why ln_L3 needs multiple components)</td><td>Bianconi et al., Phys. Rev. B 35, 806 (1987) — standard Ce L3 XANES final-state analysis. See science.tables.edge_shifts.CE_L3.</td><td class="mono">xas.policy</td></tr>
 <tr><td>Pre-edge fit window</td><td>Wilke, Farges, Petit, Brown &amp; Martin, Am. Mineral. 86, 714-730 (2001), DOI 10.2138/am-2001-5-612.</td><td class="mono">xas.policy</td></tr>
+<tr><td>U(VI) M4 satellite structure (why an_L3/an_M need multiple components)</td><td>Bes et al., Inorg. Chem. 55, 4260 (2016), DOI 10.1021/acs.inorgchem.6b00014. See science.tables.edge_shifts.U_M4_HERFD.</td><td class="mono">xas.policy</td></tr>
 <tr><td>Momentum transfer from scattering angle</td><td>q = |k_i - k_s|, evaluated in the quasi-elastic limit |k_i| = |k_s| = 2*pi/lambda(E_incident).</td><td class="mono">xrs.calibrate</td></tr>
 <tr><td>Outlier-channel rejection by DER_SNR</td><td>DER_SNR estimator: Stoehr et al., &#x27;DER_SNR: A Simple &amp; General Spectroscopic Signal-to-Noise Measurement&#x27;, ASP Conf. Ser. 394 (2008).</td><td class="mono">xrs.reduce</td></tr>
 <tr><td>First-shell peak reporting</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.fourier</td></tr>
@@ -714,8 +804,9 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <tr><td>Minimum overlapping points for a descriptor fit</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.policy</td></tr>
 <tr><td>White-line fit window</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.policy</td></tr>
 <tr><td>Elastic-line location (Gaussian fit, with argmax / centre-of-mass fallbacks)</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.calibrate</td></tr>
+<tr><td>Compton background models (constant / linear / Pearson VII)</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.policy</td></tr>
+<tr><td>Dipole vs non-dipole regime boundary in q</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.policy</td></tr>
 <tr><td>Area normalization on the energy-loss axis</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.reduce</td></tr>
-<tr><td>Compton background models (constant / linear / Pearson VII)</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.reduce</td></tr>
 </tbody></table>
 <footer>Generated by <code>beamtimehero_cli.docgen_science</code> from the source tree. Layout and conventions: <code>science/README.md</code>. Contributing: <code>CONTRIBUTING.md</code>. The agent-facing tool catalog is <a href="tool_catalog.html">tool_catalog.html</a>.</footer>
 </div>

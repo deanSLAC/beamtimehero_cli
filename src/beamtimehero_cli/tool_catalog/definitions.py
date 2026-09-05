@@ -7,6 +7,9 @@ app-level `TOOL_DEFINITIONS` import concatenates the two lists.
 import json
 from pathlib import Path
 
+from beamtimehero_cli.science.exafs import policy as _exafs_policy
+from beamtimehero_cli.science.xrs import policy as _xrs_policy
+
 _REFERENCE_IMAGES_DIR = Path(__file__).resolve().parent.parent / "reference_images"
 _MANIFEST_PATH = _REFERENCE_IMAGES_DIR / "manifest.json"
 try:
@@ -124,7 +127,8 @@ _XRS_EDGE_HI_PROP = {
     "type": "number", "description": "Upper energy-loss bound (eV) of the edge feature.",
 }
 _XRS_MODEL_PROP = {
-    "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+    "type": "string", "enum": list(_xrs_policy.BACKGROUND_MODELS),
+    "default": _xrs_policy.DEFAULT_BACKGROUND_MODEL,
     "description": "Compton background shape used when subtracting.",
 }
 _XRS_ELEMENT_PROP = {
@@ -174,11 +178,11 @@ _EXAFS_E0_PROP = {
     "description": "Edge energy E0 (eV). Default: derivative-max from the merged spectrum.",
 }
 _EXAFS_RBKG_PROP = {
-    "type": "number", "default": 1.0,
+    "type": "number", "default": _exafs_policy.DEFAULT_RBKG,
     "description": "Background cutoff R_bkg (Å): spline flexibility is capped below this apparent distance (AUTOBK Nyquist knot budget).",
 }
 _EXAFS_KWEIGHT_PROP = {
-    "type": "integer", "default": 2,
+    "type": "integer", "default": _exafs_policy.DEFAULT_KWEIGHT,
     "description": "k-weight exponent (chi·k^w for plots/FT; also the spline fit weighting).",
 }
 _EXAFS_CHI_ARTIFACT_PROP = {
@@ -2715,7 +2719,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge_lo": {"type": "number", "description": "Lower energy-loss bound (eV) of the edge feature — background is fit outside this."},
                     "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
                     "model": {
-                        "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                        "type": "string", "enum": list(_xrs_policy.BACKGROUND_MODELS),
+    "default": _xrs_policy.DEFAULT_BACKGROUND_MODEL,
                         "description": "Background shape: 'constant' (pre-edge mean), 'linear' (flanks), 'pearson7' (Compton hump; falls back to linear).",
                     },
                     "normalization": {
@@ -2748,7 +2753,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "edge_lo": {"type": "number", "description": "Lower energy-loss bound (eV) of the edge feature."},
                     "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
                     "model": {
-                        "type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                        "type": "string", "enum": list(_xrs_policy.BACKGROUND_MODELS),
+    "default": _xrs_policy.DEFAULT_BACKGROUND_MODEL,
                         "description": "Compton background shape.",
                     },
                 },
@@ -2775,7 +2781,8 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "elastic_center_ev": _ELASTIC_CENTER_PROP,
                     "edge_lo": {"type": "number", "description": "If set with edge_hi, Compton-subtract each spectrum first."},
                     "edge_hi": {"type": "number", "description": "Upper energy-loss bound (eV) of the edge feature."},
-                    "model": {"type": "string", "enum": ["constant", "linear", "pearson7"], "default": "linear",
+                    "model": {"type": "string", "enum": list(_xrs_policy.BACKGROUND_MODELS),
+    "default": _xrs_policy.DEFAULT_BACKGROUND_MODEL,
                               "description": "Compton background shape (if subtracting)."},
                     "normalization": {"type": "string", "enum": ["none", "area"], "default": "area",
                                       "description": "Per-spectrum normalization for a fair overlay."},
@@ -3115,11 +3122,11 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "e0": _EXAFS_E0_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
-                    "kmin": {"type": "number", "default": 2.0,
+                    "kmin": {"type": "number", "default": _exafs_policy.DEFAULT_KMIN,
                              "description": "FT window lower bound (Å⁻¹)."},
                     "kmax": {"type": "number",
                              "description": "FT window upper bound (Å⁻¹). Default: k_max − 0.5."},
-                    "dk": {"type": "number", "default": 1.0,
+                    "dk": {"type": "number", "default": _exafs_policy.DEFAULT_DK,
                            "description": "Hanning sill width (Å⁻¹)."},
                 },
                 "required": [],
@@ -3148,11 +3155,11 @@ AUTONOMY_TOOL_DEFINITIONS = [
                     "e0": _EXAFS_E0_PROP,
                     "rbkg": _EXAFS_RBKG_PROP,
                     "kweight": _EXAFS_KWEIGHT_PROP,
-                    "kmin": {"type": "number", "default": 2.0,
+                    "kmin": {"type": "number", "default": _exafs_policy.DEFAULT_KMIN,
                              "description": "FT window lower bound (Å⁻¹)."},
                     "kmax": {"type": "number",
                              "description": "FT window upper bound (Å⁻¹). Default: k_max − 0.5."},
-                    "dk": {"type": "number", "default": 1.0,
+                    "dk": {"type": "number", "default": _exafs_policy.DEFAULT_DK,
                            "description": "Hanning sill width (Å⁻¹)."},
                 },
                 "required": [],

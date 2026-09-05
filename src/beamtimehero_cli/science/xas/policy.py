@@ -12,6 +12,8 @@ can carry the citation that justifies it.
 """
 from __future__ import annotations
 
+import numpy as np
+
 # ---------------------------------------------------------------------------
 # Fit windows, relative to E0 (eV)
 # ---------------------------------------------------------------------------
@@ -33,8 +35,9 @@ WHITE_LINE_WINDOW_REL = (-10.0, 40.0)
 #   ln_L3 — Ce(IV) shows a final-state 4f^0/4f^1 doublet
 #   an_L3 / an_M — U(VI) M4 carries satellite structure
 # Everything else is fit with a single pseudo-Voigt.
-# Refs: Bugarin & Glatzel (2024) for the HERFD intensity treatment;
-#       Bes et al. (2016) J. Nucl. Mater. 476, 261 for the U M4 method.
+# Refs: Bianconi et al., Phys. Rev. B 35, 806 (1987) for the Ce L3 final-state
+#       doublet; Bes et al., Inorg. Chem. 55, 4260 (2016) for the U M4 method.
+#       (Both are carried in full on science.tables.edge_shifts.)
 MULTI_COMPONENT_FAMILIES = ("ln_L3", "an_L3", "an_M")
 
 MULTI_COMPONENT_COUNT = 3
@@ -53,6 +56,19 @@ def white_line_components_for(family: str | None) -> int:
 # ---------------------------------------------------------------------------
 # Data adequacy
 # ---------------------------------------------------------------------------
+
+# Minimum shared points for a *reference* spectrum being loaded for
+# comparison (LCF, alignment, differencing). Lower than the descriptor
+# minimum on purpose: a reference only has to be interpolatable onto the
+# target grid, it is not itself fitted.
+MIN_REFERENCE_POINTS = 10
+
+
+def check_reference_points(n_points: int, label: str) -> None:
+    """Raise ValueError when a reference spectrum is too short to interpolate."""
+    if n_points < MIN_REFERENCE_POINTS:
+        raise ValueError(f"'{label}': too few overlapping energy points ({n_points}).")
+
 
 # Below this many energy points shared across the selected scans, the
 # descriptor fits (pre-edge, white line, derivative E0) are not meaningful.
@@ -127,7 +143,7 @@ def resolve_edge(
         e0_anchor = None
 
     suggestion = edge_tables.suggest_edge(
-        float(min(energy)), float(max(energy)), e0_ev=e0_anchor)
+        float(np.min(energy)), float(np.max(energy)), e0_ev=e0_anchor)
     if not suggestion["found"]:
         raise ValueError(suggestion["reason"])
 
@@ -154,9 +170,13 @@ CITATIONS = {
         "Wilke, Farges, Petit, Brown & Martin, Am. Mineral. 86, 714-730 "
         "(2001), DOI 10.2138/am-2001-5-612."
     ),
-    "Multi-component white-line families (Ce(IV) doublet, U(VI) satellites)": (
-        "Bugarin, Suarez Orduz & Glatzel, J. Synchrotron Rad. 31 (2024); "
-        "Bes et al., Inorg. Chem. 55, 4260 (2016)."
+    "Ce(IV) L3 final-state doublet (why ln_L3 needs multiple components)": (
+        "Bianconi et al., Phys. Rev. B 35, 806 (1987) — standard Ce L3 XANES "
+        "final-state analysis. See science.tables.edge_shifts.CE_L3."
+    ),
+    "U(VI) M4 satellite structure (why an_L3/an_M need multiple components)": (
+        "Bes et al., Inorg. Chem. 55, 4260 (2016), DOI "
+        "10.1021/acs.inorgchem.6b00014. See science.tables.edge_shifts.U_M4_HERFD."
     ),
     "White-line fit window": None,
     "Minimum overlapping points for a descriptor fit": None,

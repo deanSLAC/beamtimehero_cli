@@ -1,4 +1,8 @@
-"""Moved — session calibration record now lives under ``science/``.
+"""Moved — the session calibration record did NOT go to ``science/``.
+
+It writes JSON to a configured directory, so it is session state rather
+than science (see the rule in ``science/README.md``) and it moved UP a
+layer instead.
 
 This module is a re-export shim kept so existing imports keep working.
 New code should import from:

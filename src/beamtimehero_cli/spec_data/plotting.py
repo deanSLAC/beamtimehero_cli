@@ -518,9 +518,6 @@ def plot_statistics_trend(stats, sample_name=""):
     return fig, summary
 
 
-def fig_to_base64(fig):
-    """Convert a matplotlib figure to a base64-encoded PNG string."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode()
+# fig_to_base64 lives in the science layer; re-exported here because callers
+# have imported it from this module since before the science/ split.
+from beamtimehero_cli.science.plots.scan import fig_to_base64  # noqa: E402,F401

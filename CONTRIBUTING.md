@@ -25,8 +25,25 @@ python -m pytest tests/test_interpretation.py -q     # the science tests
 
 The science tests build synthetic spectra with analytically known ground truth
 (an erf edge + Gaussian pre-edge + Gaussian white line), so every descriptor
-has a right answer to check against. `tests/test_interpretation.py` is the
-model to copy.
+has a right answer to check against. By area:
+
+| Area | Tests |
+|---|---|
+| XAS descriptors & interpretation | `tests/test_interpretation.py`, `tests/test_interpretation_tools.py` |
+| Reduction (counters, reps, normalization) | `tests/test_analysis_xas.py` |
+| EXAFS | `tests/test_analysis_exafs.py` |
+| XRS | `tests/test_xrs.py` |
+| Tool-level science | `tests/test_twocol_and_analysis_leaves.py` |
+
+`tests/test_interpretation.py` is the clearest model for the synthetic-spectrum
+pattern. Note that these files import through the **old** module paths
+(`beamtimehero_cli.interpretation`, `.analysis`) on purpose: that makes the
+suite double as a compatibility check on the re-export shims. **New tests
+should import from `beamtimehero_cli.science.*`.**
+
+One thing the suite does *not* do: it does not pin the policy defaults. Editing
+a number in a `policy.py` leaves the suite green. If you change one, verify the
+effect yourself — and consider adding an assertion for it.
 
 To see the whole science surface at once — every function with its signature,
 what calls it, and what it cites:
@@ -89,7 +106,21 @@ instead — that is the boundary this repo is organized around.
 - **The human-readable tool catalog** is generated, not hand-written:
   `python -m beamtimehero_cli.docgen` regenerates `docs/tool_catalog.html`.
   Regenerate it after catalog changes rather than editing the HTML.
-- **Two directories are currently unrouted** — `generic_data/fitter.py` and
-  `experiment_planning/decisions.py` are not reachable from any tool. They look
-  like the most scientific code in the repo but nothing calls them; don't be
-  misled. Their fate is undecided.
+- **Two files are unrouted** — `generic_data/fitter.py` and
+  `experiment_planning/decisions.py` are not reachable from any tool (the
+  fitter only via `decisions.py`, which has no callers). They look like the
+  most scientific code in the repo; nothing calls them. Their fate is undecided.
+- **Some live science still sits outside `science/`.** `experiment_planning/`
+  is *not* unrouted: `scan_features.py` and `scan_efficiency.py` back the
+  `analyze-convergence` / `analyze-efficiency` / `analyze-per-spot` /
+  `detect-per-scan-drift` tools. They are pure numbers-in/numbers-out and by
+  the rule they belong under `science/`; they have not been moved yet. Same for
+  most of the array-taking plotting in `spec_data/*_plotting.py`. If your change
+  is about scan statistics or plots, look there too.
+
+## Background
+
+`docs/architecture-review.html` is the analysis this layout came out of: why the
+science was hard to find, the full destination map, and a status section listing
+where the implementation diverged from the plan and what is still open. Read it
+if you want the reasoning rather than the rules.

@@ -24,6 +24,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from beamtimehero_cli.science.exafs import policy as _exafs_policy
 from beamtimehero_cli.science.reduce import reps as _reps
 from beamtimehero_cli.science.reduce import artifacts as quality
 from beamtimehero_cli.spec_data import scans
@@ -126,11 +127,7 @@ def load_mu(
 
     combined, dropped = _reps.filter_short_reps(combined)
     combined = combined.dropna()
-    if combined.empty or len(combined) < 20:
-        raise ValueError(
-            f"Too few overlapping energy points across the selected reps "
-            f"({len(combined)}) for EXAFS extraction."
-        )
+    _exafs_policy.check_exafs_points(0 if combined.empty else len(combined))
 
     energy = combined.index.values.astype(float)
     reps = combined.values.T  # (n_scans, n_points)

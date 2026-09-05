@@ -1,8 +1,13 @@
 """The scientific and mathematical core of the beamtimehero toolbelt.
 
 **The rule for everything in this package:** it takes *numbers in* and returns
-*numbers out*. No file paths, no environment variables, no SPEC, no database,
-no argparse.
+*numbers out*. No file paths, no environment variables, no SPEC, no application
+database, no argparse.
+
+The one sanctioned exception is ``xraydb``, whose tabulated edge energies and
+emission lines come from a read-only table bundled with the library. It is a
+constant lookup, not I/O the caller has to arrange — treat it like a physical
+constant. Everything else stays pure.
 
 Corollaries, which double as a routing rule:
 

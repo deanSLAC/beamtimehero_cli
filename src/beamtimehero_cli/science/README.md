@@ -7,7 +7,12 @@ read the toolbelt machinery to work in it.
 ## The one rule
 
 > Everything under `science/` takes **numbers in** and returns **numbers out**.
-> No file paths, no environment variables, no SPEC, no database, no argparse.
+> No file paths, no environment variables, no SPEC, no application database,
+> no argparse.
+
+One sanctioned exception: `xraydb`, whose tabulated edge energies and emission
+lines come from a read-only table shipped inside the library. That is a constant
+lookup, not I/O you have to arrange — treat it like a physical constant.
 
 You can check this from a function's signature alone, which is the point. The
 corollaries double as a routing rule:
@@ -19,8 +24,11 @@ corollaries double as a routing rule:
 | takes arrays and returns a dict of numbers | **here** |
 
 For plotting specifically: a figure function that takes **arrays or a descriptor
-dict** goes in `science/plots/`; one that takes a **file name** goes in
-`spec_data/`.
+dict** belongs in `science/plots/`; one that takes a **file name** belongs in
+`spec_data/`. That is the intent, not yet the state: `science/plots/` holds three
+functions and about fourteen array-taking figures are still in
+`spec_data/exafs_plotting.py`, `spec_data/xrs_plotting.py` and
+`spec_data/plotting.py`. If you are changing a plot, check there first.
 
 ## The layout
 
@@ -58,8 +66,8 @@ science/
 │   ├── reduce.py           crystal summing, Compton background, area norm
 │   ├── descriptors.py
 │   └── interpret.py
-├── fitting/    generic curve fits — beam diagnostics and alignment, NOT spectra
-│   └── similarity.py
+├── fitting/    generic curve fits (only scan-similarity so far)
+│   └── similarity.py     cosine similarity between scans
 └── plots/      figures over arrays / descriptor dicts
     ├── xas.py              annotated descriptor figure
     └── scan.py             generic scan render
@@ -70,8 +78,10 @@ science/
 | You want to change… | Go to |
 |---|---|
 | an edge energy, core-hole width, or edge-shift slope | `tables/` |
+| how edge *auto-detection* scores candidates (tolerances, bonuses) | `tables/edges.py` — see note below |
 | which counter is picked, or how reps are averaged | `reduce/` |
-| how μ(E) is normalized (area, edge-step, MBACK) | `xas/normalize.py` |
+| how μ(E) is normalized for HERFD metrics (area, MBACK, Athena pre/post) | `xas/normalize.py` |
+| the naive per-scan edge-step normalization the generic scan tools use | `reduce/normalize.py` |
 | how E₀ is found, or core-hole re-broadening | `xas/e0.py` |
 | the pre-edge or white-line fit itself | `xas/fits.py` |
 | what goes into the descriptor bundle | `xas/descriptors.py` |
@@ -79,8 +89,9 @@ science/
 | a default window, k-weight, component count, or auto-detection rule | `<technique>/policy.py` |
 | χ(k) extraction, background, or the Fourier transform | `exafs/` |
 | the energy-loss axis, Compton background, or crystal summing | `xrs/` |
-| a knife-edge / aperture / emission-peak fit for alignment | `fitting/` |
-| what a plot looks like | `plots/` |
+| scan-to-scan similarity | `fitting/similarity.py` |
+| a knife-edge / aperture / emission-peak fit | `generic_data/fitter.py` — **not** moved, and unrouted |
+| what a plot looks like | `plots/` — but most plots are still in `spec_data/`, see below |
 
 ## `policy.py` — where the defaults live
 
@@ -95,6 +106,14 @@ here so changing a default is a one-line edit in an obvious file — and so each
 choice can carry the citation that justifies it.
 
 **If you are changing a number, it probably belongs in a `policy.py`.**
+
+Two honest caveats. `xas/`, `exafs/` and `xrs/` each have one; `reduce/` and
+`fitting/` do not, so their defaults still sit next to the code that uses them.
+And edge auto-detection is *split*: `xas/policy.resolve_edge` decides
+the explicit-vs-auto policy, but the scoring weights that pick the winner
+(`_TOL_EV`, `_K_EDGE_BONUS`, `_COMMON_BONUS`, `_AMBIGUITY_MARGIN`) live in
+`tables/edges.py` beside the scoring function. If a detection comes out wrong,
+that is where to look.
 
 ## Conventions
 
@@ -124,10 +143,16 @@ appears by existing.
 reports how it was produced: which normalization, which fit window, which
 baseline model, which calibration. See `xas/descriptors.py` for the pattern.
 
-**Degrade, don't crash.** A fit that fails should return a flag and an
-unchanged spectrum, not raise. Tools call these functions inside an agent loop;
-an exception becomes an opaque failure, a flag becomes something the agent can
-report and work around.
+**Degrade on a bad fit; raise on bad data.** The two halves matter:
+
+- A *fit* that fails returns a flag (`fit_ok`) and an unchanged spectrum rather
+  than raising. Tools call these inside an agent loop, where an exception is an
+  opaque failure but a flag is something the agent can report and work around.
+  `xrs/calibrate.fit_elastic_line` degrading to argmax is the pattern.
+- *Data* that cannot support the analysis at all raises `ValueError` — too few
+  overlapping points, a missing counter, an impossible window. Handlers funnel
+  these into one error path, so don't turn them into flags. See
+  `xas/policy.check_overlap` and `exafs/policy.check_exafs_points`.
 
 ## Moved from
 
