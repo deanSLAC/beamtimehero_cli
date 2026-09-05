@@ -388,7 +388,7 @@ def plot_feature_evolution(file_name, e_min, e_max, statistic="max"):
     position), "integral" (peak area), "min" / "argmin" (dip), "height" (max−min).
     """
     import numpy as np
-    from beamtimehero_cli.experiment_planning.scan_features import (
+    from beamtimehero_cli.science.statistics.features import (
         extract_window_scalar, analyze_scalar_convergence,
     )
 

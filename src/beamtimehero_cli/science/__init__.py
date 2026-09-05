@@ -19,6 +19,7 @@ Organized by technique, then pipeline stage:
 
     tables/    tabulated physics (edge energies, shifts, emission lines)
     reduce/    detector counts -> one clean spectrum (technique-agnostic)
+    statistics/ judging a stack of reps: convergence, efficiency, heterogeneity
     xas/       XANES / HERFD
     exafs/     k-space: chi(k), background, Fourier transform
     xrs/       X-ray Raman on the energy-loss axis

@@ -196,7 +196,7 @@ TOOL_LINEAGE: dict[str, dict] = {
             "Poisson statistical limit, and a terminal verdict "
             "(needs_more / reasonable / marginal / wasteful)."
         ),
-        "python_func": "experiment_planning.scan_efficiency.analyze_scan_efficiency (via spec_data.scans.get_normalized_scan_arrays)",
+        "python_func": "science.statistics.efficiency.analyze_scan_efficiency (via spec_data.scans.get_normalized_scan_arrays)",
         "spec_command": None,
         "output": "JSON: {convergence, cv, poisson_ratio, recommended_n, verdict}",
         "source": "spec_datafile",

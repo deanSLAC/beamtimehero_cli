@@ -35,20 +35,25 @@ PKG_NAME = "beamtimehero_cli"
 GRAPH_ROOTS = ("science", "spec_data", "tool_catalog", "experiment_planning")
 
 # Display order and blurb for the science directories.
-DIR_ORDER = ["tables", "reduce", "xas", "exafs", "xrs", "fitting", "plots"]
+DIR_ORDER = ["tables", "reduce", "statistics", "xas", "exafs", "xrs",
+             "fitting", "plots"]
 DIR_NOTES = {
     "tables": "Tabulated physics. Data, not algorithms — the values most often "
               "corrected or extended, readable without touching any code.",
     "reduce": "Detector counts to one clean spectrum. Technique-agnostic: "
               "nothing here assumes an absorption edge.",
+    "statistics": "Statistics over a stack of repeated scans — convergence, "
+                  "repetition efficiency, spot heterogeneity. Judges a set of "
+                  "reps rather than producing one spectrum.",
     "xas": "XANES / HERFD. Pipeline order: normalize, e0, fits, descriptors, "
            "interpret — with compare for cross-spectrum work.",
     "exafs": "EXAFS k-space: energy/wavenumber conversion, background removal, "
              "Fourier transform into R space.",
     "xrs": "X-ray Raman on the energy-loss axis. Kept apart from xas/ because "
            "the XAS defaults are actively wrong here.",
-    "fitting": "Generic curve fits for beam diagnostics and alignment — not "
-               "spectroscopy.",
+    "fitting": "Generic fitting and similarity helpers — not spectroscopy. "
+               "Only scan-to-scan similarity so far; the knife-edge and "
+               "emission-peak fits have not moved here.",
     "plots": "Figures over arrays and descriptor dicts. A figure that takes a "
              "file name belongs in spec_data/ instead.",
 }

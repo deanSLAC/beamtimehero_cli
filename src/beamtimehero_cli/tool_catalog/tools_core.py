@@ -690,7 +690,7 @@ def t_analyze_convergence(arguments: dict) -> tuple[str, list[str]]:
 
 def t_analyze_efficiency(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.experiment_planning.scan_efficiency import analyze_scan_efficiency
+    from beamtimehero_cli.science.statistics.efficiency import analyze_scan_efficiency
     e_min = arguments.get("e_min")
     e_max = arguments.get("e_max")
     if e_min is None or e_max is None:
@@ -708,7 +708,7 @@ def t_analyze_efficiency(arguments: dict) -> tuple[str, list[str]]:
 
 def t_analyze_feature_evolution(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.experiment_planning.scan_features import (
+    from beamtimehero_cli.science.statistics.features import (
         analyze_feature_evolution,
     )
     file_name = arguments.get("file_name")
@@ -764,10 +764,10 @@ def t_group_scans_by_spot(arguments: dict) -> tuple[str, list[str]]:
 
 def t_analyze_per_spot(arguments: dict) -> tuple[str, list[str]]:
     images_b64: list[str] = []
-    from beamtimehero_cli.experiment_planning.scan_efficiency import (
+    from beamtimehero_cli.science.statistics.efficiency import (
         analyze_scan_efficiency,
     )
-    from beamtimehero_cli.experiment_planning.scan_features import (
+    from beamtimehero_cli.science.statistics.features import (
         heterogeneity_f_statistic,
     )
     file_name = arguments.get("file_name")
