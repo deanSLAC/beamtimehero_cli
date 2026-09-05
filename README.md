@@ -12,8 +12,8 @@ Provides:
 - **Action logging** — every command writes to a local SQLite audit trail.
 - **Reference docs** — `beamtimehero ref <name>` to fetch bundled procedure docs.
 
-This is the generic CLI surface. It does not include experiment-planning,
-orchestrator, or agent-harness concepts — those live in consuming projects.
+This is the generic CLI surface. It does not include orchestrator or
+agent-harness concepts — those live in consuming projects.
 
 ## Install
 

@@ -19,9 +19,21 @@ you do not need permission to change it.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -e '.[dev]'
-python -m pytest                          # ~20s
+python -m pytest                          # 309 tests, ~25s
 python -m pytest tests/test_interpretation.py -q     # the science tests
 ```
+
+Python 3.11 or newer for development — that is what CI gates on. `pyproject.toml`
+declares a 3.9 floor, but nothing has ever exercised it; CI runs a 3.9 job that
+reports without blocking, so if you see it red the fix is to raise the declared
+floor, not to chase it. Two optional extras exist and are not in `dev`: install `.[slack]`
+if you are touching `notify/slack.py`, `.[postgres]` for
+`spec_data/postgres_backend.py`. Both are imported lazily, so a bare install
+runs fine without them.
+
+Run every command in this file from the repository root — the `docgen` entry
+points read and write paths relative to the working directory. `open` is
+macOS; substitute `xdg-open` or your browser elsewhere.
 
 The science tests build synthetic spectra with analytically known ground truth
 (an erf edge + Gaussian pre-edge + Gaussian white line), so every descriptor
@@ -88,7 +100,9 @@ contribution.
 ## What to raise rather than edit
 
 Three places define what the *agents* see. Changing them changes what several
-separate applications see, so open an issue or ask first:
+separate applications see, so open an issue
+([deanSLAC/beamtimehero_cli/issues](https://github.com/deanSLAC/beamtimehero_cli/issues))
+or ask a maintainer first:
 
 | File | Why |
 |---|---|
@@ -102,6 +116,51 @@ branch.** Adding a brand-new tool is fine — it is additive.
 
 Changing what a tool *computes* is not on this list. That is science, and it
 belongs in `science/`.
+
+## Adding a tool
+
+Additive, so it needs no permission — but it does touch two of the three files
+above, and there are five steps rather than the obvious two:
+
+1. **`tool_catalog/lineage.py`** — a `TOOL_LINEAGE` entry: `long_description`,
+   `python_func` (the call chain, so an operator can trace a call to its
+   implementation), `spec_command` (`None` if it never touches SPEC), `output`,
+   `source`. This feeds `docs/tool_catalog.html` *and* the fallback
+   classification rules in `categorize.py`, so a tool without one is invisible
+   on the catalog page and lands in whatever branch the default rule picks.
+2. **`tool_catalog/definitions.py`** — the JSON schema the agent sees. Read
+   every scientific default from the relevant `policy.py` rather than writing
+   the literal (see `_exafs_policy.DEFAULT_KMIN` in the `fourier_transform_chi`
+   entry); `tests/test_science_policy.py` asserts the schema and the science
+   function agree, and a literal that merely *matches* fails it.
+3. **`tool_catalog/tools_core.py`** — a handler `t_<name>(arguments)` returning
+   `(text, images_b64)`, registered in `_HANDLERS`. `_build_dispatch()` keys it
+   by `(tree, name)`, so the same leaf name can exist under two branches with
+   different handlers. Keep it thin, per the layering rule below: unpack, ask
+   `spec_data` for arrays, call one science function, serialise. `ValueError`
+   from `science/` is the one error path — let it propagate to the handler's
+   JSON error envelope rather than catching it deeper.
+4. **`tool_catalog/categorize.py`** — only if the tool needs a branch the
+   precedence rules would not give it. Prefer a `"tree"` field on the
+   definition over an entry in `CATEGORY_OVERRIDES`.
+5. **`python -m beamtimehero_cli.docgen`** to regenerate `docs/tool_catalog.html`.
+
+`tests/test_tool_catalog_wiring.py` checks that every definition has both a
+handler and a lineage entry, so a half-wired tool fails the suite rather than
+returning "Unknown tool" at runtime.
+
+## Commits
+
+Commit subjects follow `area: lowercase imperative summary` — `science:`,
+`tests:`, `docs:`, `spec_data:`, `exafs:` — with a body explaining why, not
+what. Two content rules matter more than the format:
+
+- Changing a `policy.py` constant means updating its pinned value in
+  `tests/test_science_policy.py` **in the same commit**. That diff is the
+  record of which physics default moved and when.
+- Changing a default that *isn't* pinned — the ones in `reduce/`, `statistics/`
+  and `fitting/` — means saying so in the commit message yourself, since no
+  test will say it for you.
 
 ## Layering
 
@@ -138,6 +197,12 @@ instead — that is the boundary this repo is organized around.
 ## Background
 
 `docs/architecture-review.html` is the analysis this layout came out of: why the
-science was hard to find, the full destination map, and a status section listing
-where the implementation diverged from the plan and what is still open. Read it
-if you want the reasoning rather than the rules.
+science was hard to find, the full destination map, and a status section
+recording where the implementation diverged from the plan. Read it if you want
+the reasoning rather than the rules.
+
+`docs/xrs-analysis-branch-plan.md` is the domain background for the XRS branch.
+Its "why XRS can't reuse the XAS path" table is worth reading before you touch
+anything under `science/xrs/` — the XAS defaults are not merely suboptimal on
+the energy-loss axis, they are wrong by construction. Its module paths predate
+the `science/` move; the header maps them.

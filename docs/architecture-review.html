@@ -170,11 +170,11 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
     iterate on without reading the toolbelt machinery first.
   </p>
   <div class="statstrip">
-    <div class="stat"><b>35</b><span>modules under science/</span></div>
-    <div class="stat"><b>7</b><span>directories, by technique</span></div>
+    <div class="stat"><b>32</b><span>modules under science/</span></div>
+    <div class="stat"><b>8</b><span>directories, by technique</span></div>
     <div class="stat"><b>19</b><span>policy call sites de-duplicated</span></div>
     <div class="stat"><b>0</b><span>upward imports from science/</span></div>
-    <div class="stat"><b>218</b><span>tests green</span></div>
+    <div class="stat"><b>309</b><span>tests green</span></div>
     <button id="themetoggle">◐ theme</button>
   </div>
 </header>
@@ -189,7 +189,10 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
 <div class="card">
   <h4>Done <span class="tag t-sci">218 tests green</span></h4>
   <p>
-    <code>science/</code> exists with 35 modules across the seven directories.
+    <code>science/</code> exists with 32 modules across the eight directories
+    — counting implementation modules, not the <code>__init__.py</code> files,
+    which is the basis <code>docs/science_index.html</code> reports and the one
+    to cross-check against.
     Every old module path is a re-export shim, so the five consuming apps are
     untouched — and because the test suite still imports through the old paths,
     those 218 passing tests are themselves the shim-compatibility check
@@ -246,16 +249,19 @@ footer { margin-top: 70px; padding-top: 16px; border-top: 3px double var(--rule-
   </p>
   <p>
     <strong>3. <code>fitting/</code> holds only <code>similarity.py</code></strong>
-    — <code>generic_data/fitter.py</code> stays unrouted, as asked. The
-    directory exists so the eventual home is obvious. Review follow-up:
+    — the beam-diagnostic fits in <code>generic_data/fitter.py</code> stayed put.
+    Review follow-up:
     <code>xrs/policy.py</code> was missing at first, so the Compton background
     default stayed as nine literals and the science-side default was dead code;
     it now exists and all nine sites read from it.
   </p>
   <p>
-    <strong>4. <code>plots/</code> holds <code>xas.py</code> and
-    <code>scan.py</code></strong>. The <code>spec_data/*_plotting.py</code>
-    split was an open question and was left alone.
+    <strong>4. <code>plots/</code> initially held only <code>xas.py</code> and
+    <code>scan.py</code></strong>; the <code>spec_data/*_plotting.py</code> split
+    was left as an open question at the time. It has since landed —
+    <code>plots/</code> now also holds <code>exafs.py</code> and
+    <code>xrs.py</code>, and the six figures that load a scan by file name are
+    all that remain in <code>spec_data/plotting.py</code>.
   </p>
   <p>
     <strong>5. <code>calibration_store.py</code> moved up a layer</strong> to
@@ -818,36 +824,6 @@ wl_comps = arguments.get(<span class="k">"white_line_components"</span>) <span c
   technique directories, then <code>policy.py</code> last since it's the only step
   that changes behaviour boundaries rather than just locations.
 </p>
-
-<hr class="sep">
-
-<h3>Open questions</h3>
-<ul class="tight">
-  <li>
-    <strong><code>generic_data/fitter.py</code> and
-    <code>experiment_planning/decisions.py</code> — in or out?</strong> Together
-    that's about 1,600 lines of fitting and decision logic that nothing currently
-    imports (<code>fitter.py</code> is reachable only through
-    <code>decisions.py</code>, which has no callers). It's also the most
-    scientific-looking code in the repo, so it's where a new collaborator will
-    gravitate first. Either wire it up under <code>science/fitting/</code> or
-    delete it — leaving it in place unrouted will cost every newcomer a day.
-  </li>
-  <li>
-    <strong>Does <code>experiment_planning/</code> belong under
-    <code>science/</code>?</strong> <code>scan_features.py</code> and
-    <code>scan_efficiency.py</code> are live and array-shaped, so by the rule in
-    §02 they qualify — probably as <code>science/planning/</code>. But the README
-    currently claims experiment-planning lives in consuming projects, so the
-    intent here needs settling before it gets a home.
-  </li>
-  <li>
-    <strong>Should <code>spec_data/*_plotting.py</code> split?</strong> Those files
-    mix file-name-taking figures with array-taking figures. The rule sorts them
-    cleanly, but it's a handful of functions to reassign and worth confirming
-    you want the churn.
-  </li>
-</ul>
 
 <footer>
   Prepared from the working tree at <code class="mono">c23f8ac</code>. Function

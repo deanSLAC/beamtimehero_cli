@@ -52,8 +52,7 @@ DIR_NOTES = {
     "xrs": "X-ray Raman on the energy-loss axis. Kept apart from xas/ because "
            "the XAS defaults are actively wrong here.",
     "fitting": "Generic fitting and similarity helpers — not spectroscopy. "
-               "Only scan-to-scan similarity so far; the knife-edge and "
-               "emission-peak fits have not moved here.",
+               "Scan-to-scan similarity so far.",
     "plots": "Figures over arrays and descriptor dicts. A figure that takes a "
              "file name belongs in spec_data/ instead.",
 }
@@ -559,7 +558,7 @@ def render() -> str:
         for what, ref in m["citations"].items():
             rows.append((what, ref, _short(dotted)))
     for what, ref, where in sorted(rows, key=lambda r: (r[1] is None, r[2], r[0])):
-        cell = (f'<span class="gap">needs a reference</span>' if ref is None
+        cell = ('<span class="gap">needs a reference</span>' if ref is None
                 else _esc(ref))
         A(f"<tr><td>{_esc(what)}</td><td>{cell}</td>"
           f'<td class="mono">{_esc(where)}</td></tr>')

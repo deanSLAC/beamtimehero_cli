@@ -99,7 +99,7 @@ science/
 | χ(k) extraction, background, or the Fourier transform | `exafs/` |
 | the energy-loss axis, Compton background, or crystal summing | `xrs/` |
 | scan-to-scan similarity | `fitting/similarity.py` |
-| a knife-edge / aperture / emission-peak fit | `generic_data/fitter.py` — **not** moved, and unrouted |
+| a knife-edge / aperture / emission-peak fit | `generic_data/fitter.py` |
 | what an EXAFS k/R-space figure looks like | `plots/exafs.py` |
 | what an XRS energy-loss figure looks like | `plots/xrs.py` |
 | what a XANES descriptor / comparison figure looks like | `plots/xas.py` |

@@ -1,7 +1,21 @@
 # The XRS (X-ray Raman) analysis branch
 
 **Status: Phases 0–2 implemented and tested; Phase 3 items are documented
-extensions below.** **Scope:** the tools so the agent can process, average,
+extensions below.**
+
+> **Module paths below are pre-`science/`.** The scientific core was gathered
+> into `src/beamtimehero_cli/science/` after this was written, so read:
+>
+> | Written here | Now |
+> |---|---|
+> | `analysis/xrs.py` | `science/xrs/{calibrate,reduce}.py` |
+> | `interpretation/xrs_edges.py` | `science/tables/xrs_edges.py` |
+> | `interpretation/xrs_descriptors.py` | `science/xrs/descriptors.py` |
+> | `interpretation/xrs_interpret.py` | `science/xrs/interpret.py` |
+> | `spec_data/xrs_plotting.py` | `science/plots/xrs.py` |
+>
+> The old paths still import — they are re-export shims. The physics, the
+> phase table, and the reasoning below are unaffected. **Scope:** the tools so the agent can process, average,
 overlap, and *interpret* X-ray Raman (XRS / non-resonant inelastic X-ray
 scattering, NRIXS) spectra — a technique our XAS/HERFD/XES tools handled
 incorrectly by construction.
