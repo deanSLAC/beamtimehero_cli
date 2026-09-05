@@ -1,8 +1,16 @@
 # Action log
 
-Every `beamtimehero` invocation is recorded to a local SQLite file
-(default: `$BEAMLINE_TOOLS_DB_PATH`, falling back to
-`data/beamline_tools.db` relative to the package).
+Every `beamtimehero` invocation is recorded to a local SQLite file.
+`BEAMLINE_TOOLS_DB_PATH` sets it outright. Otherwise it is
+`beamline_tools.db` inside the writable state directory, which resolves in
+this order:
+
+1. `BEAMTIMEHERO_DATA_DIR`, if set;
+2. `<repo>/data`, when running from a source checkout;
+3. `$XDG_DATA_HOME/beamtimehero`, else `~/.local/share/beamtimehero`.
+
+An installed package therefore writes to your user data directory, never
+inside the installation itself.
 
 Tables:
 

@@ -7,14 +7,18 @@ how you wire one up.
 ## The two modes
 
 **Progressive discovery (default).** Give the agent one tool that runs
-`beamtimehero <args>` and let it explore with `--help`. This is what
-`TOOLS_MODE=cli` — the default — means, and it is the right choice for a
-general coding agent or anything with shell access. The agent sees a small
-surface and drills down only where it needs to.
+`beamtimehero <args>` and let it explore with `--help`. This is the right
+choice for a general coding agent or anything with shell access: the agent sees
+a small surface and drills down only where it needs to.
 
 **Full schema registration.** Hand the agent all 131 tool schemas up front.
 Right for a purpose-built harness where the agent should not spend turns on
-discovery. Consuming applications set `TOOLS_MODE` to switch to this.
+discovery.
+
+Which mode you are in is a property of your harness, not of this CLI. The
+`TOOLS_MODE` variable exists and is read by some consuming applications, but
+nothing in `beamtimehero_cli` itself reads it — setting it here changes
+nothing.
 
 Get the schemas with:
 
@@ -36,21 +40,36 @@ Four properties, all deliberate. They are the reason you can let a model drive
 this without supervising every call:
 
 - **Nothing reaches a beamline unless you say so.** `SPEC_MOCK` defaults to
-  `1`. Every SPEC command answers from the mock backend until you set it to
-  `0`. An agent exploring on a laptop cannot move a motor.
+  `1`, and every SPEC command answers from the mock backend. An agent exploring
+  on a laptop cannot move a motor. Note the check is `SPEC_MOCK == "1"`
+  exactly: `0` disables the mock, but so does any other value, including an
+  empty string and a YAML `true` that arrives as `"True"`. Quote it in config
+  files.
 - **Mutations require a reason.** Every leaf under `spec-write` requires
   `--justification`, and refuses to run without it.
 - **Everything is recorded.** Each invocation is written to a SQLite action
   log — argv, tool, justification, exit code, latency, stdout tail. See
   `beamtimehero ref action-log`.
-- **Failures come back as JSON, not tracebacks.** A bad argument returns
-  `{"ok": false, "error": "argparse: ..."}` on stdout. An agent can read and
-  correct that; a stack trace on stderr it usually cannot.
+- **Argument errors come back as JSON.** A bad flag returns
+  `{"ok": false, "error": "argparse: ..."}` on stdout and exits 2. An agent can
+  read and correct that; a stack trace on stderr it usually cannot.
+
+  Be precise about the limit here, because it is the one property that does not
+  hold all the way down. A tool that *runs* and then fails is different: it
+  returns a plain-text line on stdout — `Tool error (tool/read_file): Path is
+  outside scan directory: ...` — writes a traceback to stderr, and **exits 0**.
+  So parse tool results as text, not JSON, and do not use the exit code to
+  decide whether a tool succeeded. The message itself is written to be
+  actionable; the envelope around it is not yet uniform.
 
 ## Mode 1: subprocess
 
-Register one tool. The schema ships in the package as
-`tool_catalog.CLI_TOOL_DEFINITION`, or write your own equivalent:
+Register one tool. A ready-made schema ships in the package as
+`tool_catalog.CLI_TOOL_DEFINITION` — note it is a **list of one entry**, in the
+same `{"type": "function", "function": {...}}` shape as `catalog` output, so
+you can concatenate it with other tools directly. Import it rather than copying
+it; the description below is illustrative and the shipped wording is kept in
+sync with the parser:
 
 ```json
 {
@@ -77,8 +96,10 @@ beamtimehero spec-file --help                    # leaves on one branch
 beamtimehero spec-file extract-xas-descriptors --help
 ```
 
-Point the agent at `docs/tool_catalog.html` if it can read files — that is the
-whole surface on one page, with parameters and backend lineage.
+If the agent can read files and you are working in a source checkout, point it
+at `docs/tool_catalog.html` — the whole surface on one page, with parameters
+and backend lineage. That file is not shipped in the wheel; from an installed
+package, `beamtimehero catalog` is the same content as JSON.
 
 ### From Claude Code
 
@@ -132,18 +153,23 @@ exception.
 
 ## What an agent will hit first
 
-**No data.** With nothing configured, the scan and log tools report that no
-directory is set:
+**No data.** There is no bundled sample data in this package. Set
+`BL_SCAN_DIR` to a real scan root (or `SSRL_COLLECTOR_DIR` for SSRL Data
+Collector files) before expecting the scan tools to return anything. The SPEC
+tools work regardless, from the mock backend.
+
+`list_scans` says so explicitly, which is the behaviour to rely on:
 
 ```json
 {"scans": [], "error": "No scan directory configured: BL_SCAN_DIR=... ",
  "scan_dir_configured": false}
 ```
 
-There is no bundled sample data in this package. Set `BL_SCAN_DIR` to a real
-scan root (or `SSRL_COLLECTOR_DIR` for SSRL Data Collector files) before
-expecting scan tools to return anything. The SPEC tools work regardless, from
-the mock backend.
+The others are less helpful, and an agent needs to know it: with nothing
+configured `list-logs` returns `[]`, `read-scan` returns `Scan not found.`,
+`list-files` returns `No files found in scan directory.` — none of which
+distinguishes "no data here" from "not configured". If a read comes back empty,
+check `BL_SCAN_DIR` before concluding the beamline has no scans.
 
 **Configuration.** Everything resolves from environment variables.
 `config.example.yaml` in the repository lists all of them, grouped by what you
@@ -174,3 +200,41 @@ beamtimehero spec-file list-scans --limit 5           # needs BL_SCAN_DIR
 Every one of those runs with no configuration. The last returns the
 "not configured" report until you set a scan directory, which is the honest
 answer rather than an empty list.
+
+A healthy install answers the third and fourth like this:
+
+```
+$ beamtimehero catalog --names-only | head -3
+abort_current_scan
+align_beamline
+align_crystals
+
+$ SPEC_MOCK=1 beamtimehero spec-read get-beam-status
+{
+  "ok": true,
+  "kind": "read",
+  "result": {
+    "spear_current_ma": 485.2,
+    "beamline_state": "OPEN",
+    "gap_owned": true,
+    "beam_good": true,
+    "reason": null,
+    "raw": "{'spear_current': 485.2, 'bl_state': 'OPEN', 'gap_owned': 1}"
+  },
+  "output": "{'spear_current': 485.2, 'bl_state': 'OPEN', 'gap_owned': 1}"
+}
+```
+
+Those numbers are the mock backend's fixed values, so they are what you should
+see verbatim on a working install with no configuration.
+
+## When it doesn't work
+
+| Symptom | Cause |
+|---|---|
+| `command not found: beamtimehero` | The virtualenv isn't active, or `pip install -e .` was run against a different interpreter. |
+| `{"ok": false, "error": "argparse: invalid choice: ..."}` | The leaf is on a different branch. `beamtimehero catalog --names-only` lists every tool; note the CLI spells them with hyphens (`list-scans`) while tool descriptions cite them with underscores (`list_scans`). |
+| A read returns `[]` or `Scan not found.` | Almost always `BL_SCAN_DIR` unset rather than genuinely empty — see "No data" above. |
+| `Tool error (...)` on stdout, exit 0 | The tool ran and failed. Read the message; the exit code will not tell you. |
+| Every SPEC call takes ~2 s | `SPEC_EVAL_URL` points at a sandbox that isn't running. The mock path probes it first and waits out the timeout. Unset it for pure off-beamline use. |
+| A `spec-write` leaf says "Only in phase ..." | Descriptive only. Phase gating lives in the consuming application, not this package; the phase is recorded in the audit log and nothing here blocks the call. |

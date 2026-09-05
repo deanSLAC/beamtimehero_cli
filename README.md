@@ -17,9 +17,20 @@ agent-harness concepts — those live in consuming projects.
 
 ## Install
 
+Not on PyPI — install from a clone, into a virtualenv:
+
 ```bash
+git clone https://github.com/deanSLAC/beamtimehero_cli
+cd beamtimehero_cli
+python3 -m venv venv && source venv/bin/activate
 pip install -e .
 ```
+
+Python 3.11 or newer. `pyproject.toml` declares a 3.9 floor, but nothing
+exercises it and CI gates on 3.11/3.13 — on an older interpreter the
+scientific stack (silx, lmfit, xraydb) may not resolve at all.
+
+Commands below assume the repository root as the working directory.
 
 ## Quick start
 
@@ -47,9 +58,9 @@ This CLI exists to be called by an LLM agent, so that path is documented
 first-class: **[`beamtimehero ref agent-integration`](src/beamtimehero_cli/refdocs/defaults/agent-integration.md)**.
 The short version — two modes:
 
-**Progressive discovery** (the default, `TOOLS_MODE=cli`). Give the agent one
-tool that runs `beamtimehero <args>` and let it explore with `--help`. Right
-for a general coding agent or anything with shell access.
+**Progressive discovery** (the default). Give the agent one tool that runs
+`beamtimehero <args>` and let it explore with `--help`. Right for a general
+coding agent or anything with shell access.
 
 **Full schema registration.** Export every tool schema and register them up
 front:
@@ -67,33 +78,18 @@ from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS, execute_tool
 text, images_b64 = execute_tool(("spec-file",), "list_scans", {"limit": 5})
 ```
 
-Four properties make this safe to hand a model, and they are why the surface
-looks the way it does: SPEC is mocked by default; every `spec-write` leaf
-requires `--justification`; every invocation lands in a SQLite audit log; and
-argument errors come back as `{"ok": false, "error": ...}` on stdout rather
-than a traceback on stderr. The refdoc covers all of it, plus a
-`.claude/settings.json` allowlist for Claude Code.
+Four properties make this safe to hand a model — SPEC mocked by default,
+`--justification` required on every mutation, a SQLite audit log, and JSON
+argument errors. The refdoc states each one precisely, including where the
+last of them stops holding, and carries a Claude Code allowlist.
 
 ## CLI surface
 
-```
-beamtimehero ref [--list | <name>]      # bundled reference docs
-beamtimehero catalog [--tree|--profile] # export the tool schemas as JSON
-beamtimehero tool <command>             # non-SPEC tools (data, logs, plots)
-beamtimehero db <command>               # action-log queries
-beamtimehero spec-read <command>        # SPEC-bound reads (no mutation)
-beamtimehero spec-write <command>       # SPEC-bound mutations (--justification required)
-beamtimehero spec-file <command>        # scan reads + XAS/HERFD analysis over SPEC files on disk
-beamtimehero xrs <command>              # X-ray Raman analysis (energy-loss axis)
-beamtimehero exafs <command>            # EXAFS k-space analysis (chi(k), Fourier transforms)
-beamtimehero s3df <command>             # S3DF deployment backend (Postgres + pickled scans)
-beamtimehero s3df psql <command>        # read-only SQL against the S3DF Postgres
-beamtimehero slack <command>            # Slack messaging
-```
-
-Discover leaves with `--help` at any depth. Agent profiles (curated alias
-views over the catalog, e.g. `bl-aligner`) are listed with
-`beamtimehero --list-profiles`.
+Eleven top-level trees, each with its own leaves. `beamtimehero --help` prints
+them with one-line descriptions, and `--help` works at any depth;
+`beamtimehero ref getting-started` is the same list as a page you can hand to
+someone. Agent profiles — curated alias views over the catalog, e.g.
+`bl-aligner` — are listed with `beamtimehero --list-profiles`.
 
 ## Tool catalog (human-readable)
 
@@ -102,9 +98,12 @@ generated one-page catalog — the full CLI tree plus an A–Z list of every too
 with descriptions, parameters, and backend lineage:
 
 ```bash
-open docs/tool_catalog.html                 # view
+open docs/tool_catalog.html                 # view (source checkout only)
 python -m beamtimehero_cli.docgen           # regenerate after catalog changes
 ```
+
+That page is not shipped in the wheel, so from an installed package use
+`beamtimehero catalog` instead — same content, JSON rather than HTML.
 
 ## Science index (for contributors)
 
@@ -121,6 +120,35 @@ python -m beamtimehero_cli.docgen_science       # regenerate
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before your first change, and
 `docs/architecture-review.html` for why the layout is the way it is.
+
+## Scientific defaults and how they are pinned
+
+The scientific *choices* — fit windows, k-weight, glitch and convergence
+thresholds, how an absorber is guessed — live in a `policy.py` per technique,
+separate from the computations that use them. Five modules have one: `xas/`,
+`exafs/`, `xrs/`, `reduce/` and `statistics/`.
+
+Every constant in those five is pinned by `tests/test_science_policy.py`, which
+also asserts that the science functions and the agent-facing JSON schema read
+*from* policy rather than from a literal that merely agrees with it. Three
+consequences, and they are the point rather than an obstacle:
+
+- **Changing a constant fails the test.** Update its expected value in the same
+  commit. That diff is the record of which physics default moved, and when.
+- **Adding a new policy constant fails the test**, with a message naming it.
+  Pin it.
+- **Adding a sixth `policy.py` fails the test.** Discovery globs
+  `science/*/policy.py`, but the suite also asserts the exact set of modules,
+  so add yours to that set as well as pinning its constants.
+
+What this does **not** cover: numeric defaults that sit inline in a technique
+module instead of its `policy.py`. Changing one leaves the suite green, so say
+so in the commit message yourself. As of now that is the FT grid and
+first-shell window in `exafs/fourier.py`, the MBACK polynomial order and gap
+widths in `xas/normalize.py`, the outlier cuts in `xrs/reduce.py`, and the
+`0.95`/`0.99` similarity thresholds in `fitting/similarity.py`. None is less
+material than the pinned ones — if you find yourself editing one, promoting it
+into a `policy.py` is the better move.
 
 ## Configuration
 
@@ -139,21 +167,20 @@ export BEAMTIMEHERO_CONFIG=$PWD/config.yaml
 ```
 
 Anything already exported wins over the file, so a checked-in baseline plus
-per-host overrides works. A `.env` in the working directory is also loaded
-automatically. `tests/test_config_surface.py` asserts every variable the code
-reads appears in that file, so it cannot drift.
+per-host overrides works. A `.env` file is also loaded, but it is resolved
+relative to the installed package rather than your shell's working directory —
+in a source checkout that means `<repo>/.env`, and a `.env` sitting wherever
+you happened to run the command is **not** picked up. Use
+`BEAMTIMEHERO_CONFIG` or plain `export` if you need per-directory settings.
+`tests/test_config_surface.py` asserts every variable the code reads appears
+in `config.example.yaml`, so that list cannot drift.
 
-The handful you are most likely to need:
-
-| Var | Default | Meaning |
-|---|---|---|
-| `SPEC_MOCK` | `1` | Route SPEC commands to the mock backend. Set to `0` only on the beamline host. |
-| `BL_SCAN_DIR` | `/data/fifteen` | Scan file root. Auto-detects the most recent `YYYY-mm_*` subdir if the root itself isn't dated. |
-| `SSRL_COLLECTOR_DIR` | _(unset)_ | Directory of SSRL "EXAFS Data Collector" ASCII files. When set, the scan and EXAFS tools read that format. |
-| `BL_LOGS_DIR` | `/usr/local/lib/spec.log/logfiles` | Control log directory. |
-| `BEAMTIMEHERO_DATA_DIR` | `<repo>/data`, else `~/.local/share/beamtimehero` | Writable state: the action log, camera captures. A source checkout keeps it in the repo; an installed package uses the XDG user-data dir. |
-| `BEAMTIMEHERO_PLOTS_DIR` | `./data/tool_plots` | Where tool PNGs are written. Relative to the working directory by default. |
-| `BEAMTIMEHERO_CONFIG` | _(unset)_ | Path to a YAML config whose `env:` mapping is applied. |
+Rather than restate them here, read the file — it is grouped by task, so the
+three or four you need for off-beamline use sit together at the top.
+`SPEC_MOCK` is the one to know: it defaults to `1`, and **only the exact string
+`1` keeps the mock on.** Any other value routes to a real beamline, so if you
+set it in YAML, quote it (`SPEC_MOCK: "1"`) — an unquoted `true` becomes the
+string `"True"` and goes live.
 
 ## Extending the CLI
 

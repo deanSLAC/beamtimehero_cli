@@ -4,11 +4,14 @@
 
 ## Checklist
 
-- [ ] `python -m pytest` passes locally.
+- [ ] `python -m pytest` and `ruff check src tests` pass locally — CI runs
+      both, lint first.
 - [ ] If a `policy.py` constant moved, its pinned value in
       `tests/test_science_policy.py` is updated in this same commit.
-- [ ] If an *unpinned* default moved (`reduce/`, `statistics/`, `fitting/`),
-      the commit message says so — no test will.
+- [ ] If an *unpinned* default moved — the inline ones in `exafs/fourier.py`,
+      `xas/normalize.py`, `xrs/reduce.py`, `fitting/similarity.py` — the commit
+      message says so, because no test will. (`reduce/` and `statistics/` are
+      pinned; they belong to the box above.)
 - [ ] If a published method was added or changed, its `CITATIONS` entry is
       recorded (`None` is a valid, tracked answer; inventing a reference is not).
 - [ ] Generated docs regenerated if the source they describe changed:

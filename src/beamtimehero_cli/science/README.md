@@ -74,7 +74,7 @@ science/
 │   ├── descriptors.py
 │   └── interpret.py
 ├── fitting/    generic curve fits (only scan-similarity so far)
-│   └── similarity.py     cosine similarity between scans
+│   └── similarity.py     cosine similarity between scans (unpinned 0.95/0.99)
 └── plots/      figures over arrays / descriptor dicts
     ├── xas.py              descriptor figure, alignment / difference / LCF
     ├── exafs.py            chi(k) extraction, |chi(R)|, k-space overlay
@@ -120,20 +120,19 @@ here so changing a default is a one-line edit in an obvious file — and so each
 choice can carry the citation that justifies it.
 
 **If you are changing a number, it probably belongs in a `policy.py`.**
+`xas/`, `exafs/`, `xrs/`, `reduce/` and `statistics/` each have one.
+`fitting/` does not, though it should: `similarity.py` hard-codes the `0.99`
+convergence target and the `0.95` outlier cut that decide its verdict, and its
+own `CITATIONS` lists them as an unfilled gap.
 
-`xas/`, `exafs/`, `xrs/`, `reduce/` and `statistics/` each have one, and the
-pinning test finds them by globbing `science/*/policy.py` — so adding a sixth
-puts its constants under guard automatically. `fitting/` has none yet because
-it holds no chosen numbers.
+Every constant in those five modules is pinned by a test, and changing one has
+a required second step. The full contract — what is guarded, what is not, and
+what you must update in the same commit — lives in
+**[README.md, "Scientific defaults and how they are pinned"](../../../README.md#scientific-defaults-and-how-they-are-pinned)**.
+Read it before you change a number; it is the one thing here worth leaving
+`science/` for.
 
-One honest caveat. A default that lives inline in a technique module rather
-than in that technique's `policy.py` is still unguarded: the FT grid and
-first-shell window in `exafs/fourier.py`, the MBACK polynomial order and gap
-widths in `xas/normalize.py`, the outlier cuts in `xrs/reduce.py`. Changing one
-leaves the suite green. They are no less material than the pinned ones — if you
-find yourself editing one, promoting it is the better move.
-
-And edge auto-detection is *split*: `xas/policy.resolve_edge` decides
+Edge auto-detection is *split*: `xas/policy.resolve_edge` decides
 the explicit-vs-auto policy, but the scoring weights that pick the winner
 (`_TOL_EV`, `_K_EDGE_BONUS`, `_COMMON_BONUS`, `_AMBIGUITY_MARGIN`) live in
 `tables/edges.py` beside the scoring function. If a detection comes out wrong,
@@ -141,8 +140,18 @@ that is where to look.
 
 ## Conventions
 
-**Citations.** Every module that implements published methods declares a
-module-level `CITATIONS` dict mapping *what it applies to* to the reference:
+**Counter and normalization are inputs, not inferences.** Before touching
+anything that averages, compares or scores repeated scans, read
+`beamtimehero ref counter-selection`. Which channel carries the signal and how
+it is normalized must come from the caller and be echoed back in the output;
+guessing returns a confident, wrong number instead of an error. `reduce/` is
+where that convention is implemented.
+
+**Citations.** Every module here that defines functions declares a
+module-level `CITATIONS` dict — `tests/test_docgen_science.py` requires it, and
+`CITATIONS = {}` is the valid answer for a module that implements no published
+method. Where there is one, the dict maps *what it applies to* to the
+reference:
 
 ```python
 CITATIONS = {
@@ -161,16 +170,15 @@ its reference; if you recognise one of the gaps, fill it in.
 citations, and — computed from a call graph — **which tools reach it**. Check
 that before changing a function; it answers "what depends on this" without
 tracing imports. It is generated from the source tree, so a new function
-appears by existing.
+appears by existing — but the copy in `docs/` is a checked-in artifact, so
+regenerate and commit it in the same change. `tests/test_docs_fresh.py`
+compares it byte for byte.
 
-**The defaults are pinned.** `tests/test_science_policy.py` asserts the current
-value of every constant in every `policy.py`, and asserts that the science
-signatures and the agent-facing JSON schema both read from policy rather than
-from a literal. If you change a default, that test fails — update the expected
-value in the same commit. The diff on that file is the record of which physics
-defaults moved and when. It also fails if you add a *new* policy constant
-without pinning it. Note the limit stated above: it covers the three
-`policy.py` modules only.
+**The defaults are pinned.** `tests/test_science_policy.py` guards every
+constant in all five `policy.py` modules. Changing one fails that test by
+design, and there is a required second step. See
+[README.md](../../../README.md#scientific-defaults-and-how-they-are-pinned)
+for the contract, including which defaults it does *not* cover.
 
 **The boundary is enforced.** `tests/test_science_boundary.py` asserts the one
 rule mechanically, per file: nothing here may import from the rest of

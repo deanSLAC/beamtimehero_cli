@@ -8,8 +8,14 @@ determines what is safe to change and what needs a conversation first.
 
 **Work in [`src/beamtimehero_cli/science/`](src/beamtimehero_cli/science/README.md).**
 That directory has its own README with the layout, the one rule it follows, and
-a "you want to change X → go to Y" table. Start there; you should not need to
-read anything else in the repo.
+a "you want to change X → go to Y" table. Start there.
+
+One thing to read alongside it: **`beamtimehero ref counter-selection`**. Which
+detector counter is the signal, and how it gets normalized, are experiment
+inputs the pipeline must not infer on its own — getting either wrong returns a
+confident, wrong number rather than an error, and it has already cost a real
+experiment. That refdoc is binding on every multi-scan tool
+(`average_scans`, `analyze_convergence`, `analyze_efficiency`, and the rest).
 
 Everything inside `science/` is fair game — normalization, fits, descriptors,
 interpretation logic, the tabulated physics, the defaults in each
@@ -19,8 +25,9 @@ you do not need permission to change it.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -e '.[dev]'
-python -m pytest                          # 309 tests, ~25s
+python -m pytest                          # 653 tests, ~25s
 python -m pytest tests/test_interpretation.py -q     # the science tests
+ruff check src tests                      # CI gates on this too, before pytest
 ```
 
 Python 3.11 or newer for development — that is what CI gates on. `pyproject.toml`
@@ -55,34 +62,16 @@ pattern. Note that these files import through the **old** module paths
 suite double as a compatibility check on the re-export shims. **New tests
 should import from `beamtimehero_cli.science.*`.**
 
-The scientific defaults *are* pinned. `tests/test_science_policy.py` holds the
-current value of every constant in every `policy.py`, and checks that the
-science functions and the agent-facing tool schema both read from policy rather
-than from a literal that merely agrees with it. So:
+The scientific defaults are pinned, and changing one has a required second
+step. That contract — which defaults are guarded, which are not, and what you
+must update in the same commit — is in **[README.md, "Scientific defaults and
+how they are pinned"](README.md#scientific-defaults-and-how-they-are-pinned)**.
+Read it before you change a number.
 
-- Changing a constant in `xas/`, `exafs/` or `xrs/` `policy.py` **will** fail
-  that test. That is the point — update the expected value in the same commit,
-  and the diff becomes the record of which physics default moved and why.
-- Adding a *new* policy constant without pinning it also fails, with a message
-  naming the constant.
-
-`reduce/` and `statistics/` have a `policy.py` too now, so the glitch
-threshold, the convergence and drift thresholds, and the repetition-efficiency
-threshold are pinned alongside the technique defaults. The test discovers
-`science/*/policy.py` by globbing rather than naming modules, so a new one is
-covered by existing.
-
-One edge remains: several numeric defaults still sit inline in the *technique*
-modules without being in that technique's `policy.py` — the FT grid in
-`exafs/fourier.py` (`nfft`, `kstep`, `rmax_out`), the first-shell search window,
-the MBACK polynomial order and gaps in `xas/normalize.py`, the outlier-rejection
-cuts in `xrs/reduce.py`. Nothing fails if you change those. If you touch one,
-say so in the commit message yourself, and consider promoting it.
-
-Two further tests, `tests/test_science_boundary.py`, assert that `science/`
-imports nothing else from `beamtimehero_cli` and reads no environment,
-filesystem or network. If you need data loaded, take it as an argument and let
-`spec_data/` load it.
+`tests/test_science_boundary.py` asserts the `science/` boundary per file,
+both halves: it imports nothing else from `beamtimehero_cli`, and reads no
+environment, filesystem or network. If you need data loaded, take it as an
+argument and let `spec_data/` load it.
 
 To see the whole science surface at once — every function with its signature,
 what calls it, and what it cites:
@@ -127,28 +116,43 @@ belongs in `science/`.
 Additive, so it needs no permission — but it does touch two of the three files
 above, and there are five steps rather than the obvious two:
 
-1. **`tool_catalog/lineage.py`** — a `TOOL_LINEAGE` entry: `long_description`,
-   `python_func` (the call chain, so an operator can trace a call to its
-   implementation), `spec_command` (`None` if it never touches SPEC), `output`,
-   `source`. This feeds `docs/tool_catalog.html` *and* the fallback
-   classification rules in `categorize.py`, so a tool without one is invisible
-   on the catalog page and lands in whatever branch the default rule picks.
+1. **`tool_catalog/lineage.py`** — a `TOOL_LINEAGE` entry. Seven fields, and
+   `tests/test_tool_catalog_wiring.py` requires six of them to be non-empty:
+   `long_description`, `python_func` (the call chain, so an operator can trace
+   a call to its implementation), `output`, `source`, `source_detail`, and a
+   `depends_on` key (which may be an empty list). `spec_command` is the
+   seventh — `None` if it never touches SPEC. This feeds
+   `docs/tool_catalog.html` *and* the fallback classification rules in
+   `categorize.py`, so a tool without one is invisible on the catalog page and
+   lands in whatever branch the default rule picks.
 2. **`tool_catalog/definitions.py`** — the JSON schema the agent sees. Read
    every scientific default from the relevant `policy.py` rather than writing
    the literal (see `_exafs_policy.DEFAULT_KMIN` in the `fourier_transform_chi`
    entry); `tests/test_science_policy.py` asserts the schema and the science
    function agree, and a literal that merely *matches* fails it.
 3. **`tool_catalog/tools_core.py`** — a handler `t_<name>(arguments)` returning
-   `(text, images_b64)`, registered in `_HANDLERS`. `_build_dispatch()` keys it
-   by `(tree, name)`, so the same leaf name can exist under two branches with
-   different handlers. Keep it thin, per the layering rule below: unpack, ask
-   `spec_data` for arrays, call one science function, serialise. `ValueError`
-   from `science/` is the one error path — let it propagate to the handler's
-   JSON error envelope rather than catching it deeper.
+   `(text, images_b64)`. Register it in `_HANDLERS`, keyed by the bare tool
+   name. To give the *same* leaf name a different handler on another branch,
+   register that one in `_BRANCH_HANDLERS` instead, keyed by the full tree path
+   — `("s3df", "list_scans")`, or `("s3df", "psql", "execute_readonly_sql")` for
+   a nested branch. `_build_dispatch()` consults `_BRANCH_HANDLERS` first, so it
+   wins over the flat entry. Keep it thin, per the layering rule below:
+   unpack, ask `spec_data` for arrays, call one science function, serialise.
+   `ValueError` from `science/` is the one error path — let it propagate to
+   the handler's JSON error envelope rather than catching it deeper.
 4. **`tool_catalog/categorize.py`** — only if the tool needs a branch the
    precedence rules would not give it. Prefer a `"tree"` field on the
    definition over an entry in `CATEGORY_OVERRIDES`.
-5. **`python -m beamtimehero_cli.docgen`** to regenerate `docs/tool_catalog.html`.
+5. **Regenerate both pages and commit them.** `tests/test_docs_fresh.py`
+   byte-compares each against its generator:
+
+   ```bash
+   python -m beamtimehero_cli.docgen           # docs/tool_catalog.html
+   python -m beamtimehero_cli.docgen_science   # docs/science_index.html
+   ```
+
+   The second is easy to forget and just as easy to trip over: if your handler
+   reaches any `science/` function, that function's "used by" column changes.
 
 `tests/test_tool_catalog_wiring.py` checks all of this: every definition has a
 handler and a complete lineage entry, every `source` is a documented enum
@@ -164,9 +168,11 @@ what. Two content rules matter more than the format:
 - Changing a `policy.py` constant means updating its pinned value in
   `tests/test_science_policy.py` **in the same commit**. That diff is the
   record of which physics default moved and when.
-- Changing a default that *isn't* pinned — the ones in `reduce/`, `statistics/`
-  and `fitting/` — means saying so in the commit message yourself, since no
-  test will say it for you.
+- Changing a default that *isn't* pinned — the inline ones in
+  `exafs/fourier.py`, `xas/normalize.py`, `xrs/reduce.py` and
+  `fitting/similarity.py` — means saying so in the commit message yourself,
+  since no test will say it for you. (`reduce/` and `statistics/` *are* pinned;
+  they go in the bullet above.)
 
 ## Layering
 
@@ -191,9 +197,11 @@ instead — that is the boundary this repo is organized around.
   beamline unless you set it to `0`.
 - **Every mutating tool requires `--justification`** and writes to a SQLite
   audit trail. That is deliberate; don't route around it.
-- **The human-readable tool catalog** is generated, not hand-written:
-  `python -m beamtimehero_cli.docgen` regenerates `docs/tool_catalog.html`.
-  Regenerate it after catalog changes rather than editing the HTML.
+- **Both HTML pages under `docs/` are generated, not hand-written.**
+  `python -m beamtimehero_cli.docgen` writes `docs/tool_catalog.html`;
+  `python -m beamtimehero_cli.docgen_science` writes `docs/science_index.html`.
+  Regenerate and commit them rather than editing the HTML —
+  `tests/test_docs_fresh.py` compares both byte for byte.
 - **The plotting split is done.** Figures that take arrays or a descriptor
   dict live in `science/plots/` (`exafs.py`, `xrs.py`, `xas.py`, `scan.py`).
   The six that load a scan by file name stay in `spec_data/plotting.py`. If

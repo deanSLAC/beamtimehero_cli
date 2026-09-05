@@ -6,6 +6,16 @@
 `plot_running_average`, `plot_first_half_vs_second_half`,
 `plot_averaged_scans`).**
 
+> **Module paths below are pre-`science/`.** The scientific core was gathered
+> into `src/beamtimehero_cli/science/` after this was written, so read:
+>
+> | Written here | Now |
+> |---|---|
+> | `analysis.xas.pick_active_counter` | `science/reduce/counters.py` |
+> | `analysis.xas.edge_step_normalize` | `science/reduce/normalize.py` |
+>
+> The old import paths still work as re-export shims.
+
 These tools decide *two* things on the user's behalf that they must never
 decide silently for a technique they weren't built for:
 

@@ -13,8 +13,11 @@
 #          beamtimehero --help
 #
 #   2. Read it as documentation and set the variables however your deployment
-#      already does — a Kubernetes manifest, a systemd unit, a `.env` file in
-#      the working directory (loaded automatically), or plain `export`.
+#      already does — a Kubernetes manifest, a systemd unit, or plain `export`.
+#
+#      A `.env` file is loaded automatically, but it is resolved relative to
+#      the installed package, not your shell's working directory: in a source
+#      checkout that means <repo>/.env. A .env elsewhere is NOT picked up.
 #
 # Anything already exported wins over this file, so it is safe to keep a
 # checked-in baseline and override per host.
