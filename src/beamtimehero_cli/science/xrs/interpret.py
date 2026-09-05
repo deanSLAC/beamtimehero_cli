@@ -250,3 +250,21 @@ def summarize_xrs_chemistry(descriptors: dict, calibration: dict | None = None,
         "narration": narration,
         "descriptors": descriptors,
     }
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "q-dependence as a dipole vs monopole/quadrupole discriminator": (
+        "Low q approximates the dipole (s->p, XANES-like) limit; intensity "
+        "rising with q indicates monopole/quadrupole turn-on. Sahle 2015; "
+        "Mizuno-Ohmura."
+    ),
+    "Energy-loss oxidation-state readout": None,
+    "XRS reference comparison (linear combination on the loss axis)": None,
+    "Resolution-aware quality assessment": None,
+}

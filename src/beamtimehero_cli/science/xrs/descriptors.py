@@ -154,3 +154,15 @@ def extract_xrs_descriptors(
     }
     arrays = {"loss": loss, "intensity": intensity}
     return descriptors, arrays
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Edge-onset location on the energy-loss axis": None,
+    "Feature SNR against a pre-edge window": None,
+}

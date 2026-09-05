@@ -25,10 +25,13 @@ actually *wired*, in both directions:
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
 from beamtimehero_cli.science.exafs import policy as exafs_policy
+from beamtimehero_cli.science.reduce import policy as reduce_policy
+from beamtimehero_cli.science.statistics import policy as stats_policy
 from beamtimehero_cli.science.xas import policy as xas_policy
 from beamtimehero_cli.science.xrs import policy as xrs_policy
 from beamtimehero_cli.tool_catalog import TOOL_DEFINITIONS
@@ -105,6 +108,34 @@ def test_xrs_background_and_regime():
 
 
 # --------------------------------------------------------------------------
+# Reduction — artifact gating and repetition averaging
+# --------------------------------------------------------------------------
+
+def test_reduce_artifact_and_rep_defaults():
+    assert reduce_policy.DEFAULT_GLITCH_Z_THRESHOLD == 8.0
+    assert reduce_policy.DEFAULT_GLITCH_WINDOW == 7
+    # medfilt needs an odd kernel; an even default would be silently bumped
+    assert reduce_policy.DEFAULT_GLITCH_WINDOW % 2 == 1
+    assert reduce_policy.DEFAULT_SATURATION_REL_TOL == 1e-4
+    assert reduce_policy.DEFAULT_NOISE_BASELINE_FRAC == 0.1
+    assert reduce_policy.DEFAULT_MIN_REP_SPAN_FRAC == 0.8
+    assert 0.0 < reduce_policy.DEFAULT_MIN_REP_SPAN_FRAC <= 1.0
+
+
+# --------------------------------------------------------------------------
+# Statistics — convergence and repetition efficiency
+# --------------------------------------------------------------------------
+
+def test_statistics_convergence_defaults():
+    assert stats_policy.DEFAULT_SEM_THRESHOLD_FRAC == 0.01
+    assert stats_policy.DEFAULT_DRIFT_THRESHOLD_FRAC == 0.01
+    assert stats_policy.DEFAULT_EFFICIENCY_THRESHOLD == 0.05
+    assert stats_policy.DEFAULT_MIN_RECOMMENDED_SCANS == 2
+    # Two reps is the fewest that permits any scatter estimate at all.
+    assert stats_policy.DEFAULT_MIN_RECOMMENDED_SCANS >= 2
+
+
+# --------------------------------------------------------------------------
 # Wiring — the part that actually broke twice during review
 # --------------------------------------------------------------------------
 
@@ -127,6 +158,29 @@ def test_science_signatures_read_from_policy():
     assert _default_of(background.autobk_lite, "rbkg") is exafs_policy.DEFAULT_RBKG
     assert (_default_of(xrs_reduce.subtract_compton_background, "model")
             is xrs_policy.DEFAULT_BACKGROUND_MODEL)
+
+    from beamtimehero_cli.science.reduce import artifacts, reps
+    from beamtimehero_cli.science.statistics import efficiency, features
+
+    assert (_default_of(artifacts.detect_glitches, "z_threshold")
+            is reduce_policy.DEFAULT_GLITCH_Z_THRESHOLD)
+    assert (_default_of(artifacts.detect_glitches, "window")
+            is reduce_policy.DEFAULT_GLITCH_WINDOW)
+    assert (_default_of(artifacts.detect_saturation, "rel_tol")
+            is reduce_policy.DEFAULT_SATURATION_REL_TOL)
+    assert (_default_of(reps.estimate_per_rep_noise, "baseline_frac")
+            is reduce_policy.DEFAULT_NOISE_BASELINE_FRAC)
+    assert (_default_of(reps.filter_short_reps, "min_span_frac")
+            is reduce_policy.DEFAULT_MIN_REP_SPAN_FRAC)
+    assert (_default_of(efficiency.analyze_scan_efficiency, "efficiency_threshold")
+            is stats_policy.DEFAULT_EFFICIENCY_THRESHOLD)
+    assert (_default_of(efficiency.analyze_scan_efficiency, "min_recommended_scans")
+            is stats_policy.DEFAULT_MIN_RECOMMENDED_SCANS)
+    for fn in (features.analyze_scalar_convergence, features.analyze_feature_evolution):
+        assert (_default_of(fn, "sem_threshold_frac")
+                is stats_policy.DEFAULT_SEM_THRESHOLD_FRAC)
+        assert (_default_of(fn, "drift_threshold_frac")
+                is stats_policy.DEFAULT_DRIFT_THRESHOLD_FRAC)
 
 
 def _schema(tool_name):
@@ -154,15 +208,45 @@ def test_agent_schema_reads_from_policy():
     assert bg["model"]["enum"] == list(xrs_policy.BACKGROUND_MODELS)
 
 
+def _policy_modules():
+    """Every ``science/*/policy.py``, discovered rather than listed.
+
+    This used to name three modules. That made the guard itself the blind spot
+    it was written to remove: adding a fourth policy module left its constants
+    unpinned and the suite green, which is the exact failure mode this file
+    exists to prevent. Now a new policy module is covered by existing.
+    """
+    import importlib
+
+    import beamtimehero_cli.science as science
+
+    root = Path(science.__file__).parent
+    mods = [
+        importlib.import_module(f"beamtimehero_cli.science.{path.parent.name}.policy")
+        for path in sorted(root.glob("*/policy.py"))
+    ]
+    assert mods, "no science/*/policy.py found — has the layout moved?"
+    return mods
+
+
+def test_policy_module_discovery_covers_every_technique():
+    """A policy module that discovery misses is a policy module nobody pins."""
+    found = {m.__name__.split(".")[-2] for m in _policy_modules()}
+    assert found == {"exafs", "reduce", "statistics", "xas", "xrs"}, (
+        f"policy modules changed: {sorted(found)}. If a package gained or lost "
+        "one, update this set and add or remove its pinned values above."
+    )
+
+
 def test_every_policy_constant_is_pinned_here():
     """Catch a *new* policy constant that nobody pinned.
 
     Without this, adding a default to a policy module reintroduces exactly the
     silent-change problem this file exists to prevent.
     """
-    source = __import__("pathlib").Path(__file__).read_text()
+    source = Path(__file__).read_text()
     missing = []
-    for mod in (xas_policy, exafs_policy, xrs_policy):
+    for mod in _policy_modules():
         for name in dir(mod):
             if name.startswith("_") or name == "CITATIONS":
                 continue

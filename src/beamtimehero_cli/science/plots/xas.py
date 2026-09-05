@@ -219,3 +219,14 @@ def plot_lcf_fit(energy, target, fit, residual, components, title=""):
     fig.tight_layout()
 
     return fig, f"LCF fit: {frac_text}."
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+# CITATIONS = {} deliberately: these render results computed in
+# ``science/xas/``, and carry no method of their own to attribute.
+CITATIONS = {}

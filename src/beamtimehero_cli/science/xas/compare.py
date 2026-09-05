@@ -195,3 +195,16 @@ def compare_to_references(axis, intensity, references: list[dict]) -> dict:
         "residual_norm": round(float(resid), 6),
         "n_points_used": int(A.shape[0]),
     }
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "E0 registration before cross-spectrum comparison": None,
+    "Difference spectra on a common energy grid": None,
+    "Linear combination fitting (LCF) of reference spectra": None,
+}

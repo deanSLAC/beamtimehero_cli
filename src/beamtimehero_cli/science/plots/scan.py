@@ -171,3 +171,15 @@ def plot_statistics_trend(stats, sample_name=""):
         f"final CV={cv_arr[-1]:.2f}%, final SEM={sem_arr[-1]:.2f}%."
     )
     return fig, summary
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+# CITATIONS = {} deliberately: a generic scan render and a statistics trend
+# carry no scientific method of their own. The statistics they display are
+# attributed in ``science/statistics/``.
+CITATIONS = {}

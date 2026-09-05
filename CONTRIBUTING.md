@@ -66,13 +66,18 @@ than from a literal that merely agrees with it. So:
 - Adding a *new* policy constant without pinning it also fails, with a message
   naming the constant.
 
-Know the edge of that guarantee: only those three packages have a `policy.py`,
-and the test only reaches into those three. Defaults in `reduce/`,
-`statistics/` and `fitting/` still sit inline as keyword arguments — the
-glitch-detection `z_threshold`, the convergence `sem_threshold_frac`, the
-`efficiency_threshold` — and **nothing fails if you change one.** They are as
-scientifically material as the pinned ones. If you touch one, say so in the
-commit message yourself, and consider promoting it into a `policy.py`.
+`reduce/` and `statistics/` have a `policy.py` too now, so the glitch
+threshold, the convergence and drift thresholds, and the repetition-efficiency
+threshold are pinned alongside the technique defaults. The test discovers
+`science/*/policy.py` by globbing rather than naming modules, so a new one is
+covered by existing.
+
+One edge remains: several numeric defaults still sit inline in the *technique*
+modules without being in that technique's `policy.py` — the FT grid in
+`exafs/fourier.py` (`nfft`, `kstep`, `rmax_out`), the first-shell search window,
+the MBACK polynomial order and gaps in `xas/normalize.py`, the outlier-rejection
+cuts in `xrs/reduce.py`. Nothing fails if you change those. If you touch one,
+say so in the commit message yourself, and consider promoting it.
 
 Two further tests, `tests/test_science_boundary.py`, assert that `science/`
 imports nothing else from `beamtimehero_cli` and reads no environment,

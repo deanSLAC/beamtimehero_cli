@@ -122,3 +122,18 @@ def counter_selection_warning(df: pd.DataFrame, chosen: str) -> str | None:
         f"likely the real signal. Pass counter='{best_sib}' explicitly if this is "
         f"XRS or any non-edge technique. See `beamtimehero ref counter-selection`."
     )
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Active-counter selection by fractional modulation": None,
+    "Flat-channel (dark detector) warning heuristic": (
+        "Local BL15-2 convention, not a published method: see "
+        "`beamtimehero ref counter-selection`."
+    ),
+}

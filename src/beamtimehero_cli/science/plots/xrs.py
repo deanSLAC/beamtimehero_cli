@@ -132,3 +132,8 @@ def plot_crystal_sum(loss, channels, summed, keep, labels=None):
     ax.grid(alpha=0.3)
     fig.tight_layout()
     return fig
+
+
+# CITATIONS = {} deliberately: these render results computed in
+# ``science/xrs/``, and carry no method of their own to attribute.
+CITATIONS = {}

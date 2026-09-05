@@ -47,6 +47,33 @@ def test_citations_are_collected_and_gaps_flagged():
     assert any(v and "Wilke" in v for v in cites.values())
 
 
+def test_every_science_module_declares_citations():
+    """An absent CITATIONS dict must not be quieter than an empty one.
+
+    ``science/README.md`` says every module implementing published methods
+    declares a module-level ``CITATIONS`` dict, and the index turns ``None``
+    values into a visible to-do list. But a *missing* dict contributed nothing
+    to that list, so the two states read identically from the outside while
+    meaning opposite things — "nothing to attribute" and "nobody looked".
+
+    ``{}`` is a valid answer, and the modules that use it say why in a comment
+    above it: ``science/plots/*`` render results computed elsewhere. What is
+    not valid is silence.
+    """
+    data = dg.scan()
+    missing = sorted(
+        dotted for dotted, m in data["modules"].items()
+        if m["is_science"] and m["functions"] and not m["declares_citations"]
+    )
+    assert not missing, (
+        "science modules with no CITATIONS dict: " + ", ".join(missing) + ".\n"
+        "Add one — `None` is the honest value for a method you have not "
+        "attributed, and an empty dict is right for a module that implements "
+        "no method of its own. See the Conventions section of "
+        "science/README.md."
+    )
+
+
 def test_render_is_self_contained_html():
     page = dg.render()
     assert page.startswith("<!DOCTYPE html>")

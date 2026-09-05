@@ -18,6 +18,11 @@ from __future__ import annotations
 import numpy as np
 from typing import Any
 
+from beamtimehero_cli.science.statistics.policy import (
+    DEFAULT_DRIFT_THRESHOLD_FRAC,
+    DEFAULT_SEM_THRESHOLD_FRAC,
+)
+
 VALID_STATISTICS = {"max", "min", "mean", "median", "integral", "argmax", "argmin", "height"}
 
 
@@ -113,8 +118,8 @@ def extract_window_scalar(
 
 def analyze_scalar_convergence(
     per_rep_values: list[float],
-    sem_threshold_frac: float = 0.01,
-    drift_threshold_frac: float = 0.01,
+    sem_threshold_frac: float = DEFAULT_SEM_THRESHOLD_FRAC,
+    drift_threshold_frac: float = DEFAULT_DRIFT_THRESHOLD_FRAC,
 ) -> dict[str, Any]:
     """Decide whether a 1D per-rep scalar trace has converged.
 
@@ -214,8 +219,8 @@ def analyze_feature_evolution(
     e_min: float,
     e_max: float,
     statistic: str = "max",
-    sem_threshold_frac: float = 0.01,
-    drift_threshold_frac: float = 0.01,
+    sem_threshold_frac: float = DEFAULT_SEM_THRESHOLD_FRAC,
+    drift_threshold_frac: float = DEFAULT_DRIFT_THRESHOLD_FRAC,
 ) -> dict[str, Any]:
     """Convenience: extract the per-rep scalar over the window and run
     convergence analysis on it. Single call answering "has feature X

@@ -112,3 +112,17 @@ def normalize_series(
         i0_safe = np.where(i0 == 0, 1.0, i0)
         signal = signal / i0_safe
     return energy, signal
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    # Deliberately naive — the rigorous normalizations, with their references,
+    # are in science/xas/normalize.py.
+    "Naive per-scan edge-step normalization": None,
+    "Monitor (I0) division": None,
+}

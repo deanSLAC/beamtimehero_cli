@@ -105,3 +105,15 @@ def analyze_scan_quality(scan_data: list[list[float]]) -> dict[str, Any]:
         "standard_error_of_mean": [round(v, 8) for v in sem_values],
         "summary": " ".join(summary_parts),
     }
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Cosine similarity as a scan-to-scan agreement metric": None,
+    "Similarity thresholds for the scan-quality verdict": None,
+}

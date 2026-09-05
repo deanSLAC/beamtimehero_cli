@@ -8,13 +8,18 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from beamtimehero_cli.science.reduce.policy import (
+    DEFAULT_MIN_REP_SPAN_FRAC,
+    DEFAULT_NOISE_BASELINE_FRAC,
+)
+
 
 # ---------------------------------------------------------------------------
 # Per-rep noise estimation (used by inverse-variance averaging)
 # ---------------------------------------------------------------------------
 
 def estimate_per_rep_noise(
-    combined: pd.DataFrame, baseline_frac: float = 0.10,
+    combined: pd.DataFrame, baseline_frac: float = DEFAULT_NOISE_BASELINE_FRAC,
 ) -> np.ndarray:
     """Estimate per-rep noise sigma from the std of the post-edge plateau.
 
@@ -81,7 +86,7 @@ def average_reps(
 # ---------------------------------------------------------------------------
 
 def filter_short_reps(
-    combined: pd.DataFrame, min_span_frac: float = 0.8,
+    combined: pd.DataFrame, min_span_frac: float = DEFAULT_MIN_REP_SPAN_FRAC,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Drop rep columns whose covered energy span is a fraction of the rest.
 
@@ -109,3 +114,16 @@ def filter_short_reps(
         return combined, []
     dropped = [c for c in combined.columns if c not in keep]
     return combined[keep], dropped
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Inverse-variance weighting for repetition averaging": None,
+    "Post-edge-plateau standard deviation as the per-rep noise estimate": None,
+    "Aborted-rep rejection by covered energy span": None,
+}

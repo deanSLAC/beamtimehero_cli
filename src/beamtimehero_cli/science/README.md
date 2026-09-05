@@ -49,10 +49,12 @@ science/
 │   ├── normalize.py        per-scan monitor / edge-step normalization
 │   ├── reps.py             averaging and filtering across repeated scans
 │   ├── deadtime.py         ICR-based non-paralyzable correction
-│   └── artifacts.py        glitch, saturation, self-absorption flags
+│   ├── artifacts.py        glitch, saturation, self-absorption flags
+│   └── policy.py           ★ glitch/saturation thresholds, rep-averaging cuts
 ├── statistics/ judging a stack of reps — converged? enough? heterogeneous?
 │   ├── features.py         per-rep window scalar, running mean/SEM, F-statistic
-│   └── efficiency.py       CV, Poisson limit, optimal scan count
+│   ├── efficiency.py       CV, Poisson limit, optimal scan count
+│   └── policy.py           ★ SEM/drift convergence and efficiency thresholds
 ├── xas/        XANES / HERFD
 │   ├── normalize.py        area (Bugarin & Glatzel), MBACK, Athena-style pre/post
 │   ├── e0.py               edge position, core-hole re-broadening
@@ -119,12 +121,18 @@ choice can carry the citation that justifies it.
 
 **If you are changing a number, it probably belongs in a `policy.py`.**
 
-Two honest caveats. `xas/`, `exafs/` and `xrs/` each have one; `reduce/`,
-`statistics/` and `fitting/` do not, so their defaults still sit next to the
-code that uses them — and because the pinning test only walks the three
-`policy.py` modules, **those defaults are unguarded**: changing
-`z_threshold`, `sem_threshold_frac` or `efficiency_threshold` leaves the suite
-green. They are no less material than the pinned ones.
+`xas/`, `exafs/`, `xrs/`, `reduce/` and `statistics/` each have one, and the
+pinning test finds them by globbing `science/*/policy.py` — so adding a sixth
+puts its constants under guard automatically. `fitting/` has none yet because
+it holds no chosen numbers.
+
+One honest caveat. A default that lives inline in a technique module rather
+than in that technique's `policy.py` is still unguarded: the FT grid and
+first-shell window in `exafs/fourier.py`, the MBACK polynomial order and gap
+widths in `xas/normalize.py`, the outlier cuts in `xrs/reduce.py`. Changing one
+leaves the suite green. They are no less material than the pinned ones — if you
+find yourself editing one, promoting it is the better move.
+
 And edge auto-detection is *split*: `xas/policy.resolve_edge` decides
 the explicit-vs-auto policy, but the scoring weights that pick the winner
 (`_TOL_EV`, `_K_EDGE_BONUS`, `_COMMON_BONUS`, `_AMBIGUITY_MARGIN`) live in

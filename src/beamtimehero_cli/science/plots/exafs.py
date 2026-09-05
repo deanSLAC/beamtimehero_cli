@@ -71,3 +71,8 @@ def plot_chi_overlay(spectra, kweight, title):
     ax.grid(alpha=0.3)
     fig.tight_layout()
     return fig
+
+
+# CITATIONS = {} deliberately: these render results computed in
+# ``science/exafs/``, and carry no method of their own to attribute.
+CITATIONS = {}

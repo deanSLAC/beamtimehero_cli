@@ -149,6 +149,7 @@ def scan() -> dict:
                         "private": n.name.startswith("_"),
                         "lineno": n.lineno,
                     }
+            _cites, _declares = _citations(dotted)
             modules[dotted] = {
                 "dotted": dotted,
                 "rel": str(path.relative_to(PKG)),
@@ -159,7 +160,8 @@ def scan() -> dict:
                     for t in n.targets
                     if isinstance(t, ast.Name) and t.id.isupper()
                 ],
-                "citations": _citations(dotted),
+                "citations": _cites,
+                "declares_citations": _declares,
                 "is_science": dotted.startswith(f"{PKG_NAME}.science"),
             }
 
@@ -208,15 +210,23 @@ def _resolve_reexports(graph, modules, trees):
     return {fix(k): {fix(v) for v in vs} for k, vs in graph.items()}
 
 
-def _citations(dotted: str) -> dict:
-    """Import the module and read its CITATIONS dict (source of truth)."""
+def _citations(dotted: str) -> tuple[dict, bool]:
+    """Import the module and read its CITATIONS dict (source of truth).
+
+    Returns ``(citations, declares)``. The flag matters: an absent dict and an
+    empty one both yield ``{}``, but they mean opposite things — "nobody
+    looked" versus "nothing here to attribute". Only the flag can tell them
+    apart, and ``tests/test_docgen_science.py`` needs the difference.
+    """
     try:
         import importlib
         mod = importlib.import_module(dotted)
     except Exception:  # pragma: no cover — a broken module has no citations
-        return {}
+        return {}, False
     c = getattr(mod, "CITATIONS", None)
-    return dict(c) if isinstance(c, dict) else {}
+    if not isinstance(c, dict):
+        return {}, False
+    return dict(c), True
 
 
 def _call_graph(modules: dict, trees: dict) -> dict[tuple[str, str], set]:

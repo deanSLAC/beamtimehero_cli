@@ -14,12 +14,16 @@ import warnings
 from typing import Any
 
 from beamtimehero_cli.science.fitting.similarity import analyze_scan_quality
+from beamtimehero_cli.science.statistics.policy import (
+    DEFAULT_EFFICIENCY_THRESHOLD,
+    DEFAULT_MIN_RECOMMENDED_SCANS,
+)
 
 
 def analyze_scan_efficiency(
     scan_data: list[list[float]],
-    efficiency_threshold: float = 0.05,
-    min_recommended_scans: int = 2,
+    efficiency_threshold: float = DEFAULT_EFFICIENCY_THRESHOLD,
+    min_recommended_scans: int = DEFAULT_MIN_RECOMMENDED_SCANS,
     raw_counts_per_point: list[list[float]] | None = None,
 ) -> dict[str, Any]:
     """

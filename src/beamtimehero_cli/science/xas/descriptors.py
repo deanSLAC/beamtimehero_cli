@@ -235,3 +235,15 @@ def extract_descriptors(
         "flags": flags,
     }
     return descriptors, arrays
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Descriptor bundle composition (which numbers a verdict may use)": None,
+    "Theil-Sen slope and Kendall tau for per-scan descriptor trends": None,
+}

@@ -717,3 +717,25 @@ def summarize_chemistry(descriptors: dict, calibration: dict) -> dict:
         "flags": sorted(set(oxidation["flags"]) | set(coordination["flags"])),
         "narration": " ".join(s for s in sentences if s),
     }
+
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Fe K pre-edge centroid on the CII axis": cal.WILKE_2001_FE_PRE_EDGE["source"],
+    "3d K-edge shift-per-valence reasoning": cal.GENERIC_EDGE_SHIFT["source"],
+    "Ce L3 doublet oxidation readout": cal.CE_L3["source"],
+    "U M4 HERFD valence readout": cal.U_M4_HERFD["source"],
+    "5d L3 white-line intensity trend": cal.L3_WHITE_LINE_TREND["source"],
+    "Pre-edge intensity as a coordination-geometry indicator":
+        cal.WILKE_2001_FE_PRE_EDGE["intensity_brackets"]["note"],
+    # The verdict machinery itself — how evidence is weighed, when a
+    # confidence is degraded, which flags veto a conclusion — is this
+    # project's own construction, not a published scheme.
+    "Confidence degradation and flag-veto scheme": None,
+    "Calibration-domain gating (conventional vs HERFD broadening)": None,
+}

@@ -10,12 +10,18 @@ from __future__ import annotations
 import numpy as np
 from scipy.signal import medfilt
 
+from beamtimehero_cli.science.reduce.policy import (
+    DEFAULT_GLITCH_WINDOW,
+    DEFAULT_GLITCH_Z_THRESHOLD,
+    DEFAULT_SATURATION_REL_TOL,
+)
+
 
 def detect_glitches(
     energy: np.ndarray,
     mu: np.ndarray,
-    z_threshold: float = 8.0,
-    window: int = 7,
+    z_threshold: float = DEFAULT_GLITCH_Z_THRESHOLD,
+    window: int = DEFAULT_GLITCH_WINDOW,
 ) -> np.ndarray:
     """Boolean mask of monochromator-glitch-like spikes.
 
@@ -53,7 +59,9 @@ def interpolate_over_mask(
     return out
 
 
-def detect_saturation(mu: np.ndarray, rel_tol: float = 1e-4) -> dict:
+def detect_saturation(
+    mu: np.ndarray, rel_tol: float = DEFAULT_SATURATION_REL_TOL,
+) -> dict:
     """Flat-top check: many consecutive points pinned at the maximum.
 
     A flat-topped white line is the signature of detector saturation /
