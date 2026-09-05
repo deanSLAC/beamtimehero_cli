@@ -48,6 +48,9 @@ science/
 │   ├── reps.py             averaging and filtering across repeated scans
 │   ├── deadtime.py         ICR-based non-paralyzable correction
 │   └── artifacts.py        glitch, saturation, self-absorption flags
+├── statistics/ judging a stack of reps — converged? enough? heterogeneous?
+│   ├── features.py         per-rep window scalar, running mean/SEM, F-statistic
+│   └── efficiency.py       CV, Poisson limit, optimal scan count
 ├── xas/        XANES / HERFD
 │   ├── normalize.py        area (Bugarin & Glatzel), MBACK, Athena-style pre/post
 │   ├── e0.py               edge position, core-hole re-broadening
@@ -80,6 +83,8 @@ science/
 | an edge energy, core-hole width, or edge-shift slope | `tables/` |
 | how edge *auto-detection* scores candidates (tolerances, bonuses) | `tables/edges.py` — see note below |
 | which counter is picked, or how reps are averaged | `reduce/` |
+| whether a scan series has converged, or how many reps are enough | `statistics/` |
+| how sample-spot heterogeneity is judged | `statistics/features.py` |
 | how μ(E) is normalized for HERFD metrics (area, MBACK, Athena pre/post) | `xas/normalize.py` |
 | the naive per-scan edge-step normalization the generic scan tools use | `reduce/normalize.py` |
 | how E₀ is found, or core-hole re-broadening | `xas/e0.py` |
@@ -107,8 +112,9 @@ choice can carry the citation that justifies it.
 
 **If you are changing a number, it probably belongs in a `policy.py`.**
 
-Two honest caveats. `xas/`, `exafs/` and `xrs/` each have one; `reduce/` and
-`fitting/` do not, so their defaults still sit next to the code that uses them.
+Two honest caveats. `xas/`, `exafs/` and `xrs/` each have one; `reduce/`,
+`statistics/` and `fitting/` do not, so their defaults still sit next to the
+code that uses them.
 And edge auto-detection is *split*: `xas/policy.resolve_edge` decides
 the explicit-vs-auto policy, but the scoring weights that pick the winner
 (`_TOL_EV`, `_K_EDGE_BONUS`, `_COMMON_BONUS`, `_AMBIGUITY_MARGIN`) live in
@@ -138,6 +144,14 @@ citations, and — computed from a call graph — **which tools reach it**. Chec
 that before changing a function; it answers "what depends on this" without
 tracing imports. It is generated from the source tree, so a new function
 appears by existing.
+
+**The defaults are pinned.** `tests/test_science_policy.py` asserts the current
+value of every constant in every `policy.py`, and asserts that the science
+signatures and the agent-facing JSON schema both read from policy rather than
+from a literal. If you change a default, that test fails — update the expected
+value in the same commit. The diff on that file is the record of which physics
+defaults moved and when. It also fails if you add a *new* policy constant
+without pinning it.
 
 **Provenance.** Anything that produces a number a scientist might quote also
 reports how it was produced: which normalization, which fit window, which
@@ -174,6 +188,8 @@ The old locations are re-export shims, so existing imports keep working:
 | `interpretation/calibration_store.py` | `beamtimehero_cli/calibration_store.py` (session state, not science) |
 | `generic_data/lcf.py` | `science/xas/compare.py` |
 | `generic_data/cosine_similarity.py` | `science/fitting/similarity.py` |
+| `experiment_planning/scan_features.py` | `science/statistics/features.py` |
+| `experiment_planning/scan_efficiency.py` | `science/statistics/efficiency.py` |
 
 New code should use the new paths. The shims will be removed once the
 consuming applications have migrated.

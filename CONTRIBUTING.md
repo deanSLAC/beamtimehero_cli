@@ -34,6 +34,7 @@ has a right answer to check against. By area:
 | EXAFS | `tests/test_analysis_exafs.py` |
 | XRS | `tests/test_xrs.py` |
 | Tool-level science | `tests/test_twocol_and_analysis_leaves.py` |
+| Scientific defaults (pinned values) | `tests/test_science_policy.py` |
 
 `tests/test_interpretation.py` is the clearest model for the synthetic-spectrum
 pattern. Note that these files import through the **old** module paths
@@ -41,9 +42,16 @@ pattern. Note that these files import through the **old** module paths
 suite double as a compatibility check on the re-export shims. **New tests
 should import from `beamtimehero_cli.science.*`.**
 
-One thing the suite does *not* do: it does not pin the policy defaults. Editing
-a number in a `policy.py` leaves the suite green. If you change one, verify the
-effect yourself — and consider adding an assertion for it.
+The scientific defaults *are* pinned. `tests/test_science_policy.py` holds the
+current value of every constant in every `policy.py`, and checks that the
+science functions and the agent-facing tool schema both read from policy rather
+than from a literal that merely agrees with it. So:
+
+- Changing a default **will** fail that test. That is the point — update the
+  expected value in the same commit, and the diff becomes the record of which
+  physics default moved and why.
+- Adding a *new* policy constant without pinning it also fails, with a message
+  naming the constant.
 
 To see the whole science surface at once — every function with its signature,
 what calls it, and what it cites:
@@ -110,13 +118,13 @@ instead — that is the boundary this repo is organized around.
   `experiment_planning/decisions.py` are not reachable from any tool (the
   fitter only via `decisions.py`, which has no callers). They look like the
   most scientific code in the repo; nothing calls them. Their fate is undecided.
-- **Some live science still sits outside `science/`.** `experiment_planning/`
-  is *not* unrouted: `scan_features.py` and `scan_efficiency.py` back the
-  `analyze-convergence` / `analyze-efficiency` / `analyze-per-spot` /
-  `detect-per-scan-drift` tools. They are pure numbers-in/numbers-out and by
-  the rule they belong under `science/`; they have not been moved yet. Same for
-  most of the array-taking plotting in `spec_data/*_plotting.py`. If your change
-  is about scan statistics or plots, look there too.
+- **Some live science still sits outside `science/`.** Most of the
+  array-taking plotting is in `spec_data/exafs_plotting.py`,
+  `spec_data/xrs_plotting.py` and `spec_data/plotting.py` — by the rule those
+  belong in `science/plots/`, but they have not moved. If your change is about
+  what a plot looks like, look there too.
+  (Scan statistics *have* moved: `experiment_planning/scan_features.py` and
+  `scan_efficiency.py` are now `science/statistics/`, with shims left behind.)
 
 ## Background
 

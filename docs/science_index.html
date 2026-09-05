@@ -98,11 +98,11 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <h1>Science index — <span class="thin">every function, and what uses it</span></h1>
 <p class="lede">The scientific core of the toolbelt: what each function does, what it is called by, and what it cites. Generated from the source tree, so a new function appears here by existing. Regenerate with <code>python -m beamtimehero_cli.docgen_science</code>.</p>
 <div class="statstrip">
-<div class="stat"><b>98</b><span>functions</span></div>
-<div class="stat"><b>74</b><span>public</span></div>
-<div class="stat"><b>28</b><span>modules</span></div>
-<div class="stat"><b>24</b><span>cited methods</span></div>
-<div class="stat"><b>23</b><span>attribution gaps</span></div>
+<div class="stat"><b>103</b><span>functions</span></div>
+<div class="stat"><b>79</b><span>public</span></div>
+<div class="stat"><b>30</b><span>modules</span></div>
+<div class="stat"><b>27</b><span>cited methods</span></div>
+<div class="stat"><b>27</b><span>attribution gaps</span></div>
 <button id="themetoggle">&#9689; theme</button></div></header>
 <div class="therule"><blockquote>Everything under <code>science/</code> takes <b>numbers in</b> and returns <b>numbers out</b>. No file paths, no environment variables, no SPEC, no database, no argparse.</blockquote></div>
 <h2><span class="no">01</span> Functions</h2>
@@ -273,6 +273,45 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <span class="sig"><span class="fname">filter_short_reps</span>(combined, min_span_frac=...)</span>
 <p class="fdoc">Drop rep columns whose covered energy span is a fraction of the rest.</p>
 <p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-statistics)" open>
+<summary><span class="dname">science/statistics/</span><span class="chip" style="--c: var(--c-statistics)">2 modules</span><span class="count">5 fns</span></summary>
+<p class="note">Statistics over a stack of repeated scans — convergence, repetition efficiency, spot heterogeneity. Judges a set of reps rather than producing one spectrum.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">statistics.efficiency</span><span class="mdoc">Comprehensive scan repetition efficiency analysis.</span></div>
+<div class="fn" data-hay="analyze_scan_efficiency statistics.efficiency comprehensive efficiency analysis for repeated scan data. spec-file analyze-efficiency spec-file analyze-per-spot">
+<span class="sig"><span class="fname">analyze_scan_efficiency</span>(scan_data, efficiency_threshold=..., min_recommended_scans=..., raw_counts_per_point=...)</span>
+<p class="fdoc">Comprehensive efficiency analysis for repeated scan data.</p>
+<p class="users"><b>used by</b> spec-file analyze-efficiency, spec-file analyze-per-spot</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">statistics.features</span><span class="mdoc">Generic per-rep scalar extraction over an agent-supplied energy window.</span></div>
+<div class="fn const" data-hay="statistics.features valid_statistics">
+<p class="users"><b>constants</b> <code>VALID_STATISTICS</code></p>
+<p class="fdoc">Module-level data and defaults. Editing these is the most common kind of contribution; nothing here needs a call graph to be safe to change, but see "used by" on the functions that read them.</p>
+</div>
+<div class="fn" data-hay="extract_window_scalar statistics.features reduce each scan to a single scalar over the energy window [e_min, e_max]. spec-file analyze-feature-evolution spec-file plot-feature-evolution">
+<span class="sig"><span class="fname">extract_window_scalar</span>(scan_2d, energy, e_min, e_max, statistic=...)</span>
+<p class="fdoc">Reduce each scan to a single scalar over the energy window [e_min, e_max].</p>
+<p class="users"><b>used by</b> spec-file analyze-feature-evolution, spec-file plot-feature-evolution</p>
+</div>
+<div class="fn" data-hay="analyze_scalar_convergence statistics.features decide whether a 1d per-rep scalar trace has converged. spec-file analyze-feature-evolution spec-file plot-feature-evolution">
+<span class="sig"><span class="fname">analyze_scalar_convergence</span>(per_rep_values, sem_threshold_frac=..., drift_threshold_frac=...)</span>
+<p class="fdoc">Decide whether a 1D per-rep scalar trace has converged.</p>
+<p class="users"><b>used by</b> spec-file analyze-feature-evolution, spec-file plot-feature-evolution</p>
+</div>
+<div class="fn" data-hay="analyze_feature_evolution statistics.features convenience: extract the per-rep scalar over the window and run spec-file analyze-feature-evolution">
+<span class="sig"><span class="fname">analyze_feature_evolution</span>(scan_2d, energy, e_min, e_max, statistic=..., sem_threshold_frac=..., drift_threshold_frac=...)</span>
+<p class="fdoc">Convenience: extract the per-rep scalar over the window and run</p>
+<p class="users"><b>used by</b> spec-file analyze-feature-evolution</p>
+</div>
+<div class="fn" data-hay="heterogeneity_f_statistic statistics.features one-way anova f-stat across spots, on a windowed scan stack. spec-file analyze-per-spot">
+<span class="sig"><span class="fname">heterogeneity_f_statistic</span>(per_spot_groups)</span>
+<p class="fdoc">One-way ANOVA F-stat across spots, on a windowed scan stack.</p>
+<p class="users"><b>used by</b> spec-file analyze-per-spot</p>
 </div>
 </div>
 </details>
@@ -717,7 +756,7 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 </details>
 <details class="dir" style="--c: var(--c-fitting)" open>
 <summary><span class="dname">science/fitting/</span><span class="chip" style="--c: var(--c-fitting)">1 modules</span><span class="count">2 fns</span></summary>
-<p class="note">Generic curve fits for beam diagnostics and alignment — not spectroscopy.</p>
+<p class="note">Generic fitting and similarity helpers — not spectroscopy. Only scan-to-scan similarity so far; the knife-edge and emission-peak fits have not moved here.</p>
 <div class="modblock">
 <div class="modhead"><span class="mpath">fitting.similarity</span><span class="mdoc">Scan-to-scan spectral similarity.</span></div>
 <div class="fn" data-hay="compute_cosine_similarity fitting.similarity cosine similarity between two vectors: (a . b) / (||a|| * ||b||). spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-per-spot">
@@ -764,6 +803,9 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <tr><td>chi(k) -&gt; chi(R) Fourier transform convention</td><td>Ifeffit convention: chi(R) = (kstep/sqrt(pi)) * FFT[chi * k^w * window].</td><td class="mono">exafs.fourier</td></tr>
 <tr><td>Energy &lt;-&gt; photoelectron wavenumber</td><td>k = sqrt((E - E0) / ETOK) with ETOK = hbar^2/2m_e = 3.8099821 eV*A^2.</td><td class="mono">exafs.kspace</td></tr>
 <tr><td>Non-paralyzable deadtime correction</td><td>corrected = sca / (1 - tau * ICR/count_time), the standard non-paralyzable model, clipped at 5% live time.</td><td class="mono">reduce.deadtime</td></tr>
+<tr><td>Cosine-similarity convergence component</td><td>Delegates to science.fitting.similarity.analyze_scan_quality.</td><td class="mono">statistics.efficiency</td></tr>
+<tr><td>Poisson-limit comparison (counting-statistics floor)</td><td>Compares the observed scan-to-scan scatter with the sqrt(N) counting-statistics floor; scatter at the floor means further reps buy only sqrt(N) improvement.</td><td class="mono">statistics.efficiency</td></tr>
+<tr><td>Heterogeneity F-statistic across sample spots</td><td>One-way ANOVA F-test: between-spot variance over within-spot variance, on the per-rep window scalar.</td><td class="mono">statistics.features</td></tr>
 <tr><td>5d L3 white-line trend</td><td>L3 white-line area tracks unoccupied d-DOS / d-hole count (standard 5d practice, e.g. Pt/Ir XANES literature); higher oxidation -&gt; higher white-line energy and intensity.</td><td class="mono">tables.edge_shifts</td></tr>
 <tr><td>Ce L3 final-state doublet</td><td>Standard Ce L3 XANES final-state analysis (e.g. Bianconi et al. PRB 35, 806 (1987); applied in HERFD in Inorg. Chem. 2021 lanthanide L3 studies).</td><td class="mono">tables.edge_shifts</td></tr>
 <tr><td>Core-hole widths</td><td>xraydb core_width (Krause &amp; Oliver 1979 / Keski-Rahkonen &amp; Krause 1974 compilations)</td><td class="mono">tables.edge_shifts</td></tr>
@@ -792,6 +834,10 @@ footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong)
 <tr><td>Detector saturation flagging</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
 <tr><td>Monochromator-glitch detection (running-median residual)</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
 <tr><td>Self-absorption assessment</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
+<tr><td>Coefficient-of-variation convergence</td><td><span class="gap">needs a reference</span></td><td class="mono">statistics.efficiency</td></tr>
+<tr><td>Optimal scan-count recommendation</td><td><span class="gap">needs a reference</span></td><td class="mono">statistics.efficiency</td></tr>
+<tr><td>Per-rep window statistics (max/min/mean/median/integral/height)</td><td><span class="gap">needs a reference</span></td><td class="mono">statistics.features</td></tr>
+<tr><td>Running-mean / SEM convergence criterion</td><td><span class="gap">needs a reference</span></td><td class="mono">statistics.features</td></tr>
 <tr><td>Maximum plausible valence spans</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edge_shifts</td></tr>
 <tr><td>Edge-family classification (3d_K / ln_L3 / an_M / ...)</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edges</td></tr>
 <tr><td>Edge-suggestion scoring from a scan energy window</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edges</td></tr>
