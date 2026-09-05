@@ -61,6 +61,21 @@ open docs/tool_catalog.html                 # view
 python -m beamtimehero_cli.docgen           # regenerate after catalog changes
 ```
 
+## Science index (for contributors)
+
+The scientific core lives in `src/beamtimehero_cli/science/`, organized by
+technique. Its own [README](src/beamtimehero_cli/science/README.md) has the
+layout and the one rule it follows. For a generated index of every science
+function — signature, what it does, **which tools reach it**, and what it
+cites:
+
+```bash
+open docs/science_index.html                    # view
+python -m beamtimehero_cli.docgen_science       # regenerate
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before your first change.
+
 ## Env vars
 
 | Var | Default | Meaning |

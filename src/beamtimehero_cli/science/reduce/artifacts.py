@@ -99,3 +99,15 @@ def self_absorption_assessment(assume_dilute: bool | None = None) -> dict:
             "(assume_dilute) or measured standards exist (Phase 2)."
         ),
     }
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Monochromator-glitch detection (running-median residual)": None,
+    "Detector saturation flagging": None,
+    "Self-absorption assessment": None,
+}

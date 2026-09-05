@@ -82,3 +82,17 @@ def autobk_lite(
             "kmax_inv_ang": kmax,
         },
     }
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "AUTOBK-lite spline background removal": (
+        "Reduced AUTOBK — cubic smoothing spline with the knot budget from "
+        "the Nyquist criterion (2*rbkg*kmax/pi). Quick-look quality; "
+        "cross-check against Larch/Ifeffit autobk before publication."
+    ),
+}

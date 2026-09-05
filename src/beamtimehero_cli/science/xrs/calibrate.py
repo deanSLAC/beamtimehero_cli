@@ -132,3 +132,17 @@ def common_loss_grid(loss_arrays, step: float | None = None) -> np.ndarray:
         raise ValueError("Non-positive grid step.")
     n = max(2, int(round((hi - lo) / step)) + 1)
     return np.linspace(lo, hi, n)
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Momentum transfer from scattering angle": (
+        "q = |k_i - k_s|, evaluated in the quasi-elastic limit "
+        "|k_i| = |k_s| = 2*pi/lambda(E_incident)."
+    ),
+    "Elastic-line location (Gaussian fit, with argmax / centre-of-mass fallbacks)": None,
+}

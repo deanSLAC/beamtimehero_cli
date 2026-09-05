@@ -35,3 +35,16 @@ def deadtime_correct(
     rate = icr / np.maximum(count_time[:, np.newaxis], 1e-9)
     live = np.clip(1.0 - float(tau) * rate, 0.05, 1.0)
     return sca / live
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Non-paralyzable deadtime correction": (
+        "corrected = sca / (1 - tau * ICR/count_time), the standard "
+        "non-paralyzable model, clipped at 5% live time."
+    ),
+}

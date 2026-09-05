@@ -100,3 +100,18 @@ def rebroaden(energy: np.ndarray, mu: np.ndarray, fwhm_ev: float) -> np.ndarray:
     padded = np.concatenate([np.full(k, mu_u[0]), mu_u, np.full(k, mu_u[-1])])
     broadened = np.convolve(padded, kernel, mode="same")[k:-k]
     return np.interp(energy, e_u, broadened)
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "E0 as the parabola-refined derivative maximum": None,
+    "Core-hole re-broadening of HERFD spectra": (
+        "Widths from science.tables.edge_shifts.CORE_HOLE_WIDTH_SOURCE; the "
+        "re-broadening is applied so conventional-XANES calibrations (e.g. "
+        "Wilke 2001) become valid on HERFD data."
+    ),
+}

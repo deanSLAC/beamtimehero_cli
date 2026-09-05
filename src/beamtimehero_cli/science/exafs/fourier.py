@@ -110,3 +110,17 @@ def first_shell_peak(
             "~0.3-0.5 Å longer. Quantitative distances require FEFF path fitting."
         ),
     }
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "chi(k) -> chi(R) Fourier transform convention": (
+        "Ifeffit convention: chi(R) = (kstep/sqrt(pi)) * FFT[chi * k^w * window]."
+    ),
+    "Hanning-sill k-window": None,
+    "First-shell peak reporting": None,
+}

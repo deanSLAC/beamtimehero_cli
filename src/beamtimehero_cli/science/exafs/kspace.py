@@ -39,3 +39,15 @@ def rebin_k(
     grid = np.arange(kmin, kmax, kstep)
     f = interp1d(k, chi, bounds_error=False, fill_value=0.0)
     return grid, f(grid)
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Energy <-> photoelectron wavenumber": (
+        "k = sqrt((E - E0) / ETOK) with ETOK = hbar^2/2m_e = 3.8099821 eV*A^2."
+    ),
+}

@@ -247,3 +247,23 @@ CORE_HOLE_WIDTH_SOURCE = (
     "xraydb core_width (Krause & Oliver 1979 / Keski-Rahkonen & Krause "
     "1974 compilations)"
 )
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Core-hole widths": CORE_HOLE_WIDTH_SOURCE,
+    "Generic 3d K-edge shift-per-valence bracket": GENERIC_EDGE_SHIFT["source"],
+    "Fe K pre-edge centroid/intensity (CII) method": WILKE_2001_FE_PRE_EDGE["source"],
+    "Ce L3 final-state doublet": CE_L3["source"],
+    "U M4 HERFD valence determination": U_M4_HERFD["source"],
+    "5d L3 white-line trend": L3_WHITE_LINE_TREND["source"],
+    "Per-element edge-shift slopes": (
+        "One reference series per element — see the 'source' field on each "
+        "PER_ELEMENT_EDGE_SHIFT entry."
+    ),
+    "Maximum plausible valence spans": None,
+}

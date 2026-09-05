@@ -24,3 +24,15 @@ DEFAULT_DK = 1.0
 # AUTOBK R_bkg (A): the below-first-shell distance the spline is allowed to
 # follow. 1.0 A is the standard choice for a first-shell-and-beyond fit.
 DEFAULT_RBKG = 1.0
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "k^2 weighting as the default": None,
+    "Default k range and window taper": None,
+    "Default AUTOBK R_bkg": None,
+}

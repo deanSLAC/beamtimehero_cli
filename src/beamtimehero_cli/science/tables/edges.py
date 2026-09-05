@@ -196,3 +196,15 @@ def suggest_edge(e_min: float, e_max: float,
             "trusting this pick. " + out["note"]
         )
     return out
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Absorption-edge energies and labels": EDGE_ENERGY_SOURCE,
+    "Edge-family classification (3d_K / ln_L3 / an_M / ...)": None,
+    "Edge-suggestion scoring from a scan energy window": None,
+}

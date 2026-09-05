@@ -28,6 +28,23 @@ The science tests build synthetic spectra with analytically known ground truth
 has a right answer to check against. `tests/test_interpretation.py` is the
 model to copy.
 
+To see the whole science surface at once — every function with its signature,
+what calls it, and what it cites:
+
+```bash
+open docs/science_index.html                    # view
+python -m beamtimehero_cli.docgen_science       # regenerate
+```
+
+The **"used by"** column on that page is the one worth knowing about: it is
+computed from a call graph, so before changing a function you can see which
+tools depend on it without tracing imports by hand.
+
+If you add or change a published method, record the reference in that module's
+`CITATIONS` dict. The index collects those into a bibliography and lists the
+entries still marked `None` as attribution gaps — 22 of them today, and
+filling one in is a genuinely useful first contribution.
+
 ## What to raise rather than edit
 
 Three places define what the *agents* see. Changing them changes what several

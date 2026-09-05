@@ -142,3 +142,23 @@ def resolve_edge(
         info["competing_edges"] = suggestion.get("competing", [])
         info["detection_note"] = suggestion["note"]
     return info
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Pre-edge fit window": (
+        "Wilke, Farges, Petit, Brown & Martin, Am. Mineral. 86, 714-730 "
+        "(2001), DOI 10.2138/am-2001-5-612."
+    ),
+    "Multi-component white-line families (Ce(IV) doublet, U(VI) satellites)": (
+        "Bugarin, Suarez Orduz & Glatzel, J. Synchrotron Rad. 31 (2024); "
+        "Bes et al., Inorg. Chem. 55, 4260 (2016)."
+    ),
+    "White-line fit window": None,
+    "Minimum overlapping points for a descriptor fit": None,
+    "E0-anchored edge auto-detection": None,
+}

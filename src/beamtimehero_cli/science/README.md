@@ -98,11 +98,27 @@ choice can carry the citation that justifies it.
 
 ## Conventions
 
-**Citations.** Every module that implements a published method names its
-source, either in the function docstring or as a module-level constant
-(`AREA_NORM_CITATION`, `EDGE_ENERGY_SOURCE`, `CORE_HOLE_WIDTH_SOURCE`). If you
-add a method, add the reference — this directory should read like a methods
-section.
+**Citations.** Every module that implements published methods declares a
+module-level `CITATIONS` dict mapping *what it applies to* to the reference:
+
+```python
+CITATIONS = {
+    "Area normalization (the HERFD default)": AREA_NORM_CITATION,
+    "Athena-style pre-edge/post-edge normalization": None,   # gap: needs a reference
+}
+```
+
+A value of `None` means the method is implemented but not yet attributed.
+Those are collected as **attribution gaps** on the generated science index, so
+they read as a to-do list rather than an omission. If you add a method, add
+its reference; if you recognise one of the gaps, fill it in.
+
+**The generated index.** `python -m beamtimehero_cli.docgen_science` writes
+`docs/science_index.html`: every function here with its signature, docstring,
+citations, and — computed from a call graph — **which tools reach it**. Check
+that before changing a function; it answers "what depends on this" without
+tracing imports. It is generated from the source tree, so a new function
+appears by existing.
 
 **Provenance.** Anything that produces a number a scientist might quote also
 reports how it was produced: which normalization, which fit window, which

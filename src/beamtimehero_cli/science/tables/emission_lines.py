@@ -41,3 +41,16 @@ def emission_energy_ev(element: str, edge: str) -> float | None:
     if cand:
         return float(max(cand, key=lambda ln: ln.intensity).energy)
     return None
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Emission line energies and intensities": (
+        "xraydb tabulated X-ray emission lines (``xraydb.xray_lines``)."
+    ),
+    "Preferred (Siegbahn) line per edge": None,
+}

@@ -352,3 +352,15 @@ def pre_post_normalize(
         ),
     })
     return out, provenance
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Area normalization (the HERFD default)": AREA_NORM_CITATION,
+    "MBACK normalization": MBACK_CITATION,
+    "Athena-style pre-edge/post-edge normalization": None,
+}

@@ -275,3 +275,18 @@ def area_normalize(
     if abs(area) < 1e-30:
         raise ValueError("Integrated area is ~0; cannot area-normalize.")
     return {"loss": loss, "normalized": intensity / area, "area": area}
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Compton background models (constant / linear / Pearson VII)": None,
+    "Outlier-channel rejection by DER_SNR": (
+        "DER_SNR estimator: Stoehr et al., 'DER_SNR: A Simple & General "
+        "Spectroscopic Signal-to-Noise Measurement', ASP Conf. Ser. 394 (2008)."
+    ),
+    "Area normalization on the energy-loss axis": None,
+}

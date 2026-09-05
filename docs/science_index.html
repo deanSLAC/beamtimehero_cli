@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>beamtimehero — science index</title>
+<style>
+:root {
+  --paper:#f6f2ea; --panel:#fdfbf6; --ink:#221d14; --dim:#6f6656;
+  --rule:#d9d1bf; --rule-strong:#a89c82; --accent:#9a3412; --code-bg:#ede7d9;
+  --shadow:0 1px 3px rgba(60,48,20,.08); --gap:#8f6a1d;
+  --c-tables:#8a5a1f; --c-reduce:#58622a; --c-xas:#1d5a96; --c-exafs:#316648;
+  --c-xrs:#7b3d8f; --c-fitting:#5c5c66; --c-plots:#9c2b60;
+}
+:root[data-theme="dark"] {
+  --paper:#17130c; --panel:#201a11; --ink:#e9e1cf; --dim:#a2937a;
+  --rule:#3a3323; --rule-strong:#5c5138; --accent:#e8863c; --code-bg:#2c2517;
+  --shadow:0 1px 3px rgba(0,0,0,.5); --gap:#d8bf62;
+  --c-tables:#d9a659; --c-reduce:#b3c163; --c-xas:#6aabe8; --c-exafs:#7cc39a;
+  --c-xrs:#c98add; --c-fitting:#b0b0bd; --c-plots:#e577ab;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.55 Charter,"Iowan Old Style",Cambria,Georgia,serif;
+  background-image:radial-gradient(rgba(120,100,60,.06) 1px,transparent 1px);
+  background-size:26px 26px}
+code,.mono,.sig{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em}
+code{background:var(--code-bg);padding:.1em .35em;border-radius:3px}
+a{color:var(--accent)}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px 96px}
+header{padding:56px 0 0}
+.eyebrow{letter-spacing:.22em;text-transform:uppercase;font-size:.72rem;color:var(--dim);
+  font-family:ui-monospace,Menlo,monospace}
+h1{font-size:2.6rem;margin:.2em 0 .1em;font-weight:600;letter-spacing:-.01em}
+h1 .thin{color:var(--accent);font-style:italic;font-weight:400}
+.lede{max-width:64ch;color:var(--dim);margin-top:.4em}
+.statstrip{display:flex;flex-wrap:wrap;gap:0 36px;margin:28px 0 0;
+  border-top:3px double var(--rule-strong);border-bottom:1px solid var(--rule);padding:12px 0}
+.stat b{display:block;font-size:1.5rem;font-weight:600}
+.stat span{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+#themetoggle{margin-left:auto;align-self:center;cursor:pointer;background:none;
+  border:1px solid var(--rule-strong);color:var(--ink);border-radius:999px;
+  padding:.35em .9em;font:inherit;font-size:.8rem}
+h2{margin:60px 0 6px;font-size:1.5rem;display:flex;align-items:baseline;gap:.6em}
+h2 .no{color:var(--accent);font-family:ui-monospace,Menlo,monospace;font-size:.8em;font-weight:400}
+.sectionnote{color:var(--dim);margin:0 0 20px;max-width:70ch}
+.therule{border:3px double var(--rule-strong);border-radius:6px;background:var(--panel);
+  padding:20px 26px;margin:20px 0;box-shadow:var(--shadow)}
+.therule blockquote{margin:0;font-size:1.12rem;line-height:1.5;max-width:58ch}
+.therule blockquote b{color:var(--accent)}
+.dir{background:var(--panel);border:1px solid var(--rule);border-left:5px solid var(--c,var(--rule-strong));
+  border-radius:6px;margin:12px 0;box-shadow:var(--shadow)}
+.dir>summary{display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;list-style:none}
+.dir>summary::before{content:"\25B8";color:var(--dim);font-size:.8em;transition:transform .15s}
+.dir[open]>summary::before{transform:rotate(90deg)}
+.dir .dname{font-weight:600;font-family:ui-monospace,Menlo,monospace;font-size:.9rem}
+.dir .count{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:.78rem;
+  color:var(--dim);border:1px solid var(--rule);border-radius:999px;padding:.05em .6em}
+.dir .note{margin:0 16px 10px 42px;color:var(--dim);font-size:.9rem;max-width:70ch}
+.modblock{margin:0 16px 14px 42px}
+.modhead{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--rule);
+  padding-bottom:3px;margin:14px 0 8px}
+.modhead .mpath{font-family:ui-monospace,Menlo,monospace;font-size:.84rem;font-weight:600}
+.modhead .mdoc{color:var(--dim);font-size:.86rem}
+.fn{padding:5px 0 5px 0;border-bottom:1px dotted var(--rule)}
+.fn:last-child{border-bottom:0}
+.fn .sig{font-size:.82rem}
+.fn .fname{font-weight:600}
+.fn .fdoc{color:var(--dim);font-size:.88rem;margin:.15em 0 0;max-width:78ch}
+.fn.priv .fname{font-weight:400;color:var(--dim)}
+.users{margin:.3em 0 0;font-size:.76rem;color:var(--dim);
+  font-family:ui-monospace,Menlo,monospace}
+.users b{color:var(--ink);font-weight:600}
+.users .none{font-style:italic;font-family:Charter,Georgia,serif}
+.chip{font-family:ui-monospace,Menlo,monospace;font-size:.7rem;padding:.1em .5em;
+  border-radius:999px;white-space:nowrap;color:var(--c,var(--dim));
+  background:color-mix(in srgb,var(--c,var(--dim)) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--c,var(--dim)) 40%,transparent)}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.88rem}
+th,td{text-align:left;padding:.45em .7em;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600}
+tbody tr:hover{background:color-mix(in srgb,var(--rule) 25%,transparent)}
+td.mono{font-family:ui-monospace,Menlo,monospace;font-size:.79rem}
+.gap{color:var(--gap);font-style:italic}
+.toolbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;
+  background:var(--paper);padding:12px 0;border-bottom:1px solid var(--rule)}
+#q{flex:1;font:inherit;font-size:.9rem;padding:.45em .7em;border:1px solid var(--rule-strong);
+  border-radius:5px;background:var(--panel);color:var(--ink)}
+#qcount{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;color:var(--dim)}
+footer{margin-top:64px;padding-top:16px;border-top:3px double var(--rule-strong);
+  color:var(--dim);font-size:.84rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="eyebrow">Generated — beamtimehero_cli</div>
+<h1>Science index — <span class="thin">every function, and what uses it</span></h1>
+<p class="lede">The scientific core of the toolbelt: what each function does, what it is called by, and what it cites. Generated from the source tree, so a new function appears here by existing. Regenerate with <code>python -m beamtimehero_cli.docgen_science</code>.</p>
+<div class="statstrip">
+<div class="stat"><b>95</b><span>functions</span></div>
+<div class="stat"><b>71</b><span>public</span></div>
+<div class="stat"><b>35</b><span>modules</span></div>
+<div class="stat"><b>23</b><span>cited methods</span></div>
+<div class="stat"><b>22</b><span>attribution gaps</span></div>
+<button id="themetoggle">&#9689; theme</button></div></header>
+<div class="therule"><blockquote>Everything under <code>science/</code> takes <b>numbers in</b> and returns <b>numbers out</b>. No file paths, no environment variables, no SPEC, no database, no argparse.</blockquote></div>
+<h2><span class="no">01</span> Functions</h2>
+<p class="sectionnote">Grouped by directory, then module, in pipeline order. &ldquo;Used by&rdquo; is computed from a call graph that follows indirect routes (tool &rarr; handler &rarr; spec_data &rarr; science), so a function with no listed tool is very likely genuinely unreached. Resolution is static, so a call assembled at runtime (getattr, a name built from a string) is the one thing it cannot follow.</p>
+<div class="toolbar"><input id="q" type="search" placeholder="Filter functions, modules, docstrings, tool names&hellip;"><span id="qcount"></span></div>
+<details class="dir" style="--c: var(--c-tables)" open>
+<summary><span class="dname">science/tables/</span><span class="chip" style="--c: var(--c-tables)">3 modules</span><span class="count">9 fns</span></summary>
+<p class="note">Tabulated physics. Data, not algorithms — the values most often corrected or extended, readable without touching any code.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">tables.edges</span><span class="mdoc">Element/edge metadata backed by xraydb&#x27;s offline database.</span></div>
+<div class="fn" data-hay="classify_edge_family tables.edges classify (element, edge) into an interpretation family. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">classify_edge_family</span>(element, edge)</span>
+<p class="fdoc">Classify (element, edge) into an interpretation family.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +6 more</p>
+</div>
+<div class="fn" data-hay="get_edge_info tables.edges tabulated metadata for one absorption edge (offline lookup). spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">get_edge_info</span>(element, edge)</span>
+<p class="fdoc">Tabulated metadata for one absorption edge (offline lookup).</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +6 more</p>
+</div>
+<div class="fn" data-hay="suggest_edge tables.edges suggest the most plausible edge for a scan energy window. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">suggest_edge</span>(e_min, e_max, e0_ev=...)</span>
+<p class="fdoc">Suggest the most plausible edge for a scan energy window.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +5 more</p>
+</div>
+<div class="fn priv" data-hay="_candidate_edges tables.edges all in-scope edges whose tabulated energy lies inside [e_min, e_max]. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_candidate_edges</span>(e_min, e_max)</span>
+<p class="fdoc">All in-scope edges whose tabulated energy lies inside [e_min, e_max].</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +5 more</p>
+</div>
+<div class="fn priv" data-hay="_suggestion_score tables.edges  spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_suggestion_score</span>(cand, anchor)</span>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +5 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">tables.emission_lines</span><span class="mdoc">Preferred emission line (Siegbahn) per absorption edge.</span></div>
+<div class="fn" data-hay="emission_energy_ev tables.emission_lines strongest fluorescence-line energy (ev) for an edge, via xraydb. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">emission_energy_ev</span>(element, edge)</span>
+<p class="fdoc">Strongest fluorescence-line energy (eV) for an edge, via xraydb.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +2 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">tables.xrs_edges</span><span class="mdoc">Edge metadata for XRS — the low-Z / shallow edges XRS is used to reach.</span></div>
+<div class="fn" data-hay="classify_xrs_family tables.xrs_edges interpretation family for an xrs edge. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">classify_xrs_family</span>(element, edge)</span>
+<p class="fdoc">Interpretation family for an XRS edge.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="get_xrs_edge_info tables.xrs_edges tabulated loss/energy label + interpretation family for one xrs edge. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">get_xrs_edge_info</span>(element, edge)</span>
+<p class="fdoc">Tabulated loss/energy label + interpretation family for one XRS edge.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="suggest_xrs_edge tables.xrs_edges suggest the most plausible xrs edge for an energy-loss window. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">suggest_xrs_edge</span>(loss_min, loss_max, onset_ev=...)</span>
+<p class="fdoc">Suggest the most plausible XRS edge for an energy-loss window.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-reduce)" open>
+<summary><span class="dname">science/reduce/</span><span class="chip" style="--c: var(--c-reduce)">5 modules</span><span class="count">13 fns</span></summary>
+<p class="note">Detector counts to one clean spectrum. Technique-agnostic: nothing here assumes an absorption edge.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">reduce.artifacts</span><span class="mdoc">Data-quality gating for interpretation: glitches, saturation, self-absorption.</span></div>
+<div class="fn" data-hay="detect_glitches reduce.artifacts boolean mask of monochromator-glitch-like spikes. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file assess-xas-quality spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">detect_glitches</span>(energy, mu, z_threshold=..., window=...)</span>
+<p class="fdoc">Boolean mask of monochromator-glitch-like spikes.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file assess-xas-quality, spec-file extract-xas-descriptors +3 more</p>
+</div>
+<div class="fn" data-hay="interpolate_over_mask reduce.artifacts replace masked points by linear interpolation from unmasked neighbors. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">interpolate_over_mask</span>(energy, mu, mask)</span>
+<p class="fdoc">Replace masked points by linear interpolation from unmasked neighbors.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry +2 more</p>
+</div>
+<div class="fn" data-hay="detect_saturation reduce.artifacts flat-top check: many consecutive points pinned at the maximum. spec-file assess-xas-quality spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">detect_saturation</span>(mu, rel_tol=...)</span>
+<p class="fdoc">Flat-top check: many consecutive points pinned at the maximum.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="self_absorption_assessment reduce.artifacts honest self-absorption risk statement for fluorescence-detected herfd. spec-file assess-xas-quality spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">self_absorption_assessment</span>(assume_dilute=...)</span>
+<p class="fdoc">Honest self-absorption risk statement for fluorescence-detected HERFD.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">reduce.counters</span><span class="mdoc">Active-counter selection for a scan DataFrame.</span></div>
+<div class="fn" data-hay="pick_active_counter reduce.counters pick the active fluorescence/absorption counter for a scan dataframe. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file get-active-counter spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-scan spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">pick_active_counter</span>(df, priority=...)</span>
+<p class="fdoc">Pick the active fluorescence/absorption counter for a scan DataFrame.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file analyze-convergence +32 more</p>
+</div>
+<div class="fn" data-hay="counter_selection_warning reduce.counters warn when an auto-picked counter looks like a flat dark/background channel. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">counter_selection_warning</span>(df, chosen)</span>
+<p class="fdoc">Warn when an auto-picked counter looks like a flat dark/background channel.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file analyze-convergence +30 more</p>
+</div>
+<div class="fn priv" data-hay="_fractional_modulation reduce.counters (max - min) / max for one counter column. 0 for an all-zero channel. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs calibrate-energy-loss xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">_fractional_modulation</span>(series)</span>
+<p class="fdoc">(max - min) / max for one counter column. 0 for an all-zero channel.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file analyze-convergence +30 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">reduce.deadtime</span><span class="mdoc">Detector deadtime correction (ICR-based, non-paralyzable).</span></div>
+<div class="fn" data-hay="deadtime_correct reduce.deadtime non-paralyzable per-element deadtime correction for windowed counts.">
+<span class="sig"><span class="fname">deadtime_correct</span>(sca, icr, count_time, tau)</span>
+<p class="fdoc">Non-paralyzable per-element deadtime correction for windowed counts.</p>
+<p class="users"><span class="none">not reached from any catalog tool</span></p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">reduce.normalize</span><span class="mdoc">Per-scan monitor normalization — the stage before technique-specific work.</span></div>
+<div class="fn" data-hay="edge_step_normalize reduce.normalize apply edge-step normalization to a single counter on one scan. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">edge_step_normalize</span>(df, counter, normalize_by=...)</span>
+<p class="fdoc">Apply edge-step normalization to a single counter on one scan.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file analyze-convergence +18 more</p>
+</div>
+<div class="fn" data-hay="normalize_series reduce.normalize normalize one scan&#x27;s counter under a selectable mode. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-feature-evolution spec-file analyze-per-spot spec-file assess-xas-quality spec-file average-scans spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">normalize_series</span>(df, counter, normalize_by=..., mode=...)</span>
+<p class="fdoc">Normalize one scan&#x27;s counter under a selectable mode.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file analyze-convergence +18 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">reduce.reps</span><span class="mdoc">Averaging and filtering across repeated scans (reps).</span></div>
+<div class="fn" data-hay="estimate_per_rep_noise reduce.reps estimate per-rep noise sigma from the std of the post-edge plateau. spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">estimate_per_rep_noise</span>(combined, baseline_frac=...)</span>
+<p class="fdoc">Estimate per-rep noise sigma from the std of the post-edge plateau.</p>
+<p class="users"><b>used by</b> spec-file align-spectra, spec-file assess-xas-quality, spec-file compare-xas-to-references, spec-file detect-per-scan-drift, spec-file difference-spectrum, spec-file extract-xas-descriptors +9 more</p>
+</div>
+<div class="fn" data-hay="average_reps reduce.reps average edge-step normalized reps across the column dimension. spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">average_reps</span>(combined, weighting=...)</span>
+<p class="fdoc">Average edge-step normalized reps across the column dimension.</p>
+<p class="users"><b>used by</b> spec-file align-spectra, spec-file assess-xas-quality, spec-file compare-xas-to-references, spec-file detect-per-scan-drift, spec-file difference-spectrum, spec-file extract-xas-descriptors +9 more</p>
+</div>
+<div class="fn" data-hay="filter_short_reps reduce.reps drop rep columns whose covered energy span is a fraction of the rest. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">filter_short_reps</span>(combined, min_span_frac=...)</span>
+<p class="fdoc">Drop rep columns whose covered energy span is a fraction of the rest.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-xas)" open>
+<summary><span class="dname">science/xas/</span><span class="chip" style="--c: var(--c-xas)">7 modules</span><span class="count">38 fns</span></summary>
+<p class="note">XANES / HERFD. Pipeline order: normalize, e0, fits, descriptors, interpret — with compare for cross-spectrum work.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.compare</span><span class="mdoc">Cross-spectrum comparison: energy registration, differences, and LCF.</span></div>
+<div class="fn" data-hay="align_spectra xas.compare shift spectra in energy so their e0s coincide — registration by report. spec-file align-spectra spec-file difference-spectrum">
+<span class="sig"><span class="fname">align_spectra</span>(spectra, target_e0=..., max_shift_ev=...)</span>
+<p class="fdoc">Shift spectra in energy so their E0s coincide — registration by report.</p>
+<p class="users"><b>used by</b> spec-file align-spectra, spec-file difference-spectrum</p>
+</div>
+<div class="fn" data-hay="difference_spectrum xas.compare a − b on a common interpolated energy grid, optionally e0-aligned first. spec-file difference-spectrum">
+<span class="sig"><span class="fname">difference_spectrum</span>(energy_a, mu_a, energy_b, mu_b, align=..., max_shift_ev=...)</span>
+<p class="fdoc">A − B on a common interpolated energy grid, optionally E0-aligned first.</p>
+<p class="users"><b>used by</b> spec-file difference-spectrum</p>
+</div>
+<div class="fn" data-hay="compare_to_references xas.compare non-negative linear-combination fit of a spectrum to reference spectra. spec-file compare-xas-to-references xrs compare-xrs-to-references">
+<span class="sig"><span class="fname">compare_to_references</span>(axis, intensity, references)</span>
+<p class="fdoc">Non-negative linear-combination fit of a spectrum to reference spectra.</p>
+<p class="users"><b>used by</b> spec-file compare-xas-to-references, xrs compare-xrs-to-references</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.descriptors</span><span class="mdoc">The descriptor bundle — the source of truth the interpret_* tools consume.</span></div>
+<div class="fn" data-hay="per_scan_descriptor_trends xas.descriptors cheap, robust per-rep metrics + monotonic-drift tests. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">per_scan_descriptor_trends</span>(energy, reps, e0, white_line_energy, pre_edge_window)</span>
+<p class="fdoc">Cheap, robust per-rep metrics + monotonic-drift tests.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="extract_descriptors xas.descriptors full descriptor extraction. returns ``(descriptors, arrays)``. spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">extract_descriptors</span>(energy, mu, reps=..., edge_info=..., normalization=..., assume_dilute=..., white_line_components=..., pre_edge_window_rel=...)</span>
+<p class="fdoc">Full descriptor extraction. Returns ``(descriptors, arrays)``.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_trend_stats xas.descriptors monotonic-drift test for one per-scan metric series. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_trend_stats</span>(values)</span>
+<p class="fdoc">Monotonic-drift test for one per-scan metric series.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.e0</span><span class="mdoc">Edge position E0 and core-hole re-broadening.</span></div>
+<div class="fn" data-hay="find_e0 xas.e0 edge position under both fixed definitions, with uncertainty. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">find_e0</span>(energy, mu, smooth_span_ev=...)</span>
+<p class="fdoc">Edge position under both fixed definitions, with uncertainty.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file assess-xas-quality +13 more</p>
+</div>
+<div class="fn" data-hay="rebroaden xas.e0 convolve a herfd spectrum with a lorentzian of the core-hole width. spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">rebroaden</span>(energy, mu, fwhm_ev)</span>
+<p class="fdoc">Convolve a HERFD spectrum with a Lorentzian of the core-hole width.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_uniform xas.e0 interpolate onto a uniform grid (median step) for filters/convolution. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_uniform</span>(energy, mu)</span>
+<p class="fdoc">Interpolate onto a uniform grid (median step) for filters/convolution.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file assess-xas-quality +13 more</p>
+</div>
+<div class="fn priv" data-hay="_odd_window_points xas.e0  exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra spec-file align-spectra spec-file assess-xas-quality spec-file compare-xas-to-references spec-file detect-per-scan-drift spec-file difference-spectrum spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file record-energy-calibration spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_odd_window_points</span>(step, span_ev, n)</span>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra, spec-file align-spectra, spec-file assess-xas-quality +13 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.fits</span><span class="mdoc">Pseudo-Voigt peak fits over a XANES spectrum.</span></div>
+<div class="fn" data-hay="fit_peak_region xas.fits fit baseline (step + line) plus 1..max_components pseudo-voigts. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">fit_peak_region</span>(energy, mu, window, max_components=..., baseline_form=..., edge_center_hint=..., edge_center_bounds=...)</span>
+<p class="fdoc">Fit baseline (step + line) plus 1..max_components pseudo-Voigts.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +1 more</p>
+</div>
+<div class="fn" data-hay="fit_white_line xas.fits white-line fit: erf edge step + pseudo-voigt(s) above e0. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">fit_white_line</span>(energy, mu, e0, max_components=...)</span>
+<p class="fdoc">White-line fit: erf edge step + pseudo-Voigt(s) above E0.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="fit_pre_edge xas.fits wilke-style pre-edge fit: rising-edge (atan) baseline + 1-3 pseudo-voigts. spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">fit_pre_edge</span>(energy, mu, e0, window_rel=..., max_components=...)</span>
+<p class="fdoc">Wilke-style pre-edge fit: rising-edge (atan) baseline + 1-3 pseudo-Voigts.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_initial_peak_centers xas.fits seed peak centers from local maxima of the detrended window. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_initial_peak_centers</span>(e, y, n)</span>
+<p class="fdoc">Seed peak centers from local maxima of the detrended window.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +1 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.interpret</span><span class="mdoc">Hybrid interpretation engine: descriptors -&gt; structured chemical verdicts.</span></div>
+<div class="fn" data-hay="interpret_oxidation_state xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">interpret_oxidation_state</span>(descriptors, calibration)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="interpret_coordination_geometry xas.interpret  spec-file interpret-coordination-geometry spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">interpret_coordination_geometry</span>(descriptors, calibration)</span>
+<p class="users"><b>used by</b> spec-file interpret-coordination-geometry, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="summarize_chemistry xas.interpret consolidated chemical interpretation + beam-damage drift verdict. spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">summarize_chemistry</span>(descriptors, calibration)</span>
+<p class="fdoc">Consolidated chemical interpretation + beam-damage drift verdict.</p>
+<p class="users"><b>used by</b> spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_verdict xas.interpret  spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_verdict</span>(basis, descriptors_used, calibration_context, flags, provenance)</span>
+<p class="users"><b>used by</b> spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_degrade xas.interpret  spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_degrade</span>(confidence, to=...)</span>
+<p class="users"><b>used by</b> spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_3d_k xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_3d_k</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_4d_k xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_4d_k</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_5d_k xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_5d_k</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_main_group_k xas.interpret s/p-block k-edges (as, se, sn, ...): same edge-shift logic as the spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_main_group_k</span>(descriptors, calibration, flags)</span>
+<p class="fdoc">s/p-block K-edges (As, Se, Sn, ...): same edge-shift logic as the</p>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_fe_pre_edge xas.interpret fe k pre-edge centroid on the wilke 2001 cii axis (conventional domain). spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_fe_pre_edge</span>(descriptors, calibration, flags, pre, domain)</span>
+<p class="fdoc">Fe K pre-edge centroid on the Wilke 2001 CII axis (conventional domain).</p>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_shift_quality xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_shift_quality</span>(shift)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_k_edge_shift xas.interpret calibrated k-edge shift vs a reference e0 (non-fe 3d / 4d / 5d). spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_k_edge_shift</span>(descriptors, calibration, flags, family)</span>
+<p class="fdoc">Calibrated K-edge shift vs a reference E0 (non-Fe 3d / 4d / 5d).</p>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_ln_l3 xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_ln_l3</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_an_m xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_an_m</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_5d_l3 xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_5d_l3</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_oxidation_unsupported xas.interpret  spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">_oxidation_unsupported</span>(descriptors, calibration, flags)</span>
+<p class="users"><b>used by</b> spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.normalize</span><span class="mdoc">Rigorous XAS intensity normalization for HERFD metrics.</span></div>
+<div class="fn" data-hay="area_normalize xas.normalize rescale mu so its mean over [e0+window[0], e0+window[1]] equals 1. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">area_normalize</span>(energy, mu, e0, window=..., min_span_ev=...)</span>
+<p class="fdoc">Rescale mu so its mean over [e0+window[0], e0+window[1]] equals 1.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +2 more</p>
+</div>
+<div class="fn" data-hay="edge_step_provenance xas.normalize provenance stamp for spectra left on the upstream normalization. spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">edge_step_provenance</span>()</span>
+<p class="fdoc">Provenance stamp for spectra left on the upstream normalization.</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +2 more</p>
+</div>
+<div class="fn" data-hay="mback_normalize xas.normalize mback normalization (weng, waldo &amp; penner-hahn 2005). spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">mback_normalize</span>(energy, mu, e0, element, edge, *, poly_order=..., pre_gap_ev=..., post_gap_ev=..., min_region_points=...)</span>
+<p class="fdoc">MBACK normalization (Weng, Waldo &amp; Penner-Hahn 2005).</p>
+<p class="users"><b>used by</b> spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state +2 more</p>
+</div>
+<div class="fn" data-hay="pre_post_normalize xas.normalize athena-style edge-step normalization: pre-edge line + post-edge poly. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">pre_post_normalize</span>(energy, mu, e0, pre1=..., pre2=..., norm1=..., norm2=..., norm_order=..., flatten=...)</span>
+<p class="fdoc">Athena-style edge-step normalization: pre-edge line + post-edge poly.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xas.policy</span><span class="mdoc">XAS analysis policy — the defaults and heuristics, in one place.</span></div>
+<div class="fn" data-hay="white_line_components_for xas.policy max pseudo-voigt components to fit the white line of this edge family. spec-file extract-xas-descriptors spec-file fit-xas-white-line spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">white_line_components_for</span>(family)</span>
+<p class="fdoc">Max pseudo-Voigt components to fit the white line of this edge family.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file fit-xas-white-line, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="check_overlap xas.policy raise valueerror when too few shared energy points remain to fit. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">check_overlap</span>(n_points)</span>
+<p class="fdoc">Raise ValueError when too few shared energy points remain to fit.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +5 more</p>
+</div>
+<div class="fn" data-hay="window_rel_from_absolute xas.policy convert an absolute-ev fit window to one relative to the measured e0. spec-file extract-xas-descriptors spec-file fit-xas-pre-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">window_rel_from_absolute</span>(energy, mu, e_min, e_max)</span>
+<p class="fdoc">Convert an absolute-eV fit window to one relative to the measured E0.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file fit-xas-pre-edge, spec-file interpret-coordination-geometry, spec-file interpret-oxidation-state, spec-file summarize-sample-chemistry</p>
+</div>
+<div class="fn" data-hay="resolve_edge xas.policy resolve which absorption edge a spectrum measures. spec-file assess-xas-quality spec-file detect-per-scan-drift spec-file extract-xas-descriptors spec-file find-edge-e0 spec-file fit-xas-pre-edge spec-file fit-xas-white-line spec-file identify-edge spec-file interpret-coordination-geometry spec-file interpret-oxidation-state spec-file normalize-xas-intensity spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">resolve_edge</span>(energy, mu, element=..., edge=...)</span>
+<p class="fdoc">Resolve which absorption edge a spectrum measures.</p>
+<p class="users"><b>used by</b> spec-file assess-xas-quality, spec-file detect-per-scan-drift, spec-file extract-xas-descriptors, spec-file find-edge-e0, spec-file fit-xas-pre-edge, spec-file fit-xas-white-line +5 more</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-exafs)" open>
+<summary><span class="dname">science/exafs/</span><span class="chip" style="--c: var(--c-exafs)">3 modules</span><span class="count">7 fns</span></summary>
+<p class="note">EXAFS k-space: energy/wavenumber conversion, background removal, Fourier transform into R space.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">exafs.background</span><span class="mdoc">AUTOBK-lite background removal: mu(E) -&gt; chi(k).</span></div>
+<div class="fn" data-hay="autobk_lite exafs.background quick-look autobk: spline background above e0 → chi(k). exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">autobk_lite</span>(energy, mu, e0, edge_step=..., rbkg=..., kweight=...)</span>
+<p class="fdoc">Quick-look AUTOBK: spline background above E0 → chi(k).</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">exafs.fourier</span><span class="mdoc">Fourier transform of chi(k) into R space, and first-shell peak reporting.</span></div>
+<div class="fn" data-hay="ft_window exafs.fourier hanning-sill ft window on grid ``k`` (sills of width ``dk`` centred exafs exafs-products exafs fourier-transform-chi">
+<span class="sig"><span class="fname">ft_window</span>(k, kmin, kmax, dk=..., kind=...)</span>
+<p class="fdoc">Hanning-sill FT window on grid ``k`` (sills of width ``dk`` centred</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
+</div>
+<div class="fn" data-hay="xftf exafs.fourier forward ft chi(k) → chi(r), ifeffit convention. exafs exafs-products exafs fourier-transform-chi">
+<span class="sig"><span class="fname">xftf</span>(k, chi, kmin=..., kmax=..., kweight=..., dk=..., nfft=..., kstep=..., rmax_out=...)</span>
+<p class="fdoc">Forward FT chi(k) → chi(R), Ifeffit convention.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
+</div>
+<div class="fn" data-hay="first_shell_peak exafs.fourier position/height of the largest |chi(r)| peak in [rmin, rmax]. exafs exafs-products exafs fourier-transform-chi">
+<span class="sig"><span class="fname">first_shell_peak</span>(r, chir_mag, rmin=..., rmax=...)</span>
+<p class="fdoc">Position/height of the largest |chi(R)| peak in [rmin, rmax].</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">exafs.kspace</span><span class="mdoc">Energy &lt;-&gt; photoelectron wavenumber conversion, and k-grid rebinning.</span></div>
+<div class="fn" data-hay="etok exafs.kspace photoelectron wavenumber k (å⁻¹) for energies at/above e0. exafs exafs-products exafs extract-chi exafs fourier-transform-chi exafs overlay-chi-spectra">
+<span class="sig"><span class="fname">etok</span>(energy, e0)</span>
+<p class="fdoc">Photoelectron wavenumber k (Å⁻¹) for energies at/above e0.</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs extract-chi, exafs fourier-transform-chi, exafs overlay-chi-spectra</p>
+</div>
+<div class="fn" data-hay="ktoe exafs.kspace inverse of :func:`etok`: absolute energy (ev) for wavenumber k.">
+<span class="sig"><span class="fname">ktoe</span>(k, e0)</span>
+<p class="fdoc">Inverse of :func:`etok`: absolute energy (eV) for wavenumber k.</p>
+<p class="users"><span class="none">not reached from any catalog tool</span></p>
+</div>
+<div class="fn" data-hay="rebin_k exafs.kspace interpolate chi onto a uniform k grid (required before the fft). exafs exafs-products exafs fourier-transform-chi">
+<span class="sig"><span class="fname">rebin_k</span>(k, chi, kstep=..., kmin=..., kmax=...)</span>
+<p class="fdoc">Interpolate chi onto a uniform k grid (required before the FFT).</p>
+<p class="users"><b>used by</b> exafs exafs-products, exafs fourier-transform-chi</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-xrs)" open>
+<summary><span class="dname">science/xrs/</span><span class="chip" style="--c: var(--c-xrs)">4 modules</span><span class="count">23 fns</span></summary>
+<p class="note">X-ray Raman on the energy-loss axis. Kept apart from xas/ because the XAS defaults are actively wrong here.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xrs.calibrate</span><span class="mdoc">XRS energy-loss axis: elastic-line calibration and momentum transfer.</span></div>
+<div class="fn" data-hay="q_from_two_theta xrs.calibrate momentum transfer |q| in å⁻¹ for elastic-limit xrs. xrs tag-crystal-q">
+<span class="sig"><span class="fname">q_from_two_theta</span>(incident_energy_ev, two_theta_deg)</span>
+<p class="fdoc">Momentum transfer |q| in Å⁻¹ for elastic-limit XRS.</p>
+<p class="users"><b>used by</b> xrs tag-crystal-q</p>
+</div>
+<div class="fn" data-hay="fit_elastic_line xrs.calibrate locate the elastic (rayleigh) peak: ω=0 anchor and energy resolution. xrs calibrate-energy-loss">
+<span class="sig"><span class="fname">fit_elastic_line</span>(energy, intensity)</span>
+<p class="fdoc">Locate the elastic (Rayleigh) peak: ω=0 anchor and energy resolution.</p>
+<p class="users"><b>used by</b> xrs calibrate-energy-loss</p>
+</div>
+<div class="fn" data-hay="to_energy_loss xrs.calibrate convert an incident-energy axis to energy loss ω = e − e_elastic (ev). xrs align-crystals xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs sum-crystals xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">to_energy_loss</span>(energy_ev, elastic_center_ev)</span>
+<p class="fdoc">Convert an incident-energy axis to energy loss ω = E − E_elastic (eV).</p>
+<p class="users"><b>used by</b> xrs align-crystals, xrs assess-xrs-quality, xrs average-xrs-scans, xrs build-loss-axis, xrs compare-xrs-to-references, xrs extract-xrs-descriptors +7 more</p>
+</div>
+<div class="fn" data-hay="common_loss_grid xrs.calibrate build a common energy-loss grid spanning the overlap of all inputs. xrs align-crystals xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs sum-crystals xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">common_loss_grid</span>(loss_arrays, step=...)</span>
+<p class="fdoc">Build a common energy-loss grid spanning the overlap of all inputs.</p>
+<p class="users"><b>used by</b> xrs align-crystals, xrs assess-xrs-quality, xrs average-xrs-scans, xrs build-loss-axis, xrs compare-xrs-to-references, xrs extract-xrs-descriptors +7 more</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xrs.descriptors</span><span class="mdoc">Numeric descriptors from a reduced XRS edge (energy-loss axis).</span></div>
+<div class="fn" data-hay="edge_onset xrs.descriptors energy-loss of the maximum rising-edge slope (edge position proxy). xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">edge_onset</span>(loss, intensity, smooth_span_ev=...)</span>
+<p class="fdoc">Energy-loss of the maximum rising-edge slope (edge position proxy).</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="peak_in_window xrs.descriptors position + height of the maximum in a loss window (white line / pre-edge). xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">peak_in_window</span>(loss, intensity, lo, hi)</span>
+<p class="fdoc">Position + height of the maximum in a loss window (white line / pre-edge).</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="integrated_area xrs.descriptors trapezoidal integral of intensity over [lo, hi] on the loss axis. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">integrated_area</span>(loss, intensity, lo, hi)</span>
+<p class="fdoc">Trapezoidal integral of intensity over [lo, hi] on the loss axis.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-q-dependence, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="feature_snr xrs.descriptors snr of the edge feature: peak amplitude above the post-edge / post-edge noise. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">feature_snr</span>(loss, intensity, edge_lo, edge_hi)</span>
+<p class="fdoc">SNR of the edge feature: peak amplitude above the post-edge / post-edge noise.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="extract_xrs_descriptors xrs.descriptors full xrs descriptor extraction. returns ``(descriptors, arrays)``. xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">extract_xrs_descriptors</span>(loss, intensity, edge_info=..., edge_window=..., pre_edge_window=...)</span>
+<p class="fdoc">Full XRS descriptor extraction. Returns ``(descriptors, arrays)``.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_uniform xrs.descriptors  xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">_uniform</span>(loss, intensity)</span>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_window xrs.descriptors  xrs assess-xrs-quality xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">_window</span>(loss, intensity, lo, hi)</span>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs extract-xrs-descriptors, xrs interpret-q-dependence, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xrs.interpret</span><span class="mdoc">XRS interpretation engine: descriptors → structured chemical verdicts.</span></div>
+<div class="fn" data-hay="interpret_xrs_oxidation_state xrs.interpret oxidation-state / covalency read from a reduced xrs edge. xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">interpret_xrs_oxidation_state</span>(descriptors, calibration=...)</span>
+<p class="fdoc">Oxidation-state / covalency read from a reduced XRS edge.</p>
+<p class="users"><b>used by</b> xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="interpret_q_dependence xrs.interpret classify a feature&#x27;s momentum-transfer behavior. xrs interpret-q-dependence">
+<span class="sig"><span class="fname">interpret_q_dependence</span>(feature_by_q)</span>
+<p class="fdoc">Classify a feature&#x27;s momentum-transfer behavior.</p>
+<p class="users"><b>used by</b> xrs interpret-q-dependence</p>
+</div>
+<div class="fn" data-hay="compare_xrs_to_references xrs.interpret non-negative linear-combination fit of a spectrum to reference spectra. xrs compare-xrs-to-references">
+<span class="sig"><span class="fname">compare_xrs_to_references</span>(loss, intensity, references)</span>
+<p class="fdoc">Non-negative linear-combination fit of a spectrum to reference spectra.</p>
+<p class="users"><b>used by</b> xrs compare-xrs-to-references</p>
+</div>
+<div class="fn" data-hay="assess_xrs_quality xrs.interpret quality gate for a reduced xrs edge: feature snr, resolution, flags. xrs assess-xrs-quality xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">assess_xrs_quality</span>(descriptors, resolution_fwhm_ev=...)</span>
+<p class="fdoc">Quality gate for a reduced XRS edge: feature SNR, resolution, flags.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn" data-hay="summarize_xrs_chemistry xrs.interpret capstone: oxidation/covalency verdict + quality + one narration paragraph. xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">summarize_xrs_chemistry</span>(descriptors, calibration=..., resolution_fwhm_ev=...)</span>
+<p class="fdoc">Capstone: oxidation/covalency verdict + quality + one narration paragraph.</p>
+<p class="users"><b>used by</b> xrs summarize-xrs-chemistry</p>
+</div>
+<div class="fn priv" data-hay="_verdict xrs.interpret  xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">_verdict</span>(basis, descriptors_used, flags, provenance)</span>
+<p class="users"><b>used by</b> xrs interpret-q-dependence, xrs interpret-xrs-oxidation-state, xrs summarize-xrs-chemistry</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">xrs.reduce</span><span class="mdoc">XRS reduction on the energy-loss axis.</span></div>
+<div class="fn" data-hay="align_and_average xrs.reduce interpolate reps onto a common loss grid and average them. xrs assess-xrs-quality xrs average-xrs-scans xrs build-loss-axis xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">align_and_average</span>(loss_arrays, intensity_arrays, grid=...)</span>
+<p class="fdoc">Interpolate reps onto a common loss grid and average them.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs average-xrs-scans, xrs build-loss-axis, xrs compare-xrs-to-references, xrs extract-xrs-descriptors, xrs interpret-q-dependence +5 more</p>
+</div>
+<div class="fn" data-hay="reject_outlier_channels xrs.reduce flag crystal/roi channels to drop before summing. xrs align-crystals xrs sum-crystals">
+<span class="sig"><span class="fname">reject_outlier_channels</span>(grid, channel_intensities, snr_min=..., dev_mad_max=...)</span>
+<p class="fdoc">Flag crystal/ROI channels to drop before summing.</p>
+<p class="users"><b>used by</b> xrs align-crystals, xrs sum-crystals</p>
+</div>
+<div class="fn" data-hay="sum_crystals xrs.reduce energy-align per-crystal spectra, reject outliers, and sum. xrs sum-crystals">
+<span class="sig"><span class="fname">sum_crystals</span>(loss_arrays, channel_intensities, elastic_centers=..., reject=..., grid=...)</span>
+<p class="fdoc">Energy-align per-crystal spectra, reject outliers, and sum.</p>
+<p class="users"><b>used by</b> xrs sum-crystals</p>
+</div>
+<div class="fn" data-hay="subtract_compton_background xrs.reduce fit and subtract the compton/valence background under the xrs edge. xrs assess-xrs-quality xrs compare-xrs-to-references xrs extract-xrs-descriptors xrs interpret-q-dependence xrs interpret-xrs-oxidation-state xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background xrs summarize-xrs-chemistry">
+<span class="sig"><span class="fname">subtract_compton_background</span>(loss, intensity, edge_lo, edge_hi, model=...)</span>
+<p class="fdoc">Fit and subtract the Compton/valence background under the XRS edge.</p>
+<p class="users"><b>used by</b> xrs assess-xrs-quality, xrs compare-xrs-to-references, xrs extract-xrs-descriptors, xrs interpret-q-dependence, xrs interpret-xrs-oxidation-state, xrs normalize-xrs +3 more</p>
+</div>
+<div class="fn" data-hay="area_normalize xrs.reduce normalize an xrs spectrum to unit area over a loss window. xrs average-xrs-scans xrs compare-xrs-to-references xrs interpret-q-dependence xrs normalize-xrs xrs overlay-xrs-spectra xrs subtract-compton-background">
+<span class="sig"><span class="fname">area_normalize</span>(loss, intensity, lo=..., hi=...)</span>
+<p class="fdoc">Normalize an XRS spectrum to unit area over a loss window.</p>
+<p class="users"><b>used by</b> xrs average-xrs-scans, xrs compare-xrs-to-references, xrs interpret-q-dependence, xrs normalize-xrs, xrs overlay-xrs-spectra, xrs subtract-compton-background</p>
+</div>
+<div class="fn priv" data-hay="_der_snr xrs.reduce robust snr insensitive to smooth trends (stoehr et al. 2008, der_snr). xrs align-crystals xrs sum-crystals">
+<span class="sig"><span class="fname">_der_snr</span>(values)</span>
+<p class="fdoc">Robust SNR insensitive to smooth trends (Stoehr et al. 2008, DER_SNR).</p>
+<p class="users"><b>used by</b> xrs align-crystals, xrs sum-crystals</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-fitting)" open>
+<summary><span class="dname">science/fitting/</span><span class="chip" style="--c: var(--c-fitting)">1 modules</span><span class="count">2 fns</span></summary>
+<p class="note">Generic curve fits for beam diagnostics and alignment — not spectroscopy.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">fitting.similarity</span><span class="mdoc">MCP tool for cosine similarity analysis of scan data.</span></div>
+<div class="fn" data-hay="compute_cosine_similarity fitting.similarity cosine similarity between two vectors: (a . b) / (||a|| * ||b||). spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-per-spot">
+<span class="sig"><span class="fname">compute_cosine_similarity</span>(vec1, vec2)</span>
+<p class="fdoc">Cosine similarity between two vectors: (A . B) / (||A|| * ||B||).</p>
+<p class="users"><b>used by</b> spec-file analyze-convergence, spec-file analyze-efficiency, spec-file analyze-per-spot</p>
+</div>
+<div class="fn" data-hay="analyze_scan_quality fitting.similarity analyze scan quality using cosine similarity and standard error metrics. spec-file analyze-convergence spec-file analyze-efficiency spec-file analyze-per-spot">
+<span class="sig"><span class="fname">analyze_scan_quality</span>(scan_data)</span>
+<p class="fdoc">Analyze scan quality using cosine similarity and standard error metrics.</p>
+<p class="users"><b>used by</b> spec-file analyze-convergence, spec-file analyze-efficiency, spec-file analyze-per-spot</p>
+</div>
+</div>
+</details>
+<details class="dir" style="--c: var(--c-plots)" open>
+<summary><span class="dname">science/plots/</span><span class="chip" style="--c: var(--c-plots)">2 modules</span><span class="count">3 fns</span></summary>
+<p class="note">Figures over arrays and descriptor dicts. A figure that takes a file name belongs in spec_data/ instead.</p>
+<div class="modblock">
+<div class="modhead"><span class="mpath">plots.scan</span><span class="mdoc">Backend-agnostic figure rendering.</span></div>
+<div class="fn" data-hay="fig_to_base64 plots.scan convert a matplotlib figure to a base64-encoded png string. s3df plot-scan">
+<span class="sig"><span class="fname">fig_to_base64</span>(fig)</span>
+<p class="fdoc">Convert a matplotlib figure to a base64-encoded PNG string.</p>
+<p class="users"><b>used by</b> s3df plot-scan</p>
+</div>
+<div class="fn" data-hay="render_scan plots.scan render one scan&#x27;s dataframe to a matplotlib figure. s3df plot-scan spec-file plot-scan">
+<span class="sig"><span class="fname">render_scan</span>(df, file_name, scan_number, counter=..., normalize_by=..., scan_command=...)</span>
+<p class="fdoc">Render one scan&#x27;s DataFrame to a matplotlib Figure.</p>
+<p class="users"><b>used by</b> s3df plot-scan, spec-file plot-scan</p>
+</div>
+</div>
+<div class="modblock">
+<div class="modhead"><span class="mpath">plots.xas</span><span class="mdoc">Annotated descriptor plots for interpretation outputs.</span></div>
+<div class="fn" data-hay="annotated_descriptor_figure plots.xas one figure: spectrum + fits, pre-edge zoom, optional trend panel. spec-file extract-xas-descriptors spec-file summarize-sample-chemistry">
+<span class="sig"><span class="fname">annotated_descriptor_figure</span>(descriptors, arrays, title=...)</span>
+<p class="fdoc">One figure: spectrum + fits, pre-edge zoom, optional trend panel.</p>
+<p class="users"><b>used by</b> spec-file extract-xas-descriptors, spec-file summarize-sample-chemistry</p>
+</div>
+</div>
+</details>
+<h2><span class="no">02</span> Bibliography</h2>
+<p class="sectionnote">Collected from every module's <code>CITATIONS</code> dict. Entries marked <span class="gap">needs a reference</span> are implemented but unattributed — filling one in is a welcome contribution.</p>
+<table><thead><tr><th>Method</th><th>Reference</th><th>Module</th></tr></thead><tbody>
+<tr><td>AUTOBK-lite spline background removal</td><td>Reduced AUTOBK — cubic smoothing spline with the knot budget from the Nyquist criterion (2*rbkg*kmax/pi). Quick-look quality; cross-check against Larch/Ifeffit autobk before publication.</td><td class="mono">exafs.background</td></tr>
+<tr><td>chi(k) -&gt; chi(R) Fourier transform convention</td><td>Ifeffit convention: chi(R) = (kstep/sqrt(pi)) * FFT[chi * k^w * window].</td><td class="mono">exafs.fourier</td></tr>
+<tr><td>Energy &lt;-&gt; photoelectron wavenumber</td><td>k = sqrt((E - E0) / ETOK) with ETOK = hbar^2/2m_e = 3.8099821 eV*A^2.</td><td class="mono">exafs.kspace</td></tr>
+<tr><td>Non-paralyzable deadtime correction</td><td>corrected = sca / (1 - tau * ICR/count_time), the standard non-paralyzable model, clipped at 5% live time.</td><td class="mono">reduce.deadtime</td></tr>
+<tr><td>5d L3 white-line trend</td><td>L3 white-line area tracks unoccupied d-DOS / d-hole count (standard 5d practice, e.g. Pt/Ir XANES literature); higher oxidation -&gt; higher white-line energy and intensity.</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Ce L3 final-state doublet</td><td>Standard Ce L3 XANES final-state analysis (e.g. Bianconi et al. PRB 35, 806 (1987); applied in HERFD in Inorg. Chem. 2021 lanthanide L3 studies).</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Core-hole widths</td><td>xraydb core_width (Krause &amp; Oliver 1979 / Keski-Rahkonen &amp; Krause 1974 compilations)</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Fe K pre-edge centroid/intensity (CII) method</td><td>Wilke, Farges, Petit, Brown &amp; Martin, Am. Mineral. 86, 714-730 (2001), DOI 10.2138/am-2001-5-612. Conventional Fe K-XANES (full 1s core-hole broadening, ~1.25 eV).</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Generic 3d K-edge shift-per-valence bracket</td><td>Generic 3d K-edge bracket; element/ligand dependent. See e.g. Tromp &amp; Moulin, Cr K-edge XANES (SLAC eConf C060709): Cr(VI) vs Cr(III) first-derivative edges differ by ~2.3 eV.</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Per-element edge-shift slopes</td><td>One reference series per element — see the &#x27;source&#x27; field on each PER_ELEMENT_EDGE_SHIFT entry.</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>U M4 HERFD valence determination</td><td>Bes et al., Inorg. Chem. 55, 4260 (2016), DOI 10.1021/acs.inorgchem.6b00014 (U L3/M4 HERFD valence determination; Kvashnina/Butorin U M4 HERFD methodology).</td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Absorption-edge energies and labels</td><td>xraydb (Elam, Ravel &amp; Sieber 2002, Radiat. Phys. Chem. 63, 121) — tabulated label, not an energy-calibration reference</td><td class="mono">tables.edges</td></tr>
+<tr><td>Emission line energies and intensities</td><td>xraydb tabulated X-ray emission lines (``xraydb.xray_lines``).</td><td class="mono">tables.emission_lines</td></tr>
+<tr><td>Edge energies (tabulated label)</td><td>xraydb (Elam/Ravel/Sieber 2002) where the edge is tabulated.</td><td class="mono">tables.xrs_edges</td></tr>
+<tr><td>Core-hole re-broadening of HERFD spectra</td><td>Widths from science.tables.edge_shifts.CORE_HOLE_WIDTH_SOURCE; the re-broadening is applied so conventional-XANES calibrations (e.g. Wilke 2001) become valid on HERFD data.</td><td class="mono">xas.e0</td></tr>
+<tr><td>Pseudo-Voigt / step / linear models</td><td>lmfit.models (Newville et al., lmfit).</td><td class="mono">xas.fits</td></tr>
+<tr><td>Wilke-style pre-edge fit (rising-edge atan baseline + pseudo-Voigts)</td><td>Wilke, Farges, Petit, Brown &amp; Martin, Am. Mineral. 86, 714-730 (2001), DOI 10.2138/am-2001-5-612. Conventional Fe K-XANES (full 1s core-hole broadening, ~1.25 eV).</td><td class="mono">xas.fits</td></tr>
+<tr><td>Area normalization (the HERFD default)</td><td>Bugarin, Suarez Orduz &amp; Glatzel, &#x27;Area normalization of HERFD-XANES spectra&#x27;, J. Synchrotron Rad. 31 (2024)</td><td class="mono">xas.normalize</td></tr>
+<tr><td>MBACK normalization</td><td>Weng, Waldo &amp; Penner-Hahn, &#x27;A method for normalization of X-ray absorption spectra&#x27;, J. Synchrotron Rad. 12, 506 (2005)</td><td class="mono">xas.normalize</td></tr>
+<tr><td>Multi-component white-line families (Ce(IV) doublet, U(VI) satellites)</td><td>Bugarin, Suarez Orduz &amp; Glatzel, J. Synchrotron Rad. 31 (2024); Bes et al., Inorg. Chem. 55, 4260 (2016).</td><td class="mono">xas.policy</td></tr>
+<tr><td>Pre-edge fit window</td><td>Wilke, Farges, Petit, Brown &amp; Martin, Am. Mineral. 86, 714-730 (2001), DOI 10.2138/am-2001-5-612.</td><td class="mono">xas.policy</td></tr>
+<tr><td>Momentum transfer from scattering angle</td><td>q = |k_i - k_s|, evaluated in the quasi-elastic limit |k_i| = |k_s| = 2*pi/lambda(E_incident).</td><td class="mono">xrs.calibrate</td></tr>
+<tr><td>Outlier-channel rejection by DER_SNR</td><td>DER_SNR estimator: Stoehr et al., &#x27;DER_SNR: A Simple &amp; General Spectroscopic Signal-to-Noise Measurement&#x27;, ASP Conf. Ser. 394 (2008).</td><td class="mono">xrs.reduce</td></tr>
+<tr><td>First-shell peak reporting</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.fourier</td></tr>
+<tr><td>Hanning-sill k-window</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.fourier</td></tr>
+<tr><td>Default AUTOBK R_bkg</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.policy</td></tr>
+<tr><td>Default k range and window taper</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.policy</td></tr>
+<tr><td>k^2 weighting as the default</td><td><span class="gap">needs a reference</span></td><td class="mono">exafs.policy</td></tr>
+<tr><td>Detector saturation flagging</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
+<tr><td>Monochromator-glitch detection (running-median residual)</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
+<tr><td>Self-absorption assessment</td><td><span class="gap">needs a reference</span></td><td class="mono">reduce.artifacts</td></tr>
+<tr><td>Maximum plausible valence spans</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edge_shifts</td></tr>
+<tr><td>Edge-family classification (3d_K / ln_L3 / an_M / ...)</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edges</td></tr>
+<tr><td>Edge-suggestion scoring from a scan energy window</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.edges</td></tr>
+<tr><td>Preferred (Siegbahn) line per edge</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.emission_lines</td></tr>
+<tr><td>Curated XRS edge assignments and families</td><td><span class="gap">needs a reference</span></td><td class="mono">tables.xrs_edges</td></tr>
+<tr><td>E0 as the parabola-refined derivative maximum</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.e0</td></tr>
+<tr><td>Component-count selection by BIC with a parsimony margin</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.fits</td></tr>
+<tr><td>Athena-style pre-edge/post-edge normalization</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.normalize</td></tr>
+<tr><td>E0-anchored edge auto-detection</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.policy</td></tr>
+<tr><td>Minimum overlapping points for a descriptor fit</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.policy</td></tr>
+<tr><td>White-line fit window</td><td><span class="gap">needs a reference</span></td><td class="mono">xas.policy</td></tr>
+<tr><td>Elastic-line location (Gaussian fit, with argmax / centre-of-mass fallbacks)</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.calibrate</td></tr>
+<tr><td>Area normalization on the energy-loss axis</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.reduce</td></tr>
+<tr><td>Compton background models (constant / linear / Pearson VII)</td><td><span class="gap">needs a reference</span></td><td class="mono">xrs.reduce</td></tr>
+</tbody></table>
+<footer>Generated by <code>beamtimehero_cli.docgen_science</code> from the source tree. Layout and conventions: <code>science/README.md</code>. Contributing: <code>CONTRIBUTING.md</code>. The agent-facing tool catalog is <a href="tool_catalog.html">tool_catalog.html</a>.</footer>
+</div>
+<script>
+(function(){
+ var root=document.documentElement,btn=document.getElementById('themetoggle'),saved=null;
+ try{saved=localStorage.getItem('bth-sci-theme')}catch(e){}
+ if(saved)root.setAttribute('data-theme',saved);
+ else if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)
+   root.setAttribute('data-theme','dark');
+ btn.addEventListener('click',function(){
+   var n=root.getAttribute('data-theme')==='dark'?'light':'dark';
+   root.setAttribute('data-theme',n);
+   try{localStorage.setItem('bth-sci-theme',n)}catch(e){}});
+ var q=document.getElementById('q'),cnt=document.getElementById('qcount'),
+     fns=[].slice.call(document.querySelectorAll('.fn'));
+ function run(){
+   var t=q.value.trim().toLowerCase(),shown=0;
+   fns.forEach(function(el){
+     var hit=!t||el.dataset.hay.indexOf(t)>-1;
+     el.style.display=hit?'':'none'; if(hit)shown++;});
+   document.querySelectorAll('.modblock').forEach(function(m){
+     var any=[].slice.call(m.querySelectorAll('.fn')).some(function(e){return e.style.display!=='none'});
+     m.style.display=any?'':'none';});
+   document.querySelectorAll('.dir').forEach(function(d){
+     var any=[].slice.call(d.querySelectorAll('.fn')).some(function(e){return e.style.display!=='none'});
+     d.style.display=any?'':'none'; if(t&&any)d.open=true;});
+   cnt.textContent=shown+' function'+(shown===1?'':'s');}
+ q.addEventListener('input',run); run();
+})();
+</script>
+</body>
+</html>

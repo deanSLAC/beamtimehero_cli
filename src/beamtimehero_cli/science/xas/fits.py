@@ -12,6 +12,7 @@ import numpy as np
 from lmfit.models import LinearModel, PseudoVoigtModel, StepModel
 from scipy.signal import find_peaks
 
+from beamtimehero_cli.science.tables import edge_shifts as _edge_shifts
 from beamtimehero_cli.science.xas.policy import (
     PRE_EDGE_WINDOW_REL,
     WHITE_LINE_WINDOW_REL,
@@ -244,3 +245,16 @@ def fit_pre_edge(energy: np.ndarray, mu: np.ndarray, e0: float,
         energy, mu, window, max_components=max_components,
         baseline_form="atan", edge_center_hint=e0,
     )
+
+# ---------------------------------------------------------------------------
+# CITATIONS — method -> reference. ``None`` means the method is implemented
+# but not yet attributed; those surface as gaps on the generated science
+# index, and filling one in is a welcome contribution. See science/README.md.
+# ---------------------------------------------------------------------------
+
+CITATIONS = {
+    "Wilke-style pre-edge fit (rising-edge atan baseline + pseudo-Voigts)":
+        _edge_shifts.WILKE_2001_FE_PRE_EDGE["source"],
+    "Component-count selection by BIC with a parsimony margin": None,
+    "Pseudo-Voigt / step / linear models": "lmfit.models (Newville et al., lmfit).",
+}
